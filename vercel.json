@@ -1,12 +1,12 @@
 {
   "version": 2,
   "functions": {
-    "checkin/api/*.js": {
+    "api/*.js": {
       "runtime": "nodejs18.x"
     }
   },
   "routes": [
     { "src": "/api/(.*)", "dest": "api/$1.js" },
-    { "src": "/(.*)", "dest": "$1" }
+    { "src": "/(.*)", "dest": "/$1" }
   ]
 }
