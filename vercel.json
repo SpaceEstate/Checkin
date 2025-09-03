@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "functions": {
+    "checkin/api/*.js": {
+      "runtime": "@vercel/node"
+    }
+  },
+  "routes": [
+    { "src": "/api/(.*)", "dest": "checkin/api/$1.js" },
+    { "src": "/(.*)", "dest": "checkin/checkin/$1" }
+  ]
+}
