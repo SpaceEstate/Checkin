@@ -5,17 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Check-in Ospiti</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <script>
-    // Rileva l'ambiente e carica CSS corretto
-    const isGitHubPages = window.location.hostname.includes('github.io');
-    const basePath = isGitHubPages ? '/SpaceEstate/checkin/checkin/' : './';
-
-    // Carica CSS
-    const cssLink = document.createElement('link');
-    cssLink.rel = 'stylesheet';
-    cssLink.href = basePath + 'checkin.css';
-    document.head.appendChild(cssLink);
-  </script>
+  
+  <!-- Caricamento CSS direttamente -->
+  <link rel="stylesheet" href="checkin.css">
 </head>
 <body>
   <div class="container">
@@ -118,11 +110,7 @@
     </div>
   </div>
 
-  <!-- Caricamento script dinamico in fondo -->
-  <script>
-    const script = document.createElement('script');
-    script.src = basePath + 'checkin.js';
-    document.body.appendChild(script);
-  </script>
+  <!-- Caricamento script direttamente -->
+  <script src="checkin.js"></script>
 </body>
 </html>
