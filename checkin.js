@@ -612,11 +612,12 @@ window.closeCamera = function(ospiteNum) {
   preview.style.display = 'none';
 }
 
+
 // Funzione per creare il link di pagamento Stripe
 async function creaLinkPagamento() {
   const totale = calcolaTotale();
-  
-  // Raccogli tutti i dati del form
+  console.log("Tentativo pagamento per totale:", totale);
+
   const datiPrenotazione = {
     appartamento: document.getElementById('appartamento').value,
     numeroOspiti: numeroOspiti,
@@ -625,8 +626,7 @@ async function creaLinkPagamento() {
     totale: totale,
     ospiti: []
   };
-  
-  // Raccogli dati ospiti
+
   for (let i = 1; i <= numeroOspiti; i++) {
     const ospite = {
       cognome: document.querySelector(`input[name="ospite${i}_cognome"]`).value,
@@ -636,12 +636,53 @@ async function creaLinkPagamento() {
       cittadinanza: document.querySelector(`select[name="ospite${i}_cittadinanza"]`).value,
       luogoNascita: document.querySelector(`select[name="ospite${i}_luogo_nascita"]`).value
     };
-    
-    // Aggiungi comune e provincia se nato in Italia
+
     if (ospite.luogoNascita === 'Italia') {
       ospite.comune = document.querySelector(`input[name="ospite${i}_comune"]`).value;
       ospite.provincia = document.querySelector(`select[name="ospite${i}_provincia"]`).value;
     }
+
+    if (i === 1) {
+      ospite.tipoDocumento = document.querySelector(`select[name="ospite1_tipo_documento"]`).value;
+      ospite.numeroDocumento = document.querySelector(`input[name="ospite1_numero_documento"]`).value;
+      ospite.luogoRilascio = document.querySelector(`select[name="ospite1_luogo_rilascio"]`).value;
+    }
+
+    datiPrenotazione.ospiti.push(ospite);
+  }
+
+  console.log("Dati prenotazione inviati a Stripe API:", datiPrenotazione);
+
+  try {
+    console.log("Chiamata API -> /api/crea-pagamento-stripe");
+    const response = await fetch('/api/crea-pagamento-stripe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(datiPrenotazione)
+    });
+
+    console.log("Response status:", response.status, "ok:", response.ok);
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error("Errore API:", errText);
+      throw new Error(`HTTP ${response.status} - ${errText}`);
+    }
+
+    const result = await response.json();
+    console.log("Response data:", result);
+
+    const { checkoutUrl } = result;
+    if (!checkoutUrl) throw new Error("checkoutUrl non ricevuto!");
+
+    window.location.href = checkoutUrl;
+
+  } catch (error) {
+    console.error("Errore completo nella creazione pagamento:", error);
+    showNotification("Errore nella creazione del pagamento: " + error.message, "error");
+  }
+}
+
     
     // Aggiungi dati documento per il responsabile
     if (i === 1) {
