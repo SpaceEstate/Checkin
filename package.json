@@ -1,8 +1,7 @@
 {
   "name": "space-estate",
   "version": "1.0.0",
-  "type": "module",
-  "dependencies": {
+   "dependencies": {
     "stripe": "^14.0.0"
   },
   "engines": {
