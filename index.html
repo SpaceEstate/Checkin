@@ -5,8 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Check-in Ospiti</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  
-  <!-- Caricamento CSS direttamente -->
   <link rel="stylesheet" href="checkin.css">
 </head>
 <body>
@@ -78,23 +76,11 @@
 
           <div class="summary-section">
             <h3 class="summary-title">Riepilogo Prenotazione</h3>
-            <div id="summary-content">
-              <!-- Contenuto generato da JavaScript -->
-            </div>
+            <div id="summary-content"></div>
           </div>
 
-          <div class="payment-section">
-            <h3 class="payment-title">Pagamento Tassa di Soggiorno</h3>
-            <div id="card-element">
-              <!-- Stripe Elements inserirà qui il form della carta -->
-            </div>
-            <div id="card-errors" role="alert"></div>
-          </div>
-
-          <div class="button-group">
-            <button type="button" class="btn btn-secondary" onclick="indietroStep()">Indietro</button>
-            <button type="button" class="btn btn-success" onclick="completaCheckIn()">Completa Check-in</button>
-          </div>
+          <!-- Qui i bottoni verranno generati dinamicamente da aggiornaBottonePagamento() -->
+          <div class="button-group"></div>
         </div>
 
         <!-- Step successo -->
@@ -110,7 +96,6 @@
     </div>
   </div>
 
-  <!-- Caricamento script direttamente -->
   <script src="checkin.js"></script>
 </body>
 </html>
