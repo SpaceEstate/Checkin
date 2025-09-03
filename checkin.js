@@ -147,6 +147,19 @@ function showNotification(message, type = 'info') {
   const notification = document.createElement('div');
   notification.className = `notification ${type}`;
   notification.textContent = message;
+  notification.style.cssText = `
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 12px 24px;
+    border-radius: 4px;
+    color: white;
+    font-weight: bold;
+    z-index: 10000;
+    ${type === 'error' ? 'background-color: #e74c3c;' : ''}
+    ${type === 'success' ? 'background-color: #27ae60;' : ''}
+    ${type === 'info' ? 'background-color: #3498db;' : ''}
+  `;
   document.body.appendChild(notification);
   
   setTimeout(() => {
@@ -279,8 +292,10 @@ function validaStep1() {
   const appartamento = document.getElementById("appartamento").value;
   const numOspiti = document.getElementById("numero-ospiti").value;
   const numNotti = document.getElementById("numero-notti").value;
-numeroOspiti = parseInt(numOspiti);
+  
+  numeroOspiti = parseInt(numOspiti);
   numeroNotti = parseInt(numNotti);
+  
   if (!appartamento) {
     showNotification("Seleziona un appartamento", "error");
     return false;
@@ -295,8 +310,6 @@ numeroOspiti = parseInt(numOspiti);
     showNotification("Inserisci un numero di notti valido", "error");
     return false;
   }
-
-  
 
   if (numeroOspiti > 1) {
     const tipoGruppo = document.getElementById("tipo-gruppo").value;
@@ -517,6 +530,9 @@ function preparaRiepilogo() {
       <span>€${totale.toFixed(2)}</span>
     </div>
   `;
+  
+  // Aggiorna il bottone di pagamento
+  aggiornaBottonePagamento();
 }
 
 // Gestione upload file
@@ -560,7 +576,6 @@ window.capturePhoto = function(ospiteNum) {
   canvas.height = video.videoHeight;
   
   ctx.drawImage(video, 0, 0);
-  // Continua dal punto precedente...
   
   // Converti canvas in blob
   canvas.toBlob((blob) => {
@@ -639,14 +654,18 @@ async function creaLinkPagamento() {
   }
   
   try {
-    // URL CORRETTO per la tua struttura Vercel
-    const response = await fetch('https://space-estate-two.vercel.app/api/crea-pagamento-stripe', {
+    // URL corretto per la struttura attuale (stesso dominio, cartella api)
+    const response = await fetch('/api/crea-pagamento-stripe', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(datiPrenotazione)
     });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
     
     const { checkoutUrl } = await response.json();
     
@@ -659,7 +678,7 @@ async function creaLinkPagamento() {
   }
 }
 
-// Funzione per salvare i dati localmente prima del pagamento (semplificata)
+// Funzione per salvare i dati localmente prima del pagamento
 function salvaDatiLocalmente() {
   const datiPrenotazione = {
     appartamento: document.getElementById('appartamento').value,
@@ -719,7 +738,12 @@ function aggiornaBottonePagamento() {
 }
 
 // Funzione per procedere al pagamento
-async function procediAlPagamento() {
+window.procediAlPagamento = async function() {
+  // Validazione finale
+  if (!validaPrenotazioneCompleta()) {
+    return;
+  }
+  
   // Salva i dati localmente
   const datiPrenotazione = salvaDatiLocalmente();
   
@@ -738,35 +762,7 @@ async function procediAlPagamento() {
   }
 }
 
-// Modifica la funzione preparaRiepilogo per includere il nuovo bottone
-function preparaRiepilogo() {
-  const totale = calcolaTotale();
-  
-  const summaryContent = document.getElementById('summary-content');
-  summaryContent.innerHTML = `
-    <div class="summary-item">
-      <span>Appartamento:</span>
-      <span>${document.getElementById('appartamento').value}</span>
-    </div>
-    <div class="summary-item">
-      <span>Numero ospiti:</span>
-      <span>${numeroOspiti}</span>
-    </div>
-    <div class="summary-item">
-      <span>Numero notti:</span>
-      <span>${numeroNotti}</span>
-    </div>
-    <div class="summary-item">
-      <span>Tassa di soggiorno:</span>
-      <span>€${totale.toFixed(2)}</span>
-    </div>
-  `;
-  
-  // Aggiorna il bottone di pagamento
-  aggiornaBottonePagamento();
-}
-
-// Gestione della validazione finale prima del pagamento (semplificata)
+// Gestione della validazione finale prima del pagamento
 function validaPrenotazioneCompleta() {
   // Verifica che tutti i dati siano stati inseriti
   for (let i = 1; i <= numeroOspiti; i++) {
