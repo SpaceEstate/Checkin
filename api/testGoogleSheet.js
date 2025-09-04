@@ -49,18 +49,14 @@ export default async function handler(req, res) {
     
     // 🚀 TEST CONNESSIONE REALE
     try {
-      // Crea JWT per autenticazione
-      const serviceAccountAuth = new JWT({
-        email: clientEmail,
-        key: privateKey,
-        scopes: [
-          'https://www.googleapis.com/auth/spreadsheets',
-          'https://www.googleapis.com/auth/drive.file',
-        ],
+      // Connetti al Google Sheet con service account
+      const doc = new GoogleSpreadsheet(sheetId);
+      
+      // Autentica con service account
+      await doc.useServiceAccountAuth({
+        client_email: clientEmail,
+        private_key: privateKey,
       });
-
-      // Connetti al Google Sheet
-      const doc = new GoogleSpreadsheet(sheetId, serviceAccountAuth);
       
       // Test 1: Carica info documento
       await doc.loadInfo();
