@@ -2,30 +2,31 @@ import { GoogleSpreadsheet } from "google-spreadsheet";
 
 export default async function handler(req, res) {
   try {
-    // Inizializza documento
+    // Inizializza documento con ID
     const doc = new GoogleSpreadsheet(process.env.SHEET_ID);
 
-    // Autenticazione con Service Account
+    // Autenticazione usando credenziali Service Account
     await doc.useServiceAccountAuth({
       client_email: process.env.GOOGLE_CLIENT_EMAIL,
-      private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, "\n"), // fix per Vercel
+      private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, "\n"),
     });
 
-    // Carica info documento
+    // Carica le informazioni del documento
     await doc.loadInfo();
 
-    // Recupera nome del primo foglio
+    // Seleziona il primo foglio
     const sheet = doc.sheetsByIndex[0];
 
-    return res.status(200).json({
+    // Risposta JSON di test
+    res.status(200).json({
       message: "✅ Connessione riuscita!",
-      titolo: doc.title,
+      titoloDocumento: doc.title,
       primoFoglio: sheet.title,
       righe: sheet.rowCount,
       colonne: sheet.columnCount,
     });
   } catch (error) {
     console.error("Errore Google Sheets:", error);
-    return res.status(500).json({ error: error.message });
+    res.status(500).json({ error: error.message });
   }
 }
