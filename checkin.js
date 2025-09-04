@@ -552,7 +552,7 @@ window.handleFileUpload = function(input, ospiteNum) {
 // Gestione fotocamera
 let currentStream = null;
 
-async function openCamera(ospiteNum) {
+window.openCamera = async function(ospiteNum) {
   const preview = document.getElementById(`camera-preview-${ospiteNum}`);
   const video = document.getElementById(`camera-video-${ospiteNum}`);
   
@@ -611,7 +611,6 @@ window.closeCamera = function(ospiteNum) {
   
   preview.style.display = 'none';
 }
-
 
 // Funzione per creare il link di pagamento Stripe
 async function creaLinkPagamento() {
@@ -680,42 +679,6 @@ async function creaLinkPagamento() {
   } catch (error) {
     console.error("Errore completo nella creazione pagamento:", error);
     showNotification("Errore nella creazione del pagamento: " + error.message, "error");
-  }
-}
-
-    
-    // Aggiungi dati documento per il responsabile
-    if (i === 1) {
-      ospite.tipoDocumento = document.querySelector(`select[name="ospite1_tipo_documento"]`).value;
-      ospite.numeroDocumento = document.querySelector(`input[name="ospite1_numero_documento"]`).value;
-      ospite.luogoRilascio = document.querySelector(`select[name="ospite1_luogo_rilascio"]`).value;
-    }
-    
-    datiPrenotazione.ospiti.push(ospite);
-  }
-  
-  try {
-    // URL corretto per la struttura attuale (stesso dominio, cartella api)
-    const response = await fetch('/api/crea-pagamento-stripe', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(datiPrenotazione)
-    });
-    
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    
-    const { checkoutUrl } = await response.json();
-    
-    // Reindirizza a Stripe Checkout
-    window.location.href = checkoutUrl;
-    
-  } catch (error) {
-    console.error('Errore nella creazione del pagamento:', error);
-    showNotification('Errore nella creazione del pagamento. Riprova.', 'error');
   }
 }
 
