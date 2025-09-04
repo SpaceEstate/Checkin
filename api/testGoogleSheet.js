@@ -2,9 +2,10 @@ import { GoogleSpreadsheet } from "google-spreadsheet";
 
 export default async function handler(req, res) {
   try {
+    // Inizializza documento con ID
     const doc = new GoogleSpreadsheet(process.env.SHEET_ID);
 
-    // Autenticazione con Service Account (nuovo metodo)
+    // Autenticazione moderna Service Account
     await doc.useServiceAccountAuth({
       client_email: process.env.GOOGLE_CLIENT_EMAIL,
       private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, "\n"),
@@ -13,6 +14,7 @@ export default async function handler(req, res) {
     // Carica info documento
     await doc.loadInfo();
 
+    // Primo foglio
     const sheet = doc.sheetsByIndex[0];
 
     return res.status(200).json({
