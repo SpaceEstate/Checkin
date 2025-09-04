@@ -1,11 +1,10 @@
 import { GoogleSpreadsheet } from 'google-spreadsheet';
-import { JWT } from 'google-auth-library';
 
 export default async function handler(req, res) {
   try {
-    console.log("🔍 Debug completo credenziali Google");
+    console.log("🔍 Test connessione Google Sheets");
     
-    // Verifica base
+    // Verifica variabili d'ambiente
     if (!process.env.SHEET_ID || !process.env.GOOGLE_CLIENT_EMAIL || !process.env.GOOGLE_PRIVATE_KEY) {
       return res.status(500).json({ 
         error: "Variabili d'ambiente mancanti",
@@ -21,61 +20,58 @@ export default async function handler(req, res) {
     let privateKey = process.env.GOOGLE_PRIVATE_KEY;
     const sheetId = process.env.SHEET_ID;
     
-    // Debug formato email
-    const emailValid = clientEmail.includes('@') && clientEmail.includes('.iam.gserviceaccount.com');
-    
-    // Pulizia chiave
+    // Pulizia chiave privata
     if (privateKey.includes('\\n')) {
       privateKey = privateKey.replace(/\\n/g, '\n');
     }
     privateKey = privateKey.trim();
     
-    const keyValidAfterClean = privateKey.includes('-----BEGIN PRIVATE KEY-----') && 
-                               privateKey.includes('-----END PRIVATE KEY-----');
-    
     // Verifica formato credenziali
-    if (!emailValid || !keyValidAfterClean) {
+    const emailValid = clientEmail.includes('@') && clientEmail.includes('.iam.gserviceaccount.com');
+    const keyValid = privateKey.includes('-----BEGIN PRIVATE KEY-----') && privateKey.includes('-----END PRIVATE KEY-----');
+    
+    if (!emailValid || !keyValid) {
       return res.status(400).json({
         success: false,
-        error: "FORMATO CREDENZIALI INVALIDO",
+        error: "Formato credenziali non valido",
         debug: {
-          email: { valore: clientEmail, valido: emailValid },
-          chiave: { valida_dopo_pulizia: keyValidAfterClean }
+          email_valida: emailValid,
+          chiave_valida: keyValid,
+          chiave_lunghezza: privateKey.length
         }
       });
     }
     
-    console.log("✅ Formato credenziali OK, tentativo connessione reale...");
+    console.log("✅ Credenziali formattate correttamente, test connessione...");
     
-    // 🚀 TEST CONNESSIONE REALE
+    // Test connessione a Google Sheets
     try {
-      // Connetti al Google Sheet con service account
       const doc = new GoogleSpreadsheet(sheetId);
       
-      // Autentica con service account
+      // Autenticazione
       await doc.useServiceAccountAuth({
         client_email: clientEmail,
         private_key: privateKey,
       });
       
-      // Test 1: Carica info documento
+      // Carica informazioni documento
       await doc.loadInfo();
       console.log("✅ Documento caricato:", doc.title);
       
-      // Test 2: Accedi al primo foglio
+      // Accedi al primo foglio
       const sheet = doc.sheetsByIndex[0];
-      console.log("✅ Primo foglio:", sheet.title);
+      if (!sheet) {
+        throw new Error("Nessun foglio trovato nel documento");
+      }
       
-      // Test 3: Leggi le prime righe
+      // Carica headers
       await sheet.loadHeaderRow();
-      const headers = sheet.headerValues;
-      console.log("✅ Headers trovati:", headers);
+      const headers = sheet.headerValues || [];
       
-      // Test 4: Conta le righe
+      // Conta le righe
       const rows = await sheet.getRows();
-      console.log("✅ Righe trovate:", rows.length);
       
-      // SUCCESS! 🎉
+      // SUCCESS!
       return res.status(200).json({
         success: true,
         message: "🎉 CONNESSIONE RIUSCITA!",
@@ -83,61 +79,50 @@ export default async function handler(req, res) {
           documento: {
             titolo: doc.title,
             id: doc.spreadsheetId,
-            fogli: doc.sheetsByIndex.length
+            url: `https://docs.google.com/spreadsheets/d/${doc.spreadsheetId}`
           },
-          primo_foglio: {
+          foglio: {
             titolo: sheet.title,
             righe: rows.length,
             colonne: headers.length,
-            headers: headers.slice(0, 10) // Prime 10 colonne
+            headers: headers.slice(0, 5) // Prime 5 colonne
           }
         },
         test_completati: [
           "✅ Autenticazione Service Account",
           "✅ Accesso al documento",
-          "✅ Lettura metadati foglio",
-          "✅ Lettura headers",
-          "✅ Conteggio righe"
+          "✅ Lettura metadati",
+          "✅ Conteggio righe e colonne"
         ]
       });
       
-    } catch (connectionError) {
-      console.error("❌ Errore connessione:", connectionError);
+    } catch (connectError) {
+      console.error("❌ Errore connessione:", connectError.message);
       
-      // Analizza il tipo di errore
-      let errorType = "ERRORE_GENERICO";
-      let suggestion = "Controlla le configurazioni";
+      let errorType = "ERRORE_CONNESSIONE";
+      let suggestion = "Verifica la configurazione";
       
-      if (connectionError.message.includes('403')) {
+      if (connectError.message.includes('403') || connectError.message.includes('Forbidden')) {
         errorType = "ACCESSO_NEGATO";
         suggestion = "Il Google Sheet non è condiviso con il Service Account";
-      } else if (connectionError.message.includes('404')) {
-        errorType = "SHEET_NON_TROVATO";
+      } else if (connectError.message.includes('404') || connectError.message.includes('not found')) {
+        errorType = "DOCUMENTO_NON_TROVATO";
         suggestion = "Verifica l'ID del Google Sheet";
-      } else if (connectionError.message.includes('401')) {
+      } else if (connectError.message.includes('401') || connectError.message.includes('Unauthorized')) {
         errorType = "CREDENZIALI_INVALIDE";
-        suggestion = "Le credenziali sono errate o scadute";
-      } else if (connectionError.message.includes('400')) {
-        errorType = "RICHIESTA_MALFORMATA";
-        suggestion = "Problema con il formato della richiesta";
+        suggestion = "Le credenziali del Service Account sono errate";
       }
       
       return res.status(400).json({
         success: false,
-        error: "ERRORE_CONNESSIONE",
-        tipo_errore: errorType,
-        messaggio: connectionError.message,
+        error: errorType,
+        messaggio: connectError.message,
         suggerimento: suggestion,
-        debug: {
-          email: clientEmail,
-          sheet_id: sheetId,
-          chiave_lunghezza: privateKey.length
-        },
-        cosa_fare: [
-          "1. Verifica che il Google Sheet sia condiviso con: " + clientEmail,
-          "2. Controlla che le API Google Sheets siano abilitate",
-          "3. Verifica l'ID del Google Sheet",
-          "4. Assicurati che il Service Account abbia i permessi corretti"
+        azioni_da_fare: [
+          `1. Condividi il Google Sheet con: ${clientEmail}`,
+          "2. Verifica che le API Google Sheets siano abilitate",
+          "3. Controlla l'ID del Google Sheet",
+          "4. Assicurati che il Service Account sia attivo"
         ]
       });
     }
@@ -147,8 +132,7 @@ export default async function handler(req, res) {
     return res.status(500).json({
       success: false,
       error: "ERRORE_INTERNO",
-      messaggio: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      messaggio: error.message
     });
   }
 }
