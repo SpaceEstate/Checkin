@@ -2,6 +2,7 @@
   "name": "checkin-form",
   "version": "1.0.0",
   "description": "Sistema di check-in con pagamento Stripe",
+  "type": "module",
   "main": "index.js",
   "scripts": {
     "dev": "vercel dev",
