@@ -652,11 +652,55 @@ async function creaLinkPagamento() {
 
   console.log("Dati prenotazione inviati a Stripe API:", datiPrenotazione);
 
+  // MODALITÀ TEST - Simula pagamento completato
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    console.log("Modalità TEST - Simulazione pagamento");
+    
+    // Simula un delay come se fosse una vera API
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    
+    // Simula pagamento completato
+    completaCheckIn(datiPrenotazione);
+    return;
+  }
+
+  // MODALITÀ PRODUZIONE - Chiamata alla tua API Vercel
   try {
-    console.log("Chiamata API -> /api/crea-pagamento-stripe");
-    const response = await fetch('/api/crea-pagamento-stripe', {
+    // 🔥 URL del tuo progetto Vercel
+    const API_ENDPOINT = 'https://checkin-six-coral.vercel.app/api/crea-pagamento-stripe';
+    
+    console.log("Chiamata API ->", API_ENDPOINT);
+    const response = await fetch(API_ENDPOINT, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        // Aggiungi eventuali header necessari per CORS
+      },
+      body: JSON.stringify(datiPrenotazione)
+    });
+
+    console.log("Response status:", response.status, "ok:", response.ok);
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error("Errore API:", errText);
+      throw new Error(`HTTP ${response.status} - ${errText}`);
+    }
+
+    const result = await response.json();
+    console.log("Response data:", result);
+
+    const { checkoutUrl } = result;
+    if (!checkoutUrl) throw new Error("checkoutUrl non ricevuto!");
+
+    // Reindirizza a Stripe Checkout
+    window.location.href = checkoutUrl;
+
+  } catch (error) {
+    console.error("Errore completo nella creazione pagamento:", error);
+    showNotification("Errore nella creazione del pagamento: " + error.message, "error");
+  }
+}Content-Type': 'application/json' },
       body: JSON.stringify(datiPrenotazione)
     });
 
@@ -680,6 +724,31 @@ async function creaLinkPagamento() {
     console.error("Errore completo nella creazione pagamento:", error);
     showNotification("Errore nella creazione del pagamento: " + error.message, "error");
   }
+}
+
+// Funzione per completare il check-in (dopo pagamento)
+function completaCheckIn(datiPrenotazione) {
+  // Genera un codice di riferimento fittizio
+  const riferimento = 'CHK' + Date.now().toString().slice(-8);
+  
+  // Mostra lo step di successo
+  document.querySelectorAll('.step').forEach(step => {
+    step.classList.remove('active');
+  });
+  
+  const successStep = document.getElementById('step-success');
+  successStep.classList.add('active');
+  
+  // Aggiorna il riferimento
+  document.getElementById('booking-reference').textContent = riferimento;
+  
+  // Log per debug
+  console.log('Check-in completato:', {
+    riferimento,
+    dati: datiPrenotazione
+  });
+  
+  showNotification('Check-in completato con successo!', 'success');
 }
 
 // Funzione per salvare i dati localmente prima del pagamento
