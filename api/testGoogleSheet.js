@@ -2,9 +2,17 @@ import { GoogleSpreadsheet } from "google-spreadsheet";
 
 export default async function handler(req, res) {
   try {
-    console.log("🔍 Test Google Sheets v5 con gestione header duplicati");
+    console.log("🔍 Diagnostica Google Sheets Auth");
     
-    // Verifica variabili d'ambiente
+    // Test 1: Verifica esistenza variabili
+    const envVars = {
+      SHEET_ID: process.env.SHEET_ID,
+      GOOGLE_CLIENT_EMAIL: process.env.GOOGLE_CLIENT_EMAIL,
+      GOOGLE_PRIVATE_KEY: process.env.GOOGLE_PRIVATE_KEY ? "PRESENTE" : "MANCANTE"
+    };
+    
+    console.log("📋 Variabili d'ambiente:", envVars);
+    
     if (!process.env.SHEET_ID) {
       return res.status(500).json({ error: "SHEET_ID mancante" });
     }
@@ -15,114 +23,99 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: "GOOGLE_PRIVATE_KEY mancante" });
     }
 
-    console.log("📄 Inizializzazione documento v5...");
-    
-    // Prepara le credenziali per v5
+    // Test 2: Analizza formato credenziali
+    const clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
     let privateKey = process.env.GOOGLE_PRIVATE_KEY;
+    
+    console.log("📧 Email formato:", clientEmail.includes('@') ? "VALIDO" : "INVALIDO");
+    console.log("🔑 Key inizia con BEGIN:", privateKey.includes('BEGIN PRIVATE KEY') ? "SÌ" : "NO");
+    
+    // Pulisci la chiave privata
     if (privateKey.includes('\\n')) {
       privateKey = privateKey.replace(/\\n/g, '\n');
+      console.log("🔧 Convertiti \\n in newline");
     }
-
-    // Syntax per google-spreadsheet v5 - passa le credenziali al costruttore
-    const doc = new GoogleSpreadsheet(process.env.SHEET_ID, {
-      client_email: process.env.GOOGLE_CLIENT_EMAIL,
-      private_key: privateKey,
-    });
-
-    console.log("📊 Caricamento info documento...");
-    await doc.loadInfo();
     
-    const sheet = doc.sheetsByIndex[0];
-    if (!sheet) {
-      throw new Error("Nessun foglio trovato");
-    }
-
-    console.log("📋 Analisi headers...");
+    // Test 3: Verifica formato Service Account
+    const keyValid = privateKey.includes('-----BEGIN PRIVATE KEY-----') && 
+                     privateKey.includes('-----END PRIVATE KEY-----');
     
-    // Carica gli headers
-    await sheet.loadHeaderRow();
-    const rawHeaders = sheet.headerValues || [];
-    
-    console.log("🔍 Headers trovati:", rawHeaders);
-    
-    // Controlla duplicati
-    const headerCounts = {};
-    const duplicates = [];
-    
-    rawHeaders.forEach((header, index) => {
-      if (header && header.trim()) {
-        const cleanHeader = header.trim();
-        headerCounts[cleanHeader] = (headerCounts[cleanHeader] || 0) + 1;
-        if (headerCounts[cleanHeader] > 1) {
-          duplicates.push({ 
-            header: cleanHeader, 
-            posizione: index + 1,
-            colonna: String.fromCharCode(65 + index) // A, B, C, etc.
-          });
-        }
-      }
-    });
-
-    if (duplicates.length > 0) {
-      console.log("⚠️ Header duplicati trovati:", duplicates);
-      
-      return res.status(200).json({
-        success: false,
-        warning: "🚨 HEADER DUPLICATI RILEVATI",
-        message: "Il foglio Google ha header duplicati che impediscono il funzionamento",
-        data: {
-          titolo: doc.title,
-          foglio: sheet.title,
-          righeTotali: sheet.rowCount,
-          colonneTotali: sheet.columnCount,
-          headersTrovati: rawHeaders,
-          duplicatiDettaglio: duplicates,
-          istruzioniRisoluzione: [
-            `1. Apri: https://docs.google.com/spreadsheets/d/${process.env.SHEET_ID}`,
-            "2. Nella prima riga, trova le colonne con nomi duplicati",
-            "3. Rinomina gli header duplicati (es: 'Cognome' → 'Cognome Partner')",
-            "4. Salva e riprova questo test"
-          ]
+    if (!keyValid) {
+      return res.status(500).json({
+        error: "FORMATO CHIAVE PRIVATA INVALIDO",
+        details: "La chiave deve iniziare con '-----BEGIN PRIVATE KEY-----' e finire con '-----END PRIVATE KEY-----'",
+        currentFormat: {
+          starts: privateKey.substring(0, 30) + "...",
+          ends: "..." + privateKey.substring(privateKey.length - 30)
         }
       });
     }
-
-    // Headers unici - proviamo a caricare i dati
-    console.log("✅ Headers validi, caricamento righe...");
     
-    const rows = await sheet.getRows({ limit: 3 });
+    if (!clientEmail.includes('@') || !clientEmail.includes('.iam.gserviceaccount.com')) {
+      return res.status(500).json({
+        error: "FORMATO EMAIL INVALIDO",
+        details: "L'email deve essere nel formato: nome@progetto.iam.gserviceaccount.com",
+        currentEmail: clientEmail
+      });
+    }
+
+    console.log("✅ Formato credenziali OK");
+
+    // Test 4: Tentativo connessione con debug
+    console.log("📄 Tentativo inizializzazione documento...");
+    
+    const credentials = {
+      client_email: clientEmail,
+      private_key: privateKey
+    };
+    
+    const doc = new GoogleSpreadsheet(process.env.SHEET_ID, credentials);
+    
+    console.log("📊 Tentativo caricamento info...");
+    await doc.loadInfo();
+    
+    console.log("🎉 SUCCESSO! Documento caricato:", doc.title);
     
     return res.status(200).json({
       success: true,
-      message: "🎉 CONNESSIONE GOOGLE SHEETS RIUSCITA!",
+      message: "🎉 AUTENTICAZIONE RIUSCITA!",
+      diagnostica: {
+        variabiliPresenti: envVars,
+        formatoEmail: "VALIDO",
+        formatoChiave: "VALIDO",
+        connessione: "SUCCESSO"
+      },
       data: {
         titolo: doc.title,
-        foglio: sheet.title,
-        righeTotali: sheet.rowCount,
-        colonneTotali: sheet.columnCount,
-        headers: rawHeaders,
-        righeCaricate: rows.length,
-        esempioDati: rows.slice(0, 2).map(row => {
-          const rowData = {};
-          rawHeaders.forEach((header, index) => {
-            if (header && header.trim()) {
-              rowData[header] = row._rawData[index] || '';
-            }
-          });
-          return rowData;
-        })
+        fogli: doc.sheetsByIndex.map(sheet => ({
+          nome: sheet.title,
+          righe: sheet.rowCount,
+          colonne: sheet.columnCount
+        }))
       }
     });
 
   } catch (error) {
-    console.error("❌ Errore:", error);
+    console.error("❌ Errore dettagliato:", error);
+    
     return res.status(500).json({
       success: false,
       error: error.message,
       errorType: error.constructor.name,
-      stack: error.stack,
-      timestamp: new Date().toISOString(),
-      suggerimento: "Se l'errore persiste, controlla le variabili d'ambiente su Vercel"
+      diagnostica: {
+        variabiliPresenti: {
+          SHEET_ID: process.env.SHEET_ID ? "PRESENTE" : "MANCANTE",
+          GOOGLE_CLIENT_EMAIL: process.env.GOOGLE_CLIENT_EMAIL ? "PRESENTE" : "MANCANTE", 
+          GOOGLE_PRIVATE_KEY: process.env.GOOGLE_PRIVATE_KEY ? "PRESENTE" : "MANCANTE"
+        },
+        suggerimenti: [
+          "1. Verifica che il Service Account sia abilitato",
+          "2. Controlla che l'email sia corretta (@progetto.iam.gserviceaccount.com)",
+          "3. Assicurati che la chiave privata sia completa (inclusi BEGIN/END)",
+          "4. Verifica che il foglio sia condiviso con il Service Account"
+        ]
+      },
+      timestamp: new Date().toISOString()
     });
   }
 }
