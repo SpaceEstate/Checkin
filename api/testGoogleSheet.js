@@ -1,8 +1,9 @@
 import { GoogleSpreadsheet } from "google-spreadsheet";
+import { JWT } from 'google-auth-library';
 
 export default async function handler(req, res) {
   try {
-    console.log("🔍 Inizio test connessione Google Sheets");
+    console.log("🔍 Inizio test connessione Google Sheets v5");
     
     // Verifica variabili d'ambiente
     if (!process.env.SHEET_ID) {
@@ -19,23 +20,26 @@ export default async function handler(req, res) {
     console.log("📋 SHEET_ID:", process.env.SHEET_ID);
     console.log("📧 CLIENT_EMAIL:", process.env.GOOGLE_CLIENT_EMAIL);
 
-    // Inizializza documento
-    const doc = new GoogleSpreadsheet(process.env.SHEET_ID);
-    console.log("📄 Documento inizializzato");
-
-    // Prepara la chiave privata (gestisce sia \n che \\n)
+    // Prepara la chiave privata
     let privateKey = process.env.GOOGLE_PRIVATE_KEY;
     if (privateKey.includes('\\n')) {
       privateKey = privateKey.replace(/\\n/g, '\n');
     }
-    
-    // Autenticazione Service Account
-    console.log("🔐 Tentativo autenticazione...");
-    await doc.useServiceAccountAuth({
-      client_email: process.env.GOOGLE_CLIENT_EMAIL,
-      private_key: privateKey,
+
+    // Crea l'oggetto JWT per l'autenticazione (API v5)
+    console.log("🔐 Creazione JWT per autenticazione...");
+    const serviceAccountAuth = new JWT({
+      email: process.env.GOOGLE_CLIENT_EMAIL,
+      key: privateKey,
+      scopes: [
+        'https://www.googleapis.com/auth/spreadsheets',
+        'https://www.googleapis.com/auth/drive.file',
+      ],
     });
-    console.log("✅ Autenticazione riuscita");
+
+    // Inizializza documento con auth
+    console.log("📄 Inizializzazione documento...");
+    const doc = new GoogleSpreadsheet(process.env.SHEET_ID, serviceAccountAuth);
 
     // Carica info del documento
     console.log("📊 Caricamento info documento...");
@@ -53,7 +57,7 @@ export default async function handler(req, res) {
     
     // Carica le righe (con limite per evitare timeout)
     console.log("📊 Caricamento righe...");
-    const rows = await sheet.getRows({ limit: 10 }); // Limita a 10 righe per il test
+    const rows = await sheet.getRows({ limit: 10 });
     console.log("✅ Righe caricate:", rows.length);
 
     // Risposta di successo
@@ -67,14 +71,13 @@ export default async function handler(req, res) {
         colonneTotali: sheet.columnCount,
         righeCaricate: rows.length,
         headers: sheet.headerValues || [],
-        primeRighe: rows.slice(0, 3).map(row => row._rawData) // Primi 3 righe
+        primeRighe: rows.slice(0, 3).map(row => row._rawData)
       }
     });
 
   } catch (error) {
     console.error("❌ Errore Google Sheets:", error);
     
-    // Log dettagliato dell'errore
     console.error("Error name:", error.name);
     console.error("Error message:", error.message);
     console.error("Error stack:", error.stack);
