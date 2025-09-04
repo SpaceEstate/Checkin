@@ -11,7 +11,7 @@
   "dependencies": {
     "stripe": "^14.0.0",
     "google-spreadsheet": "^5.0.2"
-    "google-auth-library": "^9.0.0"
+
   },
   "engines": {
     "node": ">=18.0.0"
