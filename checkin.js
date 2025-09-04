@@ -700,30 +700,6 @@ async function creaLinkPagamento() {
     console.error("Errore completo nella creazione pagamento:", error);
     showNotification("Errore nella creazione del pagamento: " + error.message, "error");
   }
-}Content-Type': 'application/json' },
-      body: JSON.stringify(datiPrenotazione)
-    });
-
-    console.log("Response status:", response.status, "ok:", response.ok);
-
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error("Errore API:", errText);
-      throw new Error(`HTTP ${response.status} - ${errText}`);
-    }
-
-    const result = await response.json();
-    console.log("Response data:", result);
-
-    const { checkoutUrl } = result;
-    if (!checkoutUrl) throw new Error("checkoutUrl non ricevuto!");
-
-    window.location.href = checkoutUrl;
-
-  } catch (error) {
-    console.error("Errore completo nella creazione pagamento:", error);
-    showNotification("Errore nella creazione del pagamento: " + error.message, "error");
-  }
 }
 
 // Funzione per completare il check-in (dopo pagamento)
