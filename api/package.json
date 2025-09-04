@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "description": "Sistema di check-in con pagamento Stripe",
   "type": "module",
-  "main": "index.js",
   "scripts": {
     "dev": "vercel dev",
     "build": "echo 'Build completed'",
@@ -11,15 +10,9 @@
   },
   "dependencies": {
     "stripe": "^14.0.0",
-    "google-spreadsheet": "^5.0.2"
+    "google-spreadsheet": "^5.4.0"
   },
   "engines": {
     "node": ">=18.0.0"
-  },
-  "repository": {
-    "type": "git",
-    "url": "your-github-repo-url"
-  },
-  "author": "Your Name",
-  "license": "MIT"
+  }
 }
