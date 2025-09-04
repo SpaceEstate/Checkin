@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "stripe": "^14.0.0",
-    "google-spreadsheet": "^3.4.0"
+    "google-spreadsheet": "^5.0.2"
   },
   "engines": {
     "node": ">=18.0.0"
