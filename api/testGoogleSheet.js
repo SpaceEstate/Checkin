@@ -34,6 +34,7 @@ export default async function handler(req, res) {
     if (privateKey.includes('\\n')) {
       privateKey = privateKey.replace(/\\n/g, '\n');
     }
+    privateKey = privateKey.trim();
     
     const keyValidAfterClean = privateKey.includes('-----BEGIN PRIVATE KEY-----') && 
                                privateKey.includes('-----END PRIVATE KEY-----');
