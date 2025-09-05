@@ -554,6 +554,10 @@ function preparaRiepilogo() {
     <div class="summary-section">
       <h3>📍 Dettagli soggiorno</h3>
       <div class="summary-item">
+        <span>Data Check-in:</span>
+        <span><strong>${dataCheckin}</strong></span>
+      </div>
+      <div class="summary-item">
         <span>Appartamento:</span>
         <span><strong>${document.getElementById('appartamento')?.value || 'N/A'}</strong></span>
       </div>
