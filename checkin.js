@@ -911,7 +911,7 @@ async function creaLinkPagamento(datiPrenotazione) {
       ...datiPrenotazione,
       // URL di successo - vai alla pagina dedicata con placeholder per session_id
       
-      successUrl: "https://spaceestate.github.io/checkin/successo-pagamento.html?session_id={CHECKOUT_SESSION_ID}",
+      successUrl: "https://spaceestate.github.io/Checkin/successo-pagamento.html?session_id={CHECKOUT_SESSION_ID}",
       // URL di annullamento - torna alla stessa pagina con parametro
       cancelUrl: `${baseUrl}${currentPath}?canceled=true`
     };
