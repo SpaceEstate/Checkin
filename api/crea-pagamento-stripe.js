@@ -53,11 +53,10 @@ export default async function handler(req, res) {
       responsabile: `${responsabile.nome} ${responsabile.cognome}`
     });
 
-    // Prepara metadata per Stripe (massimo 50 chiavi, 500 caratteri per valore)
+    // Prepara metadata per Stripe
     const metadata = {
-      // Info prenotazione
       dataCheckin,
-      appartamento: appartamento.substring(0, 490), // Tronca se troppo lungo
+      appartamento: appartamento.substring(0, 490),
       numeroOspiti: numeroOspiti.toString(),
       numeroNotti: numeroNotti.toString(),
       tipoGruppo: tipoGruppo || '',
@@ -79,10 +78,9 @@ export default async function handler(req, res) {
       resp_luogoRilascio: responsabile.luogoRilascio || '',
     };
 
-    // Serializza altri ospiti (escluso il responsabile)
+    // Serializza altri ospiti
     const altriOspiti = ospiti.filter(o => o.numero !== 1 && !o.isResponsabile);
     if (altriOspiti.length > 0) {
-      // Compatta i dati per risparmiare spazio nei metadata
       const ospitiCompatti = altriOspiti.map(o => ({
         n: o.numero,
         c: o.cognome,
@@ -99,7 +97,7 @@ export default async function handler(req, res) {
       metadata.altri_ospiti = JSON.stringify(ospitiCompatti);
     }
 
-    // Rimuovi campi vuoti per ottimizzare spazio
+    // Rimuovi campi vuoti
     Object.keys(metadata).forEach(key => {
       if (!metadata[key] || metadata[key] === 'undefined') {
         delete metadata[key];
@@ -108,7 +106,7 @@ export default async function handler(req, res) {
 
     console.log("💳 Creazione sessione Stripe...");
 
-    // Crea la sessione di pagamento
+    // Crea la sessione di pagamento con URL CORRETTE
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
       mode: "payment",
@@ -120,14 +118,15 @@ export default async function handler(req, res) {
               name: `Tassa soggiorno - ${appartamento}`,
               description: `Check-in: ${dataCheckin} | Ospiti: ${numeroOspiti} | Notti: ${numeroNotti}`
             },
-            unit_amount: Math.round(totale * 100), // Converti in centesimi
+            unit_amount: Math.round(totale * 100),
           },
           quantity: 1,
         },
       ],
-      success_url: "https://spaceestate.github.io/checkin/checkin/successo-pagamento.html?session_id={CHECKOUT_SESSION_ID}",
-      cancel_url: "https://spaceestate.github.io/checkin/checkin/checkin.html?canceled=true",
-      metadata: metadata, // 🔑 QUI SONO I DATI CHE IL WEBHOOK RECUPERERÀ
+      // ✅ URL CORRETTE - puntano ai file che esistono veramente
+      success_url: "https://spaceestate.github.io/checkin/successo-pagamento.html?session_id={CHECKOUT_SESSION_ID}",
+      cancel_url: "https://spaceestate.github.io/checkin/index.html?canceled=true",
+      metadata: metadata,
     });
 
     console.log("✅ Sessione creata:", session.id);
