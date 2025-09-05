@@ -247,10 +247,10 @@
             }
 
             try {
-                // Carica i dati della sessione Stripe
+                // CORREZIONE: URL API corretta
                 console.log("📡 Caricamento dati sessione...");
                 
-                const response = await fetch(`https://space-estate-two.vercel.app/api/get-session?session_id=${sessionId}`, {
+                const response = await fetch(`https://checkin-six-coral.vercel.app/api/get-session?session_id=${sessionId}`, {
                     method: 'GET',
                     headers: {
                         'Accept': 'application/json'
@@ -272,11 +272,37 @@
 
                 // Pulizia dati sensibili
                 sessionStorage.removeItem('datiPrenotazione');
-                sessionStorage.removeItem('stripeSessionId');
+                sessionStorage.removeItem('paymentTimestamp');
 
             } catch (error) {
                 console.error("❌ Errore nel caricamento:", error);
-                mostraErrore("Errore nel caricamento dei dati: " + error.message);
+                
+                // FALLBACK: Prova a recuperare dati da sessionStorage
+                console.log("🔄 Tentativo recupero da sessionStorage...");
+                tentaRecuperoDaSessionStorage();
+            }
+        }
+
+        function tentaRecuperoDaSessionStorage() {
+            try {
+                const datiSalvati = sessionStorage.getItem('datiPrenotazione');
+                
+                if (datiSalvati) {
+                    const datiPrenotazione = JSON.parse(datiSalvati);
+                    console.log("✅ Dati recuperati da sessionStorage:", datiPrenotazione);
+                    
+                    mostraDettagliPrenotazione(datiPrenotazione);
+                    mostraCodiceCassetta(datiPrenotazione.appartamento);
+                    
+                    // Pulizia dopo uso
+                    sessionStorage.removeItem('datiPrenotazione');
+                    sessionStorage.removeItem('paymentTimestamp');
+                } else {
+                    mostraErrore("Nessun dato disponibile per questa sessione");
+                }
+            } catch (error) {
+                console.error("❌ Errore nel recupero da sessionStorage:", error);
+                mostraErrore("Errore nel caricamento dei dati salvati");
             }
         }
 
@@ -289,13 +315,25 @@
             }
 
             // Formatta la data
-            const dataCheckin = sessionData.dataCheckin ? 
-                new Date(sessionData.dataCheckin).toLocaleDateString('it-IT', {
-                    weekday: 'long',
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric'
-                }) : 'N/A';
+            let dataCheckin = 'N/A';
+            if (sessionData.dataCheckin) {
+                try {
+                    dataCheckin = new Date(sessionData.dataCheckin).toLocaleDateString('it-IT', {
+                        weekday: 'long',
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                    });
+                } catch {
+                    dataCheckin = sessionData.dataCheckin;
+                }
+            }
+
+            // CORREZIONE: Gestisce sia formato API che sessionStorage
+            const totale = sessionData.totale || sessionData.amount_total || '0.00';
+            const numeroOspiti = sessionData.numeroOspiti || 'N/A';
+            const numeroNotti = sessionData.numeroNotti || 'N/A';
+            const appartamento = sessionData.appartamento || 'N/A';
 
             container.innerHTML = `
                 <div class="info-item">
@@ -304,19 +342,19 @@
                 </div>
                 <div class="info-item">
                     <span class="info-label">Appartamento:</span>
-                    <span class="info-value">${sessionData.appartamento || 'N/A'}</span>
+                    <span class="info-value">${appartamento}</span>
                 </div>
                 <div class="info-item">
                     <span class="info-label">Ospiti:</span>
-                    <span class="info-value">${sessionData.numeroOspiti || 'N/A'}</span>
+                    <span class="info-value">${numeroOspiti}</span>
                 </div>
                 <div class="info-item">
                     <span class="info-label">Notti:</span>
-                    <span class="info-value">${sessionData.numeroNotti || 'N/A'}</span>
+                    <span class="info-value">${numeroNotti}</span>
                 </div>
                 <div class="info-item">
                     <span class="info-label">Totale pagato:</span>
-                    <span class="info-value">€${sessionData.totale || '0.00'}</span>
+                    <span class="info-value">€${parseFloat(totale).toFixed(2)}</span>
                 </div>
             `;
         }
@@ -327,15 +365,18 @@
             if (!appartamento) {
                 codiceElement.textContent = "N/A";
                 codiceElement.classList.add('error');
+                codiceElement.classList.remove('loading');
                 return;
             }
 
             let codice = "N/A";
             
             // Determina il codice basandosi sul nome dell'appartamento
-            if (appartamento.toLowerCase().includes("corte")) {
+            const appartamentoLower = appartamento.toLowerCase();
+            
+            if (appartamentoLower.includes("corte")) {
                 codice = "1933";
-            } else if (appartamento.toLowerCase().includes("torre")) {
+            } else if (appartamentoLower.includes("torre")) {
                 codice = "1935";
             }
 
