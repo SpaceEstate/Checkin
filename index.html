@@ -14,90 +14,77 @@
       <p>Completa la registrazione per il tuo soggiorno</p>
     </div>
 
-    <div class="form-container">
-      <form id="checkin-form">
-        <!-- Step 1: Info generali -->
-        <div class="step active" id="step-1">
-          <div class="step-header">
-            <h2 class="step-title">Informazioni Generali</h2>
-            <p class="step-subtitle">Inserisci i dettagli della tua prenotazione</p>
-          </div>
+    <form id="checkin-form">
+      <!-- Step 1: Info generali -->
+      <div class="step active" id="step-1">
+        <div class="form-group">
+          <label class="form-label" for="data-checkin">Data check-in</label>
+          <input type="date" id="data-checkin" name="data-checkin" class="form-input" required>
+        </div>
+
+        <div class="form-grid">
           <div class="form-group">
-    <label class="form-label" for="data-checkin">Data check-in</label>
-    <input type="date" id="data-checkin" name="data-checkin" class="form-input" required>
-  </div>
-
-          <div class="form-grid">
-            <div class="form-group">
-              <label class="form-label" for="appartamento">Appartamento</label>
-              <select id="appartamento" name="appartamento" class="form-select" required>
-                <option value="">Seleziona appartamento</option>
-                <option value="La Columbera - Torre, Appartamento con 2 camere da letto">La Columbera - Torre, Appartamento con 2 camere da letto</option>
-                <option value="La Columbera - Corte, Appartamento con 1 camere da letto">La Columbera - Corte, Appartamento con 1 camere da letto</option>
-              </select>
-            </div>
-
-            <div class="form-group">
-              <label class="form-label" for="numero-ospiti">Numero ospiti</label>
-              <select id="numero-ospiti" name="numero-ospiti" class="form-select" required onchange="toggleTipoGruppo()">
-                <option value="">Seleziona numero</option>
-                <option value="1">1 ospite</option>
-                <option value="2">2 ospiti</option>
-                <option value="3">3 ospiti</option>
-                <option value="4">4 ospiti</option>
-                <option value="5">5 ospiti</option>
-              </select>
-            </div>
-
-            <div class="form-group">
-              <label class="form-label" for="numero-notti">Numero notti</label>
-              <input type="number" id="numero-notti" name="numero-notti" class="form-input" min="2" required placeholder="Es. 3">
-            </div>
-
-            <div class="conditional-group" id="gruppo-wrapper">
-              <div class="form-group">
-                <label class="form-label" for="tipo-gruppo">Tipo di gruppo</label>
-                <select id="tipo-gruppo" name="tipo-gruppo" class="form-select">
-                  <option value="">Seleziona tipo</option>
-                  <option value="famiglia">Famiglia</option>
-                  <option value="generico">Generico</option>
-                </select>
-              </div>
-            </div>
+            <label class="form-label" for="appartamento">Appartamento</label>
+            <select id="appartamento" name="appartamento" class="form-select" required>
+              <option value="">Seleziona appartamento</option>
+              <option value="La Columbera - Torre, Appartamento con 2 camere da letto">La Columbera - Torre, 2 camere</option>
+              <option value="La Columbera - Corte, Appartamento con 1 camere da letto">La Columbera - Corte, 1 camera</option>
+            </select>
           </div>
 
-          <div class="button-group">
-            <button type="button" class="btn btn-primary" onclick="prossimoStep()">Avanti</button>
+          <div class="form-group">
+            <label class="form-label" for="numero-ospiti">Numero ospiti</label>
+            <select id="numero-ospiti" name="numero-ospiti" class="form-select" required onchange="toggleTipoGruppo()">
+              <option value="">Seleziona numero</option>
+              <option value="1">1 ospite</option>
+              <option value="2">2 ospiti</option>
+              <option value="3">3 ospiti</option>
+              <option value="4">4 ospiti</option>
+              <option value="5">5 ospiti</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="numero-notti">Numero notti</label>
+            <input type="number" id="numero-notti" name="numero-notti" class="form-input" min="1" required placeholder="Es. 3">
           </div>
         </div>
 
-        <!-- Step finale: Riepilogo e pagamento -->
-        <div class="step" id="step-final">
-          <div class="step-header">
-            <h2 class="step-title">Riepilogo e Pagamento</h2>
-            <p class="step-subtitle">Verifica i dati e procedi al pagamento</p>
-          </div>
-
-          <div class="summary-section">
-            <h3 class="summary-title">Riepilogo Prenotazione</h3>
-            <div id="summary-content"></div>
-          </div>
-
-          <!-- Qui i bottoni verranno generati dinamicamente da aggiornaBottonePagamento() -->
-          <div class="button-group"></div>
-        </div>
-
-        <!-- Step successo -->
-        <div class="step" id="step-success">
-          <div class="success-message">
-            <h3>✅ Check-in Completato!</h3>
-            <p>Grazie per aver completato la registrazione.</p>
-            <p>Ti auguriamo un soggiorno piacevole!</p>
-            <p><strong>Riferimento pratica:</strong> <span id="booking-reference"></span></p>
+        <div class="conditional-group" id="gruppo-wrapper">
+          <div class="form-group">
+            <label class="form-label" for="tipo-gruppo">Tipo di gruppo</label>
+            <select id="tipo-gruppo" name="tipo-gruppo" class="form-select">
+              <option value="">Seleziona tipo</option>
+              <option value="famiglia">Famiglia</option>
+              <option value="generico">Generico</option>
+            </select>
           </div>
         </div>
-      </form>
-    </div>
+
+        <div class="button-group">
+          <button type="button" class="btn btn-primary" onclick="prossimoStep()">Avanti</button>
+        </div>
+      </div>
+
+      <!-- Step finale: Riepilogo e pagamento -->
+      <div class="step" id="step-final">
+        <div class="summary-section">
+          <h3 class="summary-title">Riepilogo Prenotazione</h3>
+          <div id="summary-content"></div>
+        </div>
+        <div class="button-group"></div>
+      </div>
+
+      <!-- Step successo -->
+      <div class="step" id="step-success">
+        <div class="success-message">
+          <h3>✅ Check-in Completato!</h3>
+          <p>Grazie per aver completato la registrazione.</p>
+          <p>Ti auguriamo un soggiorno piacevole!</p>
+          <p><strong>Riferimento pratica:</strong> <span id="booking-reference"></span></p>
+        </div>
+      </div>
+    </form>
   </div>
 
   <script src="checkin.js"></script>
