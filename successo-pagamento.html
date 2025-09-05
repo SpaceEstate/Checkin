@@ -1,146 +1,393 @@
-import Stripe from "stripe";
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pagamento Riuscito - Space Estate</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #f5f2e9 0%, #e8dcc0 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            color: #8b7d6b;
+        }
 
-export default async function handler(req, res) {
-  // CORS Headers
-  res.setHeader("Access-Control-Allow-Origin", "https://spaceestate.github.io");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  
-  // Gestione preflight
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
-  }
-  
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Metodo non consentito" });
-  }
+        .success-container {
+            background: #fff;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(139, 125, 107, 0.2);
+            max-width: 700px;
+            width: 100%;
+            text-align: center;
+        }
 
-  try {
-    console.log("📥 Ricevuto request per pagamento");
-    
-    const {
-      dataCheckin,
-      appartamento,
-      numeroOspiti,
-      numeroNotti,
-      tipoGruppo,
-      totale,
-      ospiti = [],
-      timestamp
-    } = req.body;
+        .success-header {
+            margin-bottom: 30px;
+        }
 
-    // Validazione dati essenziali
-    if (!dataCheckin || !appartamento || !numeroOspiti || !ospiti.length || !totale) {
-      return res.status(400).json({ 
-        error: "Dati mancanti",
-        details: "dataCheckin, appartamento, numeroOspiti, ospiti e totale sono obbligatori"
-      });
-    }
+        .success-icon {
+            font-size: 4rem;
+            margin-bottom: 15px;
+        }
 
-    // Trova il responsabile
-    const responsabile = ospiti.find(o => o.numero === 1 || o.isResponsabile);
-    if (!responsabile) {
-      return res.status(400).json({ error: "Dati del responsabile mancanti" });
-    }
+        .success-title {
+            color: #a67c52;
+            font-size: 2rem;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
 
-    console.log("📋 Dati validati:", {
-      dataCheckin,
-      appartamento,
-      numeroOspiti,
-      totale,
-      responsabile: `${responsabile.nome} ${responsabile.cognome}`
-    });
+        .success-subtitle {
+            font-size: 1.1rem;
+            color: #8b7d6b;
+            margin-bottom: 20px;
+        }
 
-    // Prepara metadata per Stripe
-    const metadata = {
-      dataCheckin,
-      appartamento: appartamento.substring(0, 490),
-      numeroOspiti: numeroOspiti.toString(),
-      numeroNotti: numeroNotti.toString(),
-      tipoGruppo: tipoGruppo || '',
-      totale: totale.toString(),
-      timestamp: timestamp || new Date().toISOString(),
-      
-      // Dati responsabile
-      resp_cognome: responsabile.cognome || '',
-      resp_nome: responsabile.nome || '',
-      resp_genere: responsabile.genere || '',
-      resp_nascita: responsabile.nascita || '',
-      resp_eta: responsabile.eta ? responsabile.eta.toString() : '',
-      resp_cittadinanza: responsabile.cittadinanza || '',
-      resp_luogoNascita: responsabile.luogoNascita || '',
-      resp_comune: responsabile.comune || '',
-      resp_provincia: responsabile.provincia || '',
-      resp_tipoDocumento: responsabile.tipoDocumento || '',
-      resp_numeroDocumento: responsabile.numeroDocumento || '',
-      resp_luogoRilascio: responsabile.luogoRilascio || '',
-    };
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+            margin: 30px 0;
+            text-align: left;
+        }
 
-    // Serializza altri ospiti
-    const altriOspiti = ospiti.filter(o => o.numero !== 1 && !o.isResponsabile);
-    if (altriOspiti.length > 0) {
-      const ospitiCompatti = altriOspiti.map(o => ({
-        n: o.numero,
-        c: o.cognome,
-        no: o.nome,
-        g: o.genere,
-        na: o.nascita,
-        e: o.eta,
-        ci: o.cittadinanza,
-        ln: o.luogoNascita,
-        co: o.comune || '',
-        p: o.provincia || ''
-      }));
-      
-      metadata.altri_ospiti = JSON.stringify(ospitiCompatti);
-    }
+        .info-card {
+            background: #faf9f6;
+            padding: 20px;
+            border-radius: 12px;
+            border-left: 4px solid #a67c52;
+        }
 
-    // Rimuovi campi vuoti
-    Object.keys(metadata).forEach(key => {
-      if (!metadata[key] || metadata[key] === 'undefined') {
-        delete metadata[key];
-      }
-    });
+        .info-card h3 {
+            color: #a67c52;
+            font-size: 1.2rem;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
 
-    console.log("💳 Creazione sessione Stripe...");
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+        }
 
-    // Crea la sessione di pagamento con URL CORRETTE
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ["card"],
-      mode: "payment",
-      line_items: [
-        {
-          price_data: {
-            currency: "eur",
-            product_data: {
-              name: `Tassa soggiorno - ${appartamento}`,
-              description: `Check-in: ${dataCheckin} | Ospiti: ${numeroOspiti} | Notti: ${numeroNotti}`
-            },
-            unit_amount: Math.round(totale * 100),
-          },
-          quantity: 1,
-        },
-      ],
-      // ✅ URL CORRETTE - puntano ai file che esistono veramente
-      success_url: "https://spaceestate.github.io/checkin/successo-pagamento.html?session_id={CHECKOUT_SESSION_ID}",
-      cancel_url: "https://spaceestate.github.io/checkin/index.html?canceled=true",
-      metadata: metadata,
-    });
+        .info-item:last-child {
+            border-bottom: none;
+        }
 
-    console.log("✅ Sessione creata:", session.id);
+        .info-label {
+            font-weight: 500;
+            color: #8b7d6b;
+        }
 
-    return res.status(200).json({ 
-      checkoutUrl: session.url,
-      sessionId: session.id 
-    });
+        .info-value {
+            font-weight: 600;
+            color: #a67c52;
+        }
 
-  } catch (error) {
-    console.error("❌ Errore creazione sessione:", error);
-    return res.status(500).json({ 
-      error: "Errore creazione sessione",
-      message: error.message 
-    });
-  }
-}
+        .code-section {
+            background: linear-gradient(135deg, #a67c52, #b89968);
+            color: #fff;
+            padding: 25px;
+            border-radius: 15px;
+            margin: 30px 0;
+        }
+
+        .code-title {
+            font-size: 1.4rem;
+            font-weight: 600;
+            margin-bottom: 15px;
+        }
+
+        .code-box {
+            font-size: 2.5rem;
+            font-weight: bold;
+            background: rgba(255, 255, 255, 0.2);
+            padding: 20px;
+            border-radius: 12px;
+            letter-spacing: 0.2em;
+            margin-bottom: 10px;
+        }
+
+        .code-note {
+            font-size: 0.95rem;
+            opacity: 0.9;
+        }
+
+        .loading {
+            display: inline-block;
+            animation: pulse 1.5s ease-in-out infinite alternate;
+        }
+
+        @keyframes pulse {
+            from { opacity: 0.6; }
+            to { opacity: 1; }
+        }
+
+        .error {
+            color: #e74c3c;
+            background: #fdf2f2;
+            border-color: #e74c3c;
+        }
+
+        .actions {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 30px;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 14px 28px;
+            border-radius: 30px;
+            text-decoration: none;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #b89968, #a67c52);
+            color: #fff;
+        }
+
+        .btn-secondary {
+            background: #f8f8f8;
+            color: #8b7d6b;
+            border: 2px solid #e0e0e0;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(166, 124, 82, 0.3);
+        }
+
+        @media (max-width: 600px) {
+            .success-container {
+                padding: 25px;
+            }
+
+            .success-title {
+                font-size: 1.6rem;
+            }
+
+            .code-box {
+                font-size: 2rem;
+            }
+
+            .actions {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .btn {
+                width: 100%;
+                max-width: 280px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="success-container">
+        <div class="success-header">
+            <div class="success-icon">✅</div>
+            <h1 class="success-title">Pagamento completato!</h1>
+            <p class="success-subtitle">Grazie per aver completato il check-in e il pagamento della tassa di soggiorno.</p>
+        </div>
+
+        <div class="info-grid">
+            <div class="info-card">
+                <h3>📋 Dettagli prenotazione</h3>
+                <div id="booking-details">
+                    <div class="loading">Caricamento dettagli...</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="code-section">
+            <h3 class="code-title">🔑 Codice cassetta sicurezza</h3>
+            <div id="codice-cassetta" class="code-box loading">
+                ••••
+            </div>
+            <p class="code-note">Usa questo codice per accedere al tuo appartamento</p>
+        </div>
+
+        <div class="actions">
+            <a href="index.html" class="btn btn-primary">🏠 Torna alla Home</a>
+            <button onclick="window.print()" class="btn btn-secondary">🖨️ Stampa</button>
+        </div>
+    </div>
+
+    <script>
+        async function caricaDatiPagamento() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const sessionId = urlParams.get("session_id");
+            
+            console.log("🔍 Session ID:", sessionId);
+
+            if (!sessionId) {
+                mostraErrore("Sessione non trovata nell'URL");
+                return;
+            }
+
+            try {
+                // Carica i dati della sessione Stripe
+                console.log("📡 Caricamento dati sessione...");
+                
+                const response = await fetch(`https://space-estate-two.vercel.app/api/get-session?session_id=${sessionId}`, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Errore HTTP: ${response.status}`);
+                }
+
+                const sessionData = await response.json();
+                console.log("✅ Dati sessione ricevuti:", sessionData);
+
+                // Mostra i dettagli della prenotazione
+                mostraDettagliPrenotazione(sessionData);
+
+                // Determina il codice della cassetta
+                mostraCodiceCassetta(sessionData.appartamento);
+
+                // Pulizia dati sensibili
+                sessionStorage.removeItem('datiPrenotazione');
+                sessionStorage.removeItem('stripeSessionId');
+
+            } catch (error) {
+                console.error("❌ Errore nel caricamento:", error);
+                mostraErrore("Errore nel caricamento dei dati: " + error.message);
+            }
+        }
+
+        function mostraDettagliPrenotazione(sessionData) {
+            const container = document.getElementById('booking-details');
+            
+            if (!sessionData) {
+                container.innerHTML = '<div class="error">Dati non disponibili</div>';
+                return;
+            }
+
+            // Formatta la data
+            const dataCheckin = sessionData.dataCheckin ? 
+                new Date(sessionData.dataCheckin).toLocaleDateString('it-IT', {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                }) : 'N/A';
+
+            container.innerHTML = `
+                <div class="info-item">
+                    <span class="info-label">Check-in:</span>
+                    <span class="info-value">${dataCheckin}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Appartamento:</span>
+                    <span class="info-value">${sessionData.appartamento || 'N/A'}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Ospiti:</span>
+                    <span class="info-value">${sessionData.numeroOspiti || 'N/A'}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Notti:</span>
+                    <span class="info-value">${sessionData.numeroNotti || 'N/A'}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Totale pagato:</span>
+                    <span class="info-value">€${sessionData.totale || '0.00'}</span>
+                </div>
+            `;
+        }
+
+        function mostraCodiceCassetta(appartamento) {
+            const codiceElement = document.getElementById('codice-cassetta');
+            
+            if (!appartamento) {
+                codiceElement.textContent = "N/A";
+                codiceElement.classList.add('error');
+                return;
+            }
+
+            let codice = "N/A";
+            
+            // Determina il codice basandosi sul nome dell'appartamento
+            if (appartamento.toLowerCase().includes("corte")) {
+                codice = "1933";
+            } else if (appartamento.toLowerCase().includes("torre")) {
+                codice = "1935";
+            }
+
+            codiceElement.textContent = codice;
+            codiceElement.classList.remove('loading');
+            
+            if (codice === "N/A") {
+                codiceElement.classList.add('error');
+            }
+
+            console.log(`🔑 Codice cassetta per "${appartamento}": ${codice}`);
+        }
+
+        function mostraErrore(messaggio) {
+            // Aggiorna dettagli prenotazione
+            const bookingDetails = document.getElementById('booking-details');
+            if (bookingDetails) {
+                bookingDetails.innerHTML = `<div class="error">${messaggio}</div>`;
+            }
+
+            // Aggiorna codice cassetta
+            const codiceElement = document.getElementById('codice-cassetta');
+            if (codiceElement) {
+                codiceElement.textContent = "Errore";
+                codiceElement.classList.remove('loading');
+                codiceElement.classList.add('error');
+            }
+
+            // Cambia il titolo
+            const title = document.querySelector('.success-title');
+            if (title) {
+                title.textContent = "Errore nel caricamento";
+            }
+
+            // Cambia l'icona
+            const icon = document.querySelector('.success-icon');
+            if (icon) {
+                icon.textContent = "❌";
+            }
+        }
+
+        // Inizializzazione
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log("🚀 Pagina successo inizializzata");
+            caricaDatiPagamento();
+        });
+
+        // Gestione errori globali
+        window.addEventListener('error', function(event) {
+            console.error('❌ Errore JavaScript:', event.error);
+            mostraErrore("Si è verificato un errore imprevisto");
+        });
+    </script>
+</body>
+</html>
