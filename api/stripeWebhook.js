@@ -1,147 +1,172 @@
-import Stripe from "stripe";
+import Stripe from 'stripe';
+import { GoogleSpreadsheet } from 'google-spreadsheet';
+import { JWT } from 'google-auth-library';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 export default async function handler(req, res) {
-  // CORS Headers
-  res.setHeader("Access-Control-Allow-Origin", "https://spaceestate.github.io");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  
-  // Gestione preflight
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
   }
-  
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Metodo non consentito" });
+
+  const sig = req.headers['stripe-signature'];
+  const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+  if (!endpointSecret) {
+    console.error('❌ STRIPE_WEBHOOK_SECRET non configurato');
+    return res.status(500).json({ error: 'Webhook secret non configurato' });
   }
+
+  let event;
 
   try {
-    console.log("📥 Ricevuto request per pagamento");
+    // Verifica signature Stripe
+    event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+    console.log('✅ Webhook Stripe verificato:', event.type);
+  } catch (err) {
+    console.error('❌ Errore verifica webhook:', err.message);
+    return res.status(400).json({ error: 'Webhook signature invalid' });
+  }
+
+  // Gestisci solo eventi di pagamento completato
+  if (event.type === 'checkout.session.completed') {
+    try {
+      const session = event.data.object;
+      console.log('💰 Pagamento completato per sessione:', session.id);
+      
+      // Scrivi dati su Google Sheets
+      await scriviDatiSuGoogleSheets(session);
+      
+      console.log('✅ Dati scritti con successo su Google Sheets');
+      
+    } catch (error) {
+      console.error('❌ Errore elaborazione webhook:', error);
+      return res.status(500).json({ error: 'Errore interno' });
+    }
+  }
+
+  return res.status(200).json({ received: true });
+}
+
+async function scriviDatiSuGoogleSheets(session) {
+  try {
+    console.log('📊 Connessione a Google Sheets...');
     
-    const {
-      dataCheckin,
-      appartamento,
-      numeroOspiti,
-      numeroNotti,
-      tipoGruppo,
-      totale,
-      ospiti = [],
-      timestamp
-    } = req.body;
-
-    // Validazione dati essenziali
-    if (!dataCheckin || !appartamento || !numeroOspiti || !ospiti.length || !totale) {
-      return res.status(400).json({ 
-        error: "Dati mancanti",
-        details: "dataCheckin, appartamento, numeroOspiti, ospiti e totale sono obbligatori"
-      });
+    // Configurazione Google Sheets
+    const sheetId = process.env.SHEET_ID;
+    const clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
+    let privateKey = process.env.GOOGLE_PRIVATE_KEY;
+    
+    if (!sheetId || !clientEmail || !privateKey) {
+      throw new Error('Variabili ambiente Google Sheets mancanti');
     }
 
-    // Trova il responsabile
-    const responsabile = ospiti.find(o => o.numero === 1 || o.isResponsabile);
-    if (!responsabile) {
-      return res.status(400).json({ error: "Dati del responsabile mancanti" });
+    // Fix per chiave privata con escape
+    if (privateKey.includes('\\n')) {
+      privateKey = privateKey.replace(/\\n/g, '\n');
     }
 
-    console.log("📋 Dati validati:", {
-      dataCheckin,
-      appartamento,
-      numeroOspiti,
-      totale,
-      responsabile: `${responsabile.nome} ${responsabile.cognome}`
+    // Autenticazione
+    const serviceAccountAuth = new JWT({
+      email: clientEmail,
+      key: privateKey.trim(),
+      scopes: ['https://www.googleapis.com/auth/spreadsheets'],
     });
 
-    // Prepara metadata per Stripe (massimo 50 chiavi, 500 caratteri per valore)
-    const metadata = {
-      // Info prenotazione
-      dataCheckin,
-      appartamento: appartamento.substring(0, 490), // Tronca se troppo lungo
-      numeroOspiti: numeroOspiti.toString(),
-      numeroNotti: numeroNotti.toString(),
-      tipoGruppo: tipoGruppo || '',
-      totale: totale.toString(),
-      timestamp: timestamp || new Date().toISOString(),
+    // Connessione al documento
+    const doc = new GoogleSpreadsheet(sheetId, serviceAccountAuth);
+    await doc.loadInfo();
+    console.log('📝 Connesso a:', doc.title);
+
+    // Prendi il primo foglio
+    const sheet = doc.sheetsByIndex[0];
+    await sheet.loadHeaderRow();
+
+    // Estrai dati dalla sessione Stripe
+    const metadata = session.metadata;
+    
+    // Parsing altri ospiti se presenti
+    let altriOspiti = [];
+    if (metadata.altri_ospiti) {
+      try {
+        altriOspiti = JSON.parse(metadata.altri_ospiti);
+      } catch (e) {
+        console.warn('⚠️ Errore parsing altri ospiti:', e.message);
+      }
+    }
+
+    // Prepara i dati per il foglio principale (responsabile)
+    const rigaPrincipale = {
+      'Data Check-in': metadata.dataCheckin || '',
+      'Appartamento': metadata.appartamento || '',
+      'Numero Ospiti': metadata.numeroOspiti || '',
+      'Numero Notti': metadata.numeroNotti || '',
+      'Tipo Gruppo': metadata.tipoGruppo || '',
+      'Totale Pagato': metadata.totale || '',
+      'Session ID': session.id,
+      'Stato Pagamento': 'PAGATO',
+      'Data Pagamento': new Date().toISOString().split('T')[0],
       
       // Dati responsabile
-      resp_cognome: responsabile.cognome || '',
-      resp_nome: responsabile.nome || '',
-      resp_genere: responsabile.genere || '',
-      resp_nascita: responsabile.nascita || '',
-      resp_eta: responsabile.eta ? responsabile.eta.toString() : '',
-      resp_cittadinanza: responsabile.cittadinanza || '',
-      resp_luogoNascita: responsabile.luogoNascita || '',
-      resp_comune: responsabile.comune || '',
-      resp_provincia: responsabile.provincia || '',
-      resp_tipoDocumento: responsabile.tipoDocumento || '',
-      resp_numeroDocumento: responsabile.numeroDocumento || '',
-      resp_luogoRilascio: responsabile.luogoRilascio || '',
+      'Cognome': metadata.resp_cognome || '',
+      'Nome': metadata.resp_nome || '',
+      'Genere': metadata.resp_genere || '',
+      'Data Nascita': metadata.resp_nascita || '',
+      'Cittadinanza': metadata.resp_cittadinanza || '',
+      'Luogo Nascita': metadata.resp_luogoNascita || '',
+      'Comune': metadata.resp_comune || '',
+      'Provincia': metadata.resp_provincia || '',
+      'Tipo Documento': metadata.resp_tipoDocumento || '',
+      'Numero Documento': metadata.resp_numeroDocumento || '',
+      'Luogo Rilascio': metadata.resp_luogoRilascio || '',
+      'Ruolo': 'RESPONSABILE'
     };
 
-    // Serializza altri ospiti (escluso il responsabile)
-    const altriOspiti = ospiti.filter(o => o.numero !== 1 && !o.isResponsabile);
+    // Aggiungi riga responsabile
+    console.log('➕ Aggiunta riga responsabile...');
+    await sheet.addRow(rigaPrincipale);
+
+    // Aggiungi righe per altri ospiti
     if (altriOspiti.length > 0) {
-      // Compatta i dati per risparmiare spazio nei metadata
-      const ospitiCompatti = altriOspiti.map(o => ({
-        n: o.numero,
-        c: o.cognome,
-        no: o.nome,
-        g: o.genere,
-        na: o.nascita,
-        e: o.eta,
-        ci: o.cittadinanza,
-        ln: o.luogoNascita,
-        co: o.comune || '',
-        p: o.provincia || ''
-      }));
+      console.log(`➕ Aggiunta ${altriOspiti.length} altri ospiti...`);
       
-      metadata.altri_ospiti = JSON.stringify(ospitiCompatti);
+      for (const ospite of altriOspiti) {
+        const rigaOspite = {
+          'Data Check-in': metadata.dataCheckin || '',
+          'Appartamento': metadata.appartamento || '',
+          'Session ID': session.id,
+          'Stato Pagamento': 'PAGATO',
+          'Data Pagamento': new Date().toISOString().split('T')[0],
+          
+          // Dati ospite
+          'Cognome': ospite.cognome || '',
+          'Nome': ospite.nome || '',
+          'Genere': ospite.genere || '',
+          'Data Nascita': ospite.nascita || '',
+          'Cittadinanza': ospite.cittadinanza || '',
+          'Luogo Nascita': ospite.luogoNascita || '',
+          'Comune': ospite.comune || '',
+          'Provincia': ospite.provincia || '',
+          'Ruolo': 'OSPITE'
+        };
+        
+        await sheet.addRow(rigaOspite);
+      }
     }
 
-    // Rimuovi campi vuoti per ottimizzare spazio
-    Object.keys(metadata).forEach(key => {
-      if (!metadata[key] || metadata[key] === 'undefined') {
-        delete metadata[key];
-      }
-    });
-
-    console.log("💳 Creazione sessione Stripe...");
-
-    // Crea la sessione di pagamento
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ["card"],
-      mode: "payment",
-      line_items: [
-        {
-          price_data: {
-            currency: "eur",
-            product_data: {
-              name: `Tassa soggiorno - ${appartamento}`,
-              description: `Check-in: ${dataCheckin} | Ospiti: ${numeroOspiti} | Notti: ${numeroNotti}`
-            },
-            unit_amount: Math.round(totale * 100), // Converti in centesimi
-          },
-          quantity: 1,
-        },
-      ],
-      success_url: "https://spaceestate.github.io/checkin/checkin/successo-pagamento.html?session_id={CHECKOUT_SESSION_ID}",
-      cancel_url: "https://spaceestate.github.io/checkin/checkin/checkin.html?canceled=true",
-      metadata: metadata, // 🔑 QUI SONO I DATI CHE IL WEBHOOK RECUPERERÀ
-    });
-
-    console.log("✅ Sessione creata:", session.id);
-
-    return res.status(200).json({ 
-      checkoutUrl: session.url,
-      sessionId: session.id 
-    });
-
+    console.log('✅ Tutti i dati scritti con successo');
+    
   } catch (error) {
-    console.error("❌ Errore creazione sessione:", error);
-    return res.status(500).json({ 
-      error: "Errore creazione sessione",
-      message: error.message 
-    });
+    console.error('❌ Errore scrittura Google Sheets:', error);
+    throw error;
   }
+}
+
+// Configurazione per raw body (necessario per Stripe webhooks)
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '1mb',
+    },
+  },
 }
