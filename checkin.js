@@ -892,7 +892,7 @@ async function creaLinkPagamento(datiPrenotazione) {
     // Simula delay di rete
     await new Promise(resolve => setTimeout(resolve, 2000));
     
-   const sessionId = 'test_session_' + Date.now();
+    const sessionId = 'test_session_' + Date.now();
     window.location.href = `successo-pagamento.html?session_id=${sessionId}&success=true`;
     return;
   }
@@ -903,13 +903,16 @@ async function creaLinkPagamento(datiPrenotazione) {
     
     console.log("🌐 Chiamata API produzione ->", API_ENDPOINT);
 
-     // Aggiungi gli URL di ritorno corretti
+    // CORREZIONE: URL corretti per il ritorno
+    const baseUrl = window.location.origin;
+    const currentPath = window.location.pathname;
+    
     const datiConUrl = {
       ...datiPrenotazione,
-      // CAMBIATO: URL corretto per la pagina di successo
-      successUrl: `${window.location.origin}/successo-pagamento.html`,
-      // URL di annullamento - torna alla pagina di checkout
-      cancelUrl: `${window.location.origin}/${window.location.pathname}?canceled=true`
+      // URL di successo - vai alla pagina dedicata con placeholder per session_id
+      successUrl: `${baseUrl}/successo-pagamento.html?session_id={CHECKOUT_SESSION_ID}`,
+      // URL di annullamento - torna alla stessa pagina con parametro
+      cancelUrl: `${baseUrl}${currentPath}?canceled=true`
     };
     
     const response = await fetch(API_ENDPOINT, {
@@ -918,7 +921,7 @@ async function creaLinkPagamento(datiPrenotazione) {
         'Content-Type': 'application/json',
         'Accept': 'application/json'
       },
-      body: JSON.stringify(datiPrenotazione)
+      body: JSON.stringify(datiConUrl)
     });
 
     console.log("📡 Response status:", response.status);
@@ -938,6 +941,7 @@ async function creaLinkPagamento(datiPrenotazione) {
 
     // Salva dati prima del redirect
     sessionStorage.setItem('datiPrenotazione', JSON.stringify(datiPrenotazione));
+    sessionStorage.setItem('paymentTimestamp', Date.now().toString());
     
     // Redirect a Stripe Checkout
     console.log("🔄 Redirect a Stripe:", result.checkoutUrl);
@@ -949,15 +953,18 @@ async function creaLinkPagamento(datiPrenotazione) {
     throw error;
   }
 }
-// SOSTITUISCI anche questa funzione per gestire solo l'annullamento
+
+// CORREZIONE: Gestione ritorno migliorata - solo per annullamento
 function gestisciRitornoStripe() {
   const urlParams = new URLSearchParams(window.location.search);
   const canceled = urlParams.get('canceled');
   
   if (canceled === 'true') {
+    console.log("👈 Utente tornato da pagamento annullato");
+    
     showNotification('Pagamento annullato. Puoi riprovare quando vuoi.', 'info');
     
-    // Rimuovi il parametro dall'URL
+    // Rimuovi il parametro dall'URL per pulire la barra indirizzi
     const url = new URL(window.location);
     url.searchParams.delete('canceled');
     window.history.replaceState({}, document.title, url.toString());
@@ -968,8 +975,14 @@ function gestisciRitornoStripe() {
       payButton.disabled = false;
       payButton.innerHTML = `💳 Paga €${calcolaTotale().toFixed(2)} con Stripe`;
     }
+    
+    // Assicurati che l'utente sia nello step corretto
+    if (typeof mostraStepPagamento === 'function') {
+      mostraStepPagamento();
+    }
   }
 }
+
 function completaCheckIn(datiPrenotazione) {
   // Genera codice di riferimento
   const riferimento = 'CHK' + Date.now().toString().slice(-6);
@@ -1005,32 +1018,7 @@ function completaCheckIn(datiPrenotazione) {
   
   // Pulizia dati sensibili
   sessionStorage.removeItem('datiPrenotazione');
-}
-
-// === GESTIONE PAGAMENTO DI RITORNO ===
-function gestisciRitornoStripe() {
-  const urlParams = new URLSearchParams(window.location.search);
-  const success = urlParams.get('success');
-  const canceled = urlParams.get('canceled');
-  
-  if (success === 'true') {
-    // Recupera dati salvati
-    const datiSalvati = sessionStorage.getItem('datiPrenotazione');
-    
-    if (datiSalvati) {
-      try {
-        const datiPrenotazione = JSON.parse(datiSalvati);
-        completaCheckIn(datiPrenotazione);
-      } catch (e) {
-        console.error('Errore nel parsing dei dati salvati:', e);
-        showNotification('Pagamento completato, ma errore nel recupero dati', 'error');
-      }
-    } else {
-      showNotification('Pagamento completato con successo!', 'success');
-    }
-  } else if (canceled === 'true') {
-    showNotification('Pagamento annullato. Puoi riprovare quando vuoi.', 'info');
-  }
+  sessionStorage.removeItem('paymentTimestamp');
 }
 
 // === INIZIALIZZAZIONE ===
