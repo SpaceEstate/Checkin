@@ -2,6 +2,7 @@
 let currentStep = 1;
 let numeroOspiti = 0;
 let numeroNotti = 0;
+let dataCheckin = '';
 let stepGenerated = false;
 
 // Stati del mondo (lista completa)
@@ -100,6 +101,18 @@ function calcolaTotale() {
   }
   
   return Math.round((ospitiSoggetti * numeroNotti * tassaPerNotte) * 100) / 100;
+}
+
+function formatDataItaliana(dataISO) {
+  if (!dataISO) return 'N/A';
+  
+  const data = new Date(dataISO);
+  return data.toLocaleDateString('it-IT', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
 }
 
 function showNotification(message, type = 'info') {
@@ -262,10 +275,29 @@ function mostraStepCorrente() {
 
 // === VALIDAZIONI ===
 function validaStep1() {
+  const dataCheckinInput = document.getElementById("data-checkin");
   const appartamentoSelect = document.getElementById("appartamento");
   const numOspitiSelect = document.getElementById("numero-ospiti");
   const numNottiInput = document.getElementById("numero-notti");
   
+  // Validazione data check-in
+  if (!dataCheckinInput?.value) {
+    showNotification("Seleziona la data di check-in", "error");
+    dataCheckinInput?.focus();
+    return false;
+  }
+
+  // Validazione data non nel passato
+  const dataScelta = new Date(dataCheckinInput.value);
+  const oggi = new Date();
+  oggi.setHours(0, 0, 0, 0); // Reset ore per confronto solo data
+  
+  if (dataScelta < oggi) {
+    showNotification("La data di check-in non può essere nel passato", "error");
+    dataCheckinInput?.focus();
+    return false;
+  }
+
   if (!appartamentoSelect?.value) {
     showNotification("Seleziona un appartamento", "error");
     appartamentoSelect?.focus();
@@ -286,6 +318,7 @@ function validaStep1() {
   }
 
   // Aggiorna variabili globali
+  dataCheckin = dataCheckinInput.value;
   numeroOspiti = parseInt(numOspitiSelect.value);
   numeroNotti = notti;
 
@@ -555,7 +588,7 @@ function preparaRiepilogo() {
       <h3>📍 Dettagli soggiorno</h3>
       <div class="summary-item">
         <span>Data Check-in:</span>
-        <span><strong>${dataCheckin}</strong></span>
+        <span><strong>${formatDataItaliana(dataCheckin)}</strong></span>
       </div>
       <div class="summary-item">
         <span>Appartamento:</span>
@@ -797,6 +830,7 @@ function validaPrenotazioneCompleta() {
 
 function raccogliDatiPrenotazione() {
   const datiPrenotazione = {
+    dataCheckin: dataCheckin,
     appartamento: document.getElementById('appartamento')?.value,
     numeroOspiti: numeroOspiti,
     numeroNotti: numeroNotti,
@@ -933,6 +967,7 @@ function completaCheckIn(datiPrenotazione) {
   // Log per debug
   console.log('✅ Check-in completato:', {
     riferimento,
+    dataCheckin: datiPrenotazione.dataCheckin,
     totale: datiPrenotazione.totale,
     ospiti: datiPrenotazione.ospiti.length
   });
@@ -973,6 +1008,15 @@ function gestisciRitornoStripe() {
 document.addEventListener('DOMContentLoaded', function() {
   console.log('🚀 Check-in form inizializzato');
   
+  // Imposta data odierna come minimo per check-in
+  const dataCheckinInput = document.getElementById('data-checkin');
+  if (dataCheckinInput) {
+    const oggi = new Date().toISOString().split('T')[0];
+    dataCheckinInput.min = oggi;
+    // Opzionale: imposta data odierna come default
+    // dataCheckinInput.value = oggi;
+  }
+  
   // Mostra solo il primo step
   document.querySelectorAll('.step').forEach(step => {
     step.classList.remove('active');
@@ -1006,9 +1050,14 @@ if (window.location.hostname === 'localhost' || window.location.hostname === '12
     getCurrentStep: () => currentStep,
     getNumeroOspiti: () => numeroOspiti,
     getNumeroNotti: () => numeroNotti,
+    getDataCheckin: () => dataCheckin,
     calcolaTotale: calcolaTotale,
     getDatiPrenotazione: raccogliDatiPrenotazione,
-    simulaSuccesso: () => completaCheckIn({ totale: 10.50, ospiti: [{ nome: 'Test', cognome: 'User' }] })
+    simulaSuccesso: () => completaCheckIn({ 
+      dataCheckin: '2025-09-10',
+      totale: 10.50, 
+      ospiti: [{ nome: 'Test', cognome: 'User' }] 
+    })
   };
   
   console.log('🔧 Funzioni debug disponibili in window.debugCheckin');
