@@ -28,7 +28,10 @@ export default async function handler(req, res) {
       tipoGruppo,
       totale,
       ospiti = [],
-      timestamp
+      timestamp,
+      // AGGIUNTO: URL di ritorno dal frontend
+      successUrl,
+      cancelUrl
     } = req.body;
 
     // Validazione dati essenziali
@@ -50,7 +53,9 @@ export default async function handler(req, res) {
       appartamento,
       numeroOspiti,
       totale,
-      responsabile: `${responsabile.nome} ${responsabile.cognome}`
+      responsabile: `${responsabile.nome} ${responsabile.cognome}`,
+      successUrl,
+      cancelUrl
     });
 
     // Prepara metadata per Stripe
@@ -106,7 +111,11 @@ export default async function handler(req, res) {
 
     console.log("💳 Creazione sessione Stripe...");
 
-    // Crea la sessione di pagamento con URL CORRETTE
+    // CORREZIONE: URL dinamiche o di fallback
+    const finalSuccessUrl = successUrl || "https://spaceestate.github.io/checkin/successo-pagamento.html?session_id={CHECKOUT_SESSION_ID}";
+    const finalCancelUrl = cancelUrl || "https://spaceestate.github.io/checkin/index.html?canceled=true";
+
+    // Crea la sessione di pagamento
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
       mode: "payment",
@@ -123,9 +132,8 @@ export default async function handler(req, res) {
           quantity: 1,
         },
       ],
-      // ✅ URL CORRETTE - puntano ai file che esistono veramente
-      success_url: "https://spaceestate.github.io/checkin/successo-pagamento.html?session_id={CHECKOUT_SESSION_ID}",
-      cancel_url: "https://spaceestate.github.io/checkin/index.html?canceled=true",
+      success_url: finalSuccessUrl,
+      cancel_url: finalCancelUrl,
       metadata: metadata,
     });
 
