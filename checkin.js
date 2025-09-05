@@ -892,8 +892,8 @@ async function creaLinkPagamento(datiPrenotazione) {
     // Simula delay di rete
     await new Promise(resolve => setTimeout(resolve, 2000));
     
-    // Simula pagamento completato
-    completaCheckIn(datiPrenotazione);
+   const sessionId = 'test_session_' + Date.now();
+    window.location.href = `successo-pagamento.html?session_id=${sessionId}&success=true`;
     return;
   }
 
@@ -902,6 +902,15 @@ async function creaLinkPagamento(datiPrenotazione) {
     const API_ENDPOINT = 'https://checkin-six-coral.vercel.app/api/crea-pagamento-stripe';
     
     console.log("🌐 Chiamata API produzione ->", API_ENDPOINT);
+
+     // Aggiungi gli URL di ritorno corretti
+    const datiConUrl = {
+      ...datiPrenotazione,
+      // CAMBIATO: URL corretto per la pagina di successo
+      successUrl: `${window.location.origin}/successo-pagamento.html`,
+      // URL di annullamento - torna alla pagina di checkout
+      cancelUrl: `${window.location.origin}/${window.location.pathname}?canceled=true`
+    };
     
     const response = await fetch(API_ENDPOINT, {
       method: 'POST',
@@ -940,7 +949,27 @@ async function creaLinkPagamento(datiPrenotazione) {
     throw error;
   }
 }
-
+// SOSTITUISCI anche questa funzione per gestire solo l'annullamento
+function gestisciRitornoStripe() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const canceled = urlParams.get('canceled');
+  
+  if (canceled === 'true') {
+    showNotification('Pagamento annullato. Puoi riprovare quando vuoi.', 'info');
+    
+    // Rimuovi il parametro dall'URL
+    const url = new URL(window.location);
+    url.searchParams.delete('canceled');
+    window.history.replaceState({}, document.title, url.toString());
+    
+    // Riattiva il bottone di pagamento
+    const payButton = document.querySelector('.btn-payment');
+    if (payButton) {
+      payButton.disabled = false;
+      payButton.innerHTML = `💳 Paga €${calcolaTotale().toFixed(2)} con Stripe`;
+    }
+  }
+}
 function completaCheckIn(datiPrenotazione) {
   // Genera codice di riferimento
   const riferimento = 'CHK' + Date.now().toString().slice(-6);
