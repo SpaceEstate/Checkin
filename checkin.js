@@ -910,7 +910,7 @@ async function creaLinkPagamento(datiPrenotazione) {
     const datiConUrl = {
       ...datiPrenotazione,
       // URL di successo - vai alla pagina dedicata con placeholder per session_id
-      successUrl: `${baseUrl}/successo-pagamento.html?session_id={CHECKOUT_SESSION_ID}`,
+      successUrl: `${baseUrl}/checkin/successo-pagamento.html?session_id={CHECKOUT_SESSION_ID}`,
       // URL di annullamento - torna alla stessa pagina con parametro
       cancelUrl: `${baseUrl}${currentPath}?canceled=true`
     };
