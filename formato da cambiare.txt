@@ -1,0 +1,645 @@
+import React, { useState, useEffect } from 'react';
+import { Calendar, Clock, User, MapPin, Euro, Plus, X, Edit3, Phone, Mail, Settings, AlertTriangle, RefreshCw, Wifi } from 'lucide-react';
+
+const BookingCalendar = () => {
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState(null);
+  const [bookings, setBookings] = useState([]);
+  const [showModal, setShowModal] = useState(false);
+  const [selectedBooking, setSelectedBooking] = useState(null);
+  const [editMode, setEditMode] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [lastSync, setLastSync] = useState(null);
+
+  // URLs iCal per le proprietà
+  const [icalUrls, setIcalUrls] = useState({
+    appCorte: {
+      booking: 'https://ical.booking.com/v1/export?t=4afe8fa2-08b5-48f2-838b-ed8ffbd7c776',
+      airbnb: 'https://www.airbnb.it/calendar/ical/21897262.ics?s=ac74abfbed5c0fe4915529e86f1ee2db'
+    },
+    appTorre: {
+      booking: 'https://ical.booking.com/v1/export?t=a72f80ac-175b-4f7b-8072-7ebf38078d72',
+      airbnb: 'https://www.airbnb.it/calendar/ical/19627139.ics?s=d8f563f5df5b559f04a0ace62ead7302'
+    }
+  });
+
+  const [newBooking, setNewBooking] = useState({
+    platform: 'airbnb',
+    checkIn: '',
+    checkOut: '',
+    guestName: '',
+    guestEmail: '',
+    guestPhone: '',
+    guests: 1,
+    totalPrice: 0,
+    status: 'confermata',
+    property: '',
+    notes: '',
+    source: 'manual'
+  });
+
+  // Funzione per parsare iCal
+  const parseICalData = (icalData, platform, property) => {
+    const lines = icalData.split('\n');
+    const events = [];
+    let currentEvent = null;
+    
+    for (let line of lines) {
+      line = line.trim();
+      
+      if (line === 'BEGIN:VEVENT') {
+        currentEvent = {
+          platform: platform,
+          property: property,
+          source: 'ical',
+          status: 'confermata',
+          guests: 1,
+          guestEmail: '',
+          guestPhone: '',
+          notes: ''
+        };
+      } else if (line === 'END:VEVENT' && currentEvent) {
+        if (currentEvent.checkIn && currentEvent.checkOut && currentEvent.guestName) {
+          events.push({
+            ...currentEvent,
+            id: `${platform}-${property}-${currentEvent.checkIn}-${Math.random().toString(36).substr(2, 9)}`
+          });
+        }
+        currentEvent = null;
+      } else if (currentEvent) {
+        if (line.startsWith('DTSTART')) {
+          const dateMatch = line.match(/(\d{8})/);
+          if (dateMatch) {
+            const date = dateMatch[1];
+            currentEvent.checkIn = `${date.substr(0,4)}-${date.substr(4,2)}-${date.substr(6,2)}`;
+          }
+        } else if (line.startsWith('DTEND')) {
+          const dateMatch = line.match(/(\d{8})/);
+          if (dateMatch) {
+            const date = dateMatch[1];
+            currentEvent.checkOut = `${date.substr(0,4)}-${date.substr(4,2)}-${date.substr(6,2)}`;
+          }
+        } else if (line.startsWith('SUMMARY')) {
+          let summary = line.replace('SUMMARY:', '');
+          // Decodifica eventuali caratteri speciali
+          summary = summary.replace(/\\n/g, ' ').replace(/\\,/g, ',').replace(/\\\\/g, '\\');
+          
+          // Estrai informazioni dal summary
+          if (summary.includes('Reserved') || summary.includes('Blocked') || summary.includes('Not available')) {
+            currentEvent.guestName = 'Prenotazione Bloccata';
+            currentEvent.status = 'confermata';
+          } else {
+            // Cerca di estrarre il nome dell'ospite
+            const matches = summary.match(/(.+?)(?:\s*\(|$)/);
+            currentEvent.guestName = matches ? matches[1].trim() : summary;
+          }
+        } else if (line.startsWith('DESCRIPTION')) {
+          let description = line.replace('DESCRIPTION:', '');
+          description = description.replace(/\\n/g, '\n').replace(/\\,/g, ',').replace(/\\\\/g, '\\');
+          currentEvent.notes = description;
+          
+          // Cerca di estrarre il prezzo dalla descrizione
+          const priceMatch = description.match(/€\s*(\d+(?:[.,]\d{2})?)/i) || 
+                           description.match(/EUR\s*(\d+(?:[.,]\d{2})?)/i) ||
+                           description.match(/(\d+(?:[.,]\d{2})?)\s*€/i);
+          if (priceMatch) {
+            currentEvent.totalPrice = parseFloat(priceMatch[1].replace(',', '.'));
+          } else {
+            currentEvent.totalPrice = 0;
+          }
+        }
+      }
+    }
+    
+    return events;
+  };
+
+  // Funzione per sincronizzare i calendari iCal
+  const syncICalCalendars = async () => {
+    setIsLoading(true);
+    try {
+      const newBookings = [];
+      const corsProxy = 'https://api.allorigins.win/get?url=';
+      
+      // Sincronizza tutti i calendari
+      const calendars = [
+        { ...icalUrls.appCorte, property: 'App Corte' },
+        { ...icalUrls.appTorre, property: 'App Torre' }
+      ];
+      
+      for (const calendar of calendars) {
+        // Sincronizza Booking.com
+        if (calendar.booking) {
+          try {
+            const response = await fetch(corsProxy + encodeURIComponent(calendar.booking));
+            const data = await response.json();
+            const bookingEvents = parseICalData(data.contents, 'booking', calendar.property);
+            newBookings.push(...bookingEvents);
+          } catch (error) {
+            console.error(`Errore sincronizzazione Booking.com per ${calendar.property}:`, error);
+          }
+        }
+        
+        // Sincronizza Airbnb
+        if (calendar.airbnb) {
+          try {
+            const response = await fetch(corsProxy + encodeURIComponent(calendar.airbnb));
+            const data = await response.json();
+            const airbnbEvents = parseICalData(data.contents, 'airbnb', calendar.property);
+            newBookings.push(...airbnbEvents);
+          } catch (error) {
+            console.error(`Errore sincronizzazione Airbnb per ${calendar.property}:`, error);
+          }
+        }
+      }
+      
+      // Rimuovi prenotazioni esistenti da iCal e aggiungi quelle nuove
+      setBookings(prevBookings => {
+        const manualBookings = prevBookings.filter(booking => booking.source !== 'ical');
+        return [...manualBookings, ...newBookings];
+      });
+      
+      setLastSync(new Date());
+      console.log(`Sincronizzate ${newBookings.length} prenotazioni`);
+    } catch (error) {
+      console.error('Errore durante la sincronizzazione:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Carica prenotazioni di esempio e sincronizza al caricamento
+  useEffect(() => {
+    const sampleBookings = [
+      {
+        id: 'manual-1',
+        platform: 'airbnb',
+        checkIn: '2025-09-15',
+        checkOut: '2025-09-18',
+        guestName: 'Marco Rossi',
+        guestEmail: 'marco.rossi@email.com',
+        guestPhone: '+39 333 1234567',
+        guests: 2,
+        totalPrice: 320,
+        status: 'confermata',
+        property: 'Casa Vista Mare',
+        notes: 'Richiede check-in tardivo',
+        source: 'manual'
+      }
+    ];
+    setBookings(sampleBookings);
+    
+    // Sincronizza automaticamente all'avvio
+    syncICalCalendars();
+  }, []);
+
+  // Funzioni per il calendario
+  const getDaysInMonth = (date) => {
+    return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+  };
+
+  const getFirstDayOfMonth = (date) => {
+    const firstDay = new Date(date.getFullYear(), date.getMonth(), 1).getDay();
+    return firstDay === 0 ? 6 : firstDay - 1; // Lunedì = 0
+  };
+
+  const formatDate = (date) => {
+    return date.toISOString().split('T')[0];
+  };
+
+  const isDateBooked = (day) => {
+    const dateStr = formatDate(new Date(currentDate.getFullYear(), currentDate.getMonth(), day));
+    return bookings.some(booking => {
+      const checkIn = new Date(booking.checkIn);
+      const checkOut = new Date(booking.checkOut);
+      const currentDateObj = new Date(dateStr);
+      return currentDateObj >= checkIn && currentDateObj < checkOut;
+    });
+  };
+
+  const getBookingForDate = (day) => {
+    const dateStr = formatDate(new Date(currentDate.getFullYear(), currentDate.getMonth(), day));
+    return bookings.find(booking => {
+      const checkIn = new Date(booking.checkIn);
+      const checkOut = new Date(booking.checkOut);
+      const currentDateObj = new Date(dateStr);
+      return currentDateObj >= checkIn && currentDateObj < checkOut;
+    });
+  };
+
+  const handleDateClick = (day) => {
+    const booking = getBookingForDate(day);
+    if (booking) {
+      setSelectedBooking(booking);
+      setShowModal(true);
+    } else {
+      const dateStr = formatDate(new Date(currentDate.getFullYear(), currentDate.getMonth(), day));
+      setSelectedDate(dateStr);
+      setNewBooking({...newBooking, checkIn: dateStr});
+      setEditMode(true);
+      setShowModal(true);
+    }
+  };
+
+  const handleSaveBooking = () => {
+    if (selectedBooking && !editMode) return;
+    
+    if (editMode) {
+      if (selectedBooking) {
+        // Modifica prenotazione esistente
+        setBookings(bookings.map(b => 
+          b.id === selectedBooking.id ? {...newBooking, id: selectedBooking.id} : b
+        ));
+      } else {
+        // Nuova prenotazione
+        const newId = `manual-${Date.now()}`;
+        setBookings([...bookings, {...newBooking, id: newId, source: 'manual'}]);
+      }
+      setNewBooking({
+        platform: 'airbnb',
+        checkIn: '',
+        checkOut: '',
+        guestName: '',
+        guestEmail: '',
+        guestPhone: '',
+        guests: 1,
+        totalPrice: 0,
+        status: 'confermata',
+        property: '',
+        notes: '',
+        source: 'manual'
+      });
+    }
+    
+    setShowModal(false);
+    setEditMode(false);
+    setSelectedBooking(null);
+  };
+
+  const handleDeleteBooking = () => {
+    if (selectedBooking && selectedBooking.source === 'manual') {
+      setBookings(bookings.filter(b => b.id !== selectedBooking.id));
+      setShowModal(false);
+      setSelectedBooking(null);
+    }
+  };
+
+  const handleEditBooking = () => {
+    if (selectedBooking.source === 'manual') {
+      setNewBooking({...selectedBooking});
+      setEditMode(true);
+    }
+  };
+
+  const closeModal = () => {
+    setShowModal(false);
+    setEditMode(false);
+    setSelectedBooking(null);
+    setNewBooking({
+      platform: 'airbnb',
+      checkIn: '',
+      checkOut: '',
+      guestName: '',
+      guestEmail: '',
+      guestPhone: '',
+      guests: 1,
+      totalPrice: 0,
+      status: 'confermata',
+      property: '',
+      notes: '',
+      source: 'manual'
+    });
+  };
+
+  const monthNames = [
+    'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
+    'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'
+  ];
+
+  const dayNames = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
+
+  const previousMonth = () => {
+    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
+  };
+
+  const nextMonth = () => {
+    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
+  };
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'confermata': return 'bg-green-100 text-green-800';
+      case 'in_arrivo': return 'bg-blue-100 text-blue-800';
+      case 'in_corso': return 'bg-purple-100 text-purple-800';
+      case 'completata': return 'bg-gray-100 text-gray-800';
+      default: return 'bg-yellow-100 text-yellow-800';
+    }
+  };
+
+  const getPlatformColor = (platform) => {
+    return platform === 'airbnb' ? 'bg-red-500' : 'bg-blue-600';
+  };
+
+  const renderCalendar = () => {
+    const daysInMonth = getDaysInMonth(currentDate);
+    const firstDay = getFirstDayOfMonth(currentDate);
+    const days = [];
+
+    // Giorni vuoti all'inizio
+    for (let i = 0; i < firstDay; i++) {
+      days.push(<div key={`empty-${i}`} className="h-24 border border-gray-200"></div>);
+    }
+
+    // Giorni del mese
+    for (let day = 1; day <= daysInMonth; day++) {
+      const isBooked = isDateBooked(day);
+      const booking = getBookingForDate(day);
+      const isToday = new Date().toDateString() === new Date(currentDate.getFullYear(), currentDate.getMonth(), day).toDateString();
+
+      days.push(
+        <div
+          key={day}
+          className={`h-24 border border-gray-200 cursor-pointer transition-colors hover:bg-gray-50 relative ${isToday ? 'ring-2 ring-blue-500' : ''}`}
+          onClick={() => handleDateClick(day)}
+        >
+          <div className={`text-sm font-medium p-1 ${isToday ? 'text-blue-600' : 'text-gray-900'}`}>
+            {day}
+          </div>
+          {isBooked && booking && (
+            <div className="absolute inset-x-1 bottom-1 top-6">
+              <div className={`${getPlatformColor(booking.platform)} text-white text-xs p-1 rounded mb-1 truncate flex items-center justify-between`}>
+                <span>{booking.platform.toUpperCase()}</span>
+                {booking.source === 'ical' && <Wifi className="w-3 h-3" />}
+              </div>
+              <div className="text-xs text-gray-700 truncate font-medium">
+                {booking.guestName}
+              </div>
+              <div className="text-xs text-gray-500 truncate">
+                {booking.property && <div>{booking.property}</div>}
+                {booking.totalPrice > 0 && <div>€{booking.totalPrice}</div>}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    return days;
+  };
+
+  const today = new Date();
+  const upcomingBookings = bookings.filter(booking => {
+    const checkIn = new Date(booking.checkIn);
+    return checkIn >= today;
+  }).sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn)).slice(0, 5);
+
+  const totalBookings = bookings.length;
+  const totalRevenue = bookings.reduce((sum, b) => sum + (b.totalPrice || 0), 0);
+  const icalBookings = bookings.filter(b => b.source === 'ical').length;
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-4">
+      <div className="max-w-7xl mx-auto">
+        <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+          {/* Header */}
+          <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-3xl font-bold flex items-center gap-3">
+                  <Calendar className="w-8 h-8" />
+                  Calendario Gestionale
+                </h1>
+                <p className="text-blue-100 mt-2">Gestisci le tue prenotazioni con sincronizzazione iCal</p>
+                {lastSync && (
+                  <p className="text-blue-200 text-sm mt-1">
+                    Ultima sincronizzazione: {lastSync.toLocaleString('it-IT')}
+                  </p>
+                )}
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={syncICalCalendars}
+                  disabled={isLoading}
+                  className="bg-white bg-opacity-20 text-white px-4 py-2 rounded-lg font-medium hover:bg-opacity-30 transition-colors flex items-center gap-2 disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+                  {isLoading ? 'Sincronizzando...' : 'Sincronizza'}
+                </button>
+                <button
+                  onClick={() => setShowSettings(true)}
+                  className="bg-white bg-opacity-20 text-white px-4 py-2 rounded-lg font-medium hover:bg-opacity-30 transition-colors flex items-center gap-2"
+                >
+                  <Settings className="w-4 h-4" />
+                  Impostazioni
+                </button>
+                <button
+                  onClick={() => {
+                    setEditMode(true);
+                    setShowModal(true);
+                  }}
+                  className="bg-white text-blue-600 px-4 py-2 rounded-lg font-medium hover:bg-blue-50 transition-colors flex items-center gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  Nuova Prenotazione
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex">
+            {/* Calendario principale */}
+            <div className="flex-1 p-6">
+              {/* Controlli del calendario */}
+              <div className="flex items-center justify-between mb-6">
+                <button
+                  onClick={previousMonth}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  ←
+                </button>
+                <h2 className="text-2xl font-bold text-gray-800">
+                  {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
+                </h2>
+                <button
+                  onClick={nextMonth}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  →
+                </button>
+              </div>
+
+              {/* Griglia del calendario */}
+              <div className="grid grid-cols-7 gap-0 border border-gray-200 rounded-lg overflow-hidden">
+                {/* Header giorni della settimana */}
+                {dayNames.map(day => (
+                  <div key={day} className="bg-gray-100 p-3 text-center font-medium text-gray-700 border-b border-gray-200">
+                    {day}
+                  </div>
+                ))}
+                {/* Giorni del calendario */}
+                {renderCalendar()}
+              </div>
+
+              {/* Legenda */}
+              <div className="mt-6 flex items-center gap-6 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 bg-red-500 rounded"></div>
+                  <span className="text-sm text-gray-600">Airbnb</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 bg-blue-600 rounded"></div>
+                  <span className="text-sm text-gray-600">Booking.com</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 border-blue-500 rounded"></div>
+                  <span className="text-sm text-gray-600">Oggi</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Wifi className="w-4 h-4 text-green-600" />
+                  <span className="text-sm text-gray-600">Sincronizzato iCal</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Sidebar */}
+            <div className="w-80 bg-gray-50 border-l border-gray-200 p-6">
+              <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                <Clock className="w-5 h-5" />
+                Prossime Prenotazioni
+              </h3>
+              <div className="space-y-3 max-h-60 overflow-y-auto">
+                {upcomingBookings.map(booking => (
+                  <div
+                    key={booking.id}
+                    className="bg-white p-4 rounded-lg border border-gray-200 hover:shadow-md transition-shadow cursor-pointer"
+                    onClick={() => {
+                      setSelectedBooking(booking);
+                      setShowModal(true);
+                    }}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${getPlatformColor(booking.platform)} text-white flex items-center gap-1`}>
+                        {booking.platform.toUpperCase()}
+                        {booking.source === 'ical' && <Wifi className="w-3 h-3" />}
+                      </span>
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${getStatusColor(booking.status)}`}>
+                        {booking.status.replace('_', ' ')}
+                      </span>
+                    </div>
+                    <div className="font-medium text-gray-800 mb-1 truncate">{booking.guestName}</div>
+                    {booking.property && (
+                      <div className="text-xs text-gray-600 mb-1 truncate">{booking.property}</div>
+                    )}
+                    <div className="text-sm text-gray-600 mb-1">
+                      {new Date(booking.checkIn).toLocaleDateString('it-IT')} - {new Date(booking.checkOut).toLocaleDateString('it-IT')}
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      {booking.totalPrice > 0 && `€${booking.totalPrice} • `}
+                      {booking.guests} {booking.guests === 1 ? 'ospite' : 'ospiti'}
+                    </div>
+                  </div>
+                ))}
+                {upcomingBookings.length === 0 && (
+                  <div className="text-center text-gray-500 py-8">
+                    <Calendar className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                    <p>Nessuna prenotazione in programma</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Statistiche rapide */}
+              <div className="mt-8">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">Statistiche</h3>
+                <div className="bg-white rounded-lg p-4 border border-gray-200">
+                  <div className="grid grid-cols-1 gap-4 text-center">
+                    <div>
+                      <div className="text-2xl font-bold text-blue-600">{totalBookings}</div>
+                      <div className="text-xs text-gray-500">Prenotazioni Totali</div>
+                    </div>
+                    <div>
+                      <div className="text-2xl font-bold text-green-600">€{totalRevenue}</div>
+                      <div className="text-xs text-gray-500">Ricavi Totali</div>
+                    </div>
+                    <div>
+                      <div className="text-lg font-bold text-purple-600 flex items-center justify-center gap-1">
+                        <Wifi className="w-4 h-4" />
+                        {icalBookings}
+                      </div>
+                      <div className="text-xs text-gray-500">Sincronizzate iCal</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Modal per impostazioni iCal */}
+      {showSettings && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
+                  <Settings className="w-6 h-6" />
+                  Configurazione iCal
+                </h3>
+                <button
+                  onClick={() => setShowSettings(false)}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6">
+              <div className="space-y-6">
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <Wifi className="w-5 h-5 text-green-600 mt-0.5" />
+                    <div className="text-sm text-green-800">
+                      <p className="font-medium mb-2">URLs iCal Configurati:</p>
+                      <div className="space-y-2 text-xs">
+                        <div><strong>App Corte - Booking:</strong> {icalUrls.appCorte.booking}</div>
+                        <div><strong>App Corte - Airbnb:</strong> {icalUrls.appCorte.airbnb}</div>
+                        <div><strong>App Torre - Booking:</strong> {icalUrls.appTorre.booking}</div>
+                        <div><strong>App Torre - Airbnb:</strong> {icalUrls.appTorre.airbnb}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="w-5 h-5 text-blue-600 mt-0.5" />
+                    <div className="text-sm text-blue-800">
+                      <p className="font-medium mb-2">Come funziona la sincronizzazione:</p>
+                      <ul className="list-disc list-inside space-y-1">
+                        <li>Il sistema scarica automaticamente i calendari iCal delle piattaforme</li>
+                        <li>Le prenotazioni vengono parsate e visualizzate nel calendario</li>
+                        <li>Le prenotazioni iCal sono contrassegnate con l'icona WiFi</li>
+                        <li>Le prenotazioni iCal non possono essere modificate manualmente</li>
+                        <li>La sincronizzazione può essere eseguita manualmente o automaticamente</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="w-5 h-5 text-yellow-600 mt-0.5" />
+                    <div className="text-sm text-yellow-800">
+                      <p className="font-medium mb-1">Limitazioni CORS:</p>
+                      <p>Il sistema utilizza un proxy CORS per accedere ai calendari iCal. In caso di problemi di connessione, verifica che gli URLs siano corretti e accessibili.</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 pt-4 border-t border-gray-200">
+                  <button
+                    onClick={syncICalCalendars}
+                    disabled={isLoading}
+                    className="px-6 py-2 bg
