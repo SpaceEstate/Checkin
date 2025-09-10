@@ -1,0 +1,1187 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calendario Gestionale - Sistema Prenotazioni</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/lucide/0.263.1/lucide.min.css">
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <style>
+        .booking-card {
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .booking-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        .calendar-day {
+            min-height: 96px;
+        }
+        .sync-indicator {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            padding: 12px 20px;
+            border-radius: 8px;
+            color: white;
+            font-weight: 500;
+            transform: translateX(100%);
+            transition: transform 0.3s ease;
+        }
+        .notification.show {
+            transform: translateX(0);
+        }
+        .notification.success { background-color: #10b981; }
+        .notification.error { background-color: #ef4444; }
+        .notification.info { background-color: #3b82f6; }
+        .notification.warning { background-color: #f59e0b; }
+        
+        .countdown-timer {
+            animation: countdown 60s linear infinite;
+        }
+        
+        @keyframes countdown {
+            from { width: 100%; }
+            to { width: 0%; }
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-gray-50">
+    <div id="app" class="p-4">
+        <div class="max-w-7xl mx-auto">
+            <div class="bg-white rounded-lg shadow-lg overflow-hidden">
+                <!-- Header -->
+                <div class="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-6">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h1 class="text-3xl font-bold flex items-center gap-3">
+                                <i data-lucide="calendar" class="w-8 h-8"></i>
+                                Calendario Gestionale
+                            </h1>
+                            <p class="text-blue-100 mt-2">Gestisci le tue prenotazioni con sincronizzazione iCal automatica</p>
+                            <p id="lastSyncInfo" class="text-blue-200 text-sm mt-1"></p>
+                            <div class="flex items-center gap-2 text-blue-200 text-sm mt-1">
+                                <span id="syncStatus" class="sync-indicator">🔄</span>
+                                <span>Sincronizzazione automatica ogni minuto</span>
+                                <div class="w-16 h-1 bg-blue-300 bg-opacity-30 rounded-full overflow-hidden ml-2">
+                                    <div id="syncCountdown" class="h-full bg-blue-200 countdown-timer"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex gap-3">
+                            <button id="syncBtn" class="bg-white bg-opacity-20 text-white px-4 py-2 rounded-lg font-medium hover:bg-opacity-30 transition-colors flex items-center gap-2">
+                                <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                                <span>Sincronizza</span>
+                            </button>
+                            <button id="settingsBtn" class="bg-white bg-opacity-20 text-white px-4 py-2 rounded-lg font-medium hover:bg-opacity-30 transition-colors flex items-center gap-2">
+                                <i data-lucide="settings" class="w-4 h-4"></i>
+                                Impostazioni
+                            </button>
+                            <button id="newBookingBtn" class="bg-white text-blue-600 px-4 py-2 rounded-lg font-medium hover:bg-blue-50 transition-colors flex items-center gap-2">
+                                <i data-lucide="plus" class="w-4 h-4"></i>
+                                Nuova Prenotazione
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex">
+                    <!-- Calendario principale -->
+                    <div class="flex-1 p-6">
+                        <!-- Controlli del calendario -->
+                        <div class="flex items-center justify-between mb-6">
+                            <button id="prevMonthBtn" class="p-2 hover:bg-gray-100 rounded-lg transition-colors text-2xl">
+                                ←
+                            </button>
+                            <h2 id="currentMonthYear" class="text-2xl font-bold text-gray-800"></h2>
+                            <button id="nextMonthBtn" class="p-2 hover:bg-gray-100 rounded-lg transition-colors text-2xl">
+                                →
+                            </button>
+                        </div>
+
+                        <!-- Griglia del calendario -->
+                        <div class="grid grid-cols-7 gap-0 border border-gray-200 rounded-lg overflow-hidden">
+                            <!-- Header giorni della settimana -->
+                            <div class="bg-gray-100 p-3 text-center font-medium text-gray-700 border-b border-gray-200">Lun</div>
+                            <div class="bg-gray-100 p-3 text-center font-medium text-gray-700 border-b border-gray-200">Mar</div>
+                            <div class="bg-gray-100 p-3 text-center font-medium text-gray-700 border-b border-gray-200">Mer</div>
+                            <div class="bg-gray-100 p-3 text-center font-medium text-gray-700 border-b border-gray-200">Gio</div>
+                            <div class="bg-gray-100 p-3 text-center font-medium text-gray-700 border-b border-gray-200">Ven</div>
+                            <div class="bg-gray-100 p-3 text-center font-medium text-gray-700 border-b border-gray-200">Sab</div>
+                            <div class="bg-gray-100 p-3 text-center font-medium text-gray-700 border-b border-gray-200">Dom</div>
+                            <!-- Giorni del calendario -->
+                            <div id="calendarGrid" class="col-span-7 grid grid-cols-7"></div>
+                        </div>
+
+                        <!-- Legenda -->
+                        <div class="mt-6 flex items-center gap-6 flex-wrap">
+                            <div class="flex items-center gap-2">
+                                <div class="w-4 h-4 bg-red-500 rounded"></div>
+                                <span class="text-sm text-gray-600">Airbnb</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <div class="w-4 h-4 bg-blue-600 rounded"></div>
+                                <span class="text-sm text-gray-600">Booking.com</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <div class="w-4 h-4 bg-green-600 rounded"></div>
+                                <span class="text-sm text-gray-600">Manuale</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <div class="w-4 h-4 border-2 border-blue-500 rounded"></div>
+                                <span class="text-sm text-gray-600">Oggi</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <i data-lucide="wifi" class="w-4 h-4 text-green-600"></i>
+                                <span class="text-sm text-gray-600">Sincronizzato iCal</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Sidebar -->
+                    <div class="w-80 bg-gray-50 border-l border-gray-200 p-6">
+                        <h3 class="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                            <i data-lucide="clock" class="w-5 h-5"></i>
+                            Prossime Prenotazioni
+                        </h3>
+                        <div id="upcomingBookings" class="space-y-3 max-h-60 overflow-y-auto">
+                            <!-- Le prenotazioni verranno inserite qui -->
+                        </div>
+
+                        <!-- Statistiche rapide -->
+                        <div class="mt-8">
+                            <h3 class="text-lg font-semibold text-gray-800 mb-4">Statistiche</h3>
+                            <div class="bg-white rounded-lg p-4 border border-gray-200">
+                                <div class="grid grid-cols-1 gap-4 text-center">
+                                    <div>
+                                        <div id="totalBookings" class="text-2xl font-bold text-blue-600">0</div>
+                                        <div class="text-xs text-gray-500">Prenotazioni Totali</div>
+                                    </div>
+                                    <div>
+                                        <div id="totalRevenue" class="text-2xl font-bold text-green-600">€0</div>
+                                        <div class="text-xs text-gray-500">Ricavi Totali</div>
+                                    </div>
+                                    <div>
+                                        <div id="icalBookings" class="text-lg font-bold text-purple-600 flex items-center justify-center gap-1">
+                                            <i data-lucide="wifi" class="w-4 h-4"></i>
+                                            0
+                                        </div>
+                                        <div class="text-xs text-gray-500">Sincronizzate iCal</div>
+                                    </div>
+                                    <div>
+                                        <div id="manualBookings" class="text-lg font-bold text-green-600">0</div>
+                                        <div class="text-xs text-gray-500">Prenotazioni Manuali</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Stato sistema -->
+                        <div class="mt-6">
+                            <h3 class="text-lg font-semibold text-gray-800 mb-4">Stato Sistema</h3>
+                            <div class="bg-white rounded-lg p-4 border border-gray-200 space-y-2">
+                                <div class="flex items-center justify-between text-sm">
+                                    <span class="text-gray-600">Auto-sync</span>
+                                    <span id="autoSyncStatus" class="text-green-600 font-medium">ATTIVO</span>
+                                </div>
+                                <div class="flex items-center justify-between text-sm">
+                                    <span class="text-gray-600">Prossima sync</span>
+                                    <span id="nextSyncTime" class="text-gray-800 font-medium">--</span>
+                                </div>
+                                <div class="flex items-center justify-between text-sm">
+                                    <span class="text-gray-600">Calendario backup</span>
+                                    <span id="backupStatus" class="text-blue-600 font-medium">OK</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal per prenotazioni -->
+    <div id="bookingModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div class="p-6 border-b border-gray-200">
+                <div class="flex items-center justify-between">
+                    <h3 id="modalTitle" class="text-xl font-semibold text-gray-800"></h3>
+                    <button id="closeModalBtn" class="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div id="modalContent" class="p-6">
+                <!-- Il contenuto del modal verrà inserito qui -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal per impostazioni -->
+    <div id="settingsModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div class="p-6 border-b border-gray-200">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-xl font-semibold text-gray-800 flex items-center gap-2">
+                        <i data-lucide="settings" class="w-6 h-6"></i>
+                        Configurazione Sistema
+                    </h3>
+                    <button id="closeSettingsBtn" class="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="p-6">
+                <div class="space-y-6">
+                    <!-- URLs iCal -->
+                    <div class="bg-green-50 border border-green-200 rounded-lg p-4">
+                        <div class="flex items-start gap-3">
+                            <i data-lucide="wifi" class="w-5 h-5 text-green-600 mt-0.5"></i>
+                            <div class="text-sm text-green-800">
+                                <p class="font-medium mb-2">URLs iCal Configurati:</p>
+                                <div class="space-y-2 text-xs">
+                                    <div><strong>App Corte - Booking:</strong> https://ical.booking.com/v1/export?t=4afe8fa2-08b5-48f2-838b-ed8ffbd7c776</div>
+                                    <div><strong>App Corte - Airbnb:</strong> https://www.airbnb.it/calendar/ical/21897262.ics?s=ac74abfbed5c0fe4915529e86f1ee2db</div>
+                                    <div><strong>App Torre - Booking:</strong> https://ical.booking.com/v1/export?t=a72f80ac-175b-4f7b-8072-7ebf38078d72</div>
+                                    <div><strong>App Torre - Airbnb:</strong> https://www.airbnb.it/calendar/ical/19627139.ics?s=d8f563f5df5b559f04a0ace62ead7302</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Funzionalità automatiche -->
+                    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <div class="flex items-start gap-3">
+                            <i data-lucide="zap" class="w-5 h-5 text-blue-600 mt-0.5"></i>
+                            <div class="text-sm text-blue-800">
+                                <p class="font-medium mb-2">Funzionalità Automatiche Attive:</p>
+                                <ul class="list-disc list-inside space-y-1">
+                                    <li>Sincronizzazione automatica ogni 60 secondi</li>
+                                    <li>Salvataggio automatico prenotazioni nel browser</li>
+                                    <li>Backup incrementale dei dati</li>
+                                    <li>Notifiche real-time per modifiche</li>
+                                    <li>Countdown visivo per prossima sincronizzazione</li>
+                                    <li>Rilevamento automatico conflitti date</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Blocco Date sulle Piattaforme -->
+                    <div class="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                        <div class="flex items-start gap-3">
+                            <i data-lucide="shield" class="w-5 h-5 text-orange-600 mt-0.5"></i>
+                            <div class="text-sm text-orange-800">
+                                <p class="font-medium mb-2">Sistema Blocco Date Automatico:</p>
+                                <ul class="list-disc list-inside space-y-1">
+                                    <li>Quando aggiungi una prenotazione manuale, il sistema tenta di bloccare automaticamente le date</li>
+                                    <li>Per Booking.com: richiede integrazione con API ufficiale (credenziali partner)</li>
+                                    <li>Per Airbnb: richiede token di accesso account host</li>
+                                    <li>In caso di errore, riceverai una notifica per il blocco manuale</li>
+                                </ul>
+                                <div class="mt-3 p-3 bg-orange-100 rounded border">
+                                    <p class="font-medium text-orange-900 mb-1">Stato Integrazione API:</p>
+                                    <div class="space-y-1 text-xs">
+                                        <div>🔸 Booking.com API: <span class="font-bold text-red-700">NON CONFIGURATA</span></div>
+                                        <div>🔸 Airbnb API: <span class="font-bold text-red-700">NON CONFIGURATA</span></div>
+                                        <div class="text-orange-700 mt-2">Per configurare le API, contatta il supporto tecnico con le tue credenziali di partner delle piattaforme.</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Controlli -->
+                    <div class="flex gap-3 pt-4 border-t border-gray-200">
+                        <button id="manualSyncBtn" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2">
+                            <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                            Sincronizza Ora
+                        </button>
+                        <button id="toggleAutoSyncBtn" class="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2">
+                            <i data-lucide="pause" class="w-4 h-4"></i>
+                            Disabilita Auto-Sync
+                        </button>
+                        <button id="exportDataBtn" class="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2">
+                            <i data-lucide="download" class="w-4 h-4"></i>
+                            Esporta Dati
+                        </button>
+                        <button id="clearDataBtn" class="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            Cancella Tutto
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sistema di notifiche -->
+    <div id="notifications"></div>
+
+    <script>
+        // Sistema di gestione calendario e prenotazioni avanzato
+        class BookingCalendar {
+            constructor() {
+                this.currentDate = new Date();
+                this.bookings = this.loadBookings();
+                this.selectedBooking = null;
+                this.isLoading = false;
+                this.lastSync = null;
+                this.syncInterval = null;
+                this.countdownInterval = null;
+                this.autoSyncEnabled = true;
+                this.nextSyncTime = null;
+                
+                // URLs iCal
+                this.icalUrls = {
+                    appCorte: {
+                        booking: 'https://ical.booking.com/v1/export?t=4afe8fa2-08b5-48f2-838b-ed8ffbd7c776',
+                        airbnb: 'https://www.airbnb.it/calendar/ical/21897262.ics?s=ac74abfbed5c0fe4915529e86f1ee2db'
+                    },
+                    appTorre: {
+                        booking: 'https://ical.booking.com/v1/export?t=a72f80ac-175b-4f7b-8072-7ebf38078d72',
+                        airbnb: 'https://www.airbnb.it/calendar/ical/19627139.ics?s=d8f563f5df5b559f04a0ace62ead7302'
+                    }
+                };
+
+                this.monthNames = [
+                    'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
+                    'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'
+                ];
+
+                this.init();
+            }
+
+            init() {
+                this.bindEvents();
+                this.renderCalendar();
+                this.updateSidebar();
+                this.startAutoSync();
+                this.syncICalCalendars(); // Sync iniziale
+                this.updateSystemStatus();
+                
+                // Initialize Lucide icons
+                lucide.createIcons();
+            }
+
+            bindEvents() {
+                // Controlli calendario
+                document.getElementById('prevMonthBtn').addEventListener('click', () => this.previousMonth());
+                document.getElementById('nextMonthBtn').addEventListener('click', () => this.nextMonth());
+
+                // Bottoni header
+                document.getElementById('syncBtn').addEventListener('click', () => this.syncICalCalendars());
+                document.getElementById('settingsBtn').addEventListener('click', () => this.showSettings());
+                document.getElementById('newBookingBtn').addEventListener('click', () => this.newBooking());
+
+                // Modal controls
+                document.getElementById('closeModalBtn').addEventListener('click', () => this.closeModal());
+                document.getElementById('closeSettingsBtn').addEventListener('click', () => this.closeSettings());
+
+                // Settings buttons
+                document.getElementById('manualSyncBtn').addEventListener('click', () => this.syncICalCalendars());
+                document.getElementById('toggleAutoSyncBtn').addEventListener('click', () => this.toggleAutoSync());
+                document.getElementById('exportDataBtn').addEventListener('click', () => this.exportData());
+                document.getElementById('clearDataBtn').addEventListener('click', () => this.clearAllData());
+
+                // Close modals when clicking outside
+                document.getElementById('bookingModal').addEventListener('click', (e) => {
+                    if (e.target.id === 'bookingModal') this.closeModal();
+                });
+                document.getElementById('settingsModal').addEventListener('click', (e) => {
+                    if (e.target.id === 'settingsModal') this.closeSettings();
+                });
+            }
+
+            // Gestione salvataggio e caricamento dati
+            saveBookings() {
+                try {
+                    const dataToSave = {
+                        bookings: this.bookings,
+                        lastSync: this.lastSync,
+                        autoSyncEnabled: this.autoSyncEnabled,
+                        timestamp: new Date().toISOString()
+                    };
+                    
+                    // Salvataggio principale
+                    localStorage.setItem('booking_calendar_data', JSON.stringify(dataToSave));
+                    
+                    // Backup rotativo (mantieni ultimi 3 backup)
+                    const backups = JSON.parse(localStorage.getItem('booking_calendar_backups') || '[]');
+                    backups.unshift(dataToSave);
+                    if (backups.length > 3) backups.pop();
+                    localStorage.setItem('booking_calendar_backups', JSON.stringify(backups));
+                    
+                    console.log('Dati salvati con successo');
+                } catch (e) {
+                    this.showNotification('Errore nel salvataggio dati: ' + e.message, 'error');
+                    console.error('Errore salvataggio:', e);
+                }
+            }
+
+            loadBookings() {
+                try {
+                    const saved = localStorage.getItem('booking_calendar_data');
+                    
+                    if (saved) {
+                        const data = JSON.parse(saved);
+                        this.lastSync = data.lastSync ? new Date(data.lastSync) : null;
+                        this.autoSyncEnabled = data.autoSyncEnabled !== undefined ? data.autoSyncEnabled : true;
+                        this.updateSyncInfo();
+                        return data.bookings || this.getSampleBookings();
+                    }
+                    
+                    return this.getSampleBookings();
+                } catch (e) {
+                    this.showNotification('Errore nel caricamento dati, carico backup', 'warning');
+                    return this.loadFromBackup() || this.getSampleBookings();
+                }
+            }
+
+            loadFromBackup() {
+                try {
+                    const backups = JSON.parse(localStorage.getItem('booking_calendar_backups') || '[]');
+                    if (backups.length > 0) {
+                        const backup = backups[0];
+                        this.lastSync = backup.lastSync ? new Date(backup.lastSync) : null;
+                        this.autoSyncEnabled = backup.autoSyncEnabled !== undefined ? backup.autoSyncEnabled : true;
+                        return backup.bookings;
+                    }
+                } catch (e) {
+                    console.error('Errore caricamento backup:', e);
+                }
+                return null;
+            }
+
+            getSampleBookings() {
+                return [
+                    {
+                        id: 'manual-1',
+                        platform: 'manual',
+                        checkIn: '2025-09-15',
+                        checkOut: '2025-09-18',
+                        guestName: 'Marco Rossi',
+                        guestEmail: 'marco.rossi@email.com',
+                        guestPhone: '+39 333 1234567',
+                        guests: 2,
+                        totalPrice: 320,
+                        status: 'confermata',
+                        property: 'Casa Vista Mare',
+                        notes: 'Richiede check-in tardivo',
+                        source: 'manual',
+                        createdAt: new Date().toISOString()
+                    }
+                ];
+            }
+
+            // Sistema di sincronizzazione automatica migliorato
+            startAutoSync() {
+                this.stopAutoSync(); // Assicurati di non avere timer duplicati
+                
+                if (!this.autoSyncEnabled) return;
+                
+                // Sync ogni 60 secondi (60000ms)
+                this.syncInterval = setInterval(() => {
+                    if (this.autoSyncEnabled && !this.isLoading) {
+                        this.syncICalCalendars();
+                    }
+                }, 60000);
+                
+                // Countdown visivo
+                this.startCountdown();
+                this.updateSystemStatus();
+            }
+
+            stopAutoSync() {
+                if (this.syncInterval) {
+                    clearInterval(this.syncInterval);
+                    this.syncInterval = null;
+                }
+                if (this.countdownInterval) {
+                    clearInterval(this.countdownInterval);
+                    this.countdownInterval = null;
+                }
+            }
+
+            startCountdown() {
+                let secondsLeft = 60;
+                this.nextSyncTime = new Date(Date.now() + 60000);
+                
+                this.countdownInterval = setInterval(() => {
+                    secondsLeft--;
+                    
+                    if (secondsLeft <= 0) {
+                        secondsLeft = 60;
+                        this.nextSyncTime = new Date(Date.now() + 60000);
+                        
+                        // Restart countdown animation
+                        const countdown = document.getElementById('syncCountdown');
+                        countdown.style.animation = 'none';
+                        setTimeout(() => {
+                            countdown.style.animation = 'countdown 60s linear infinite';
+                        }, 10);
+                    }
+                    
+                    // Update next sync time display
+                    const nextSyncElement = document.getElementById('nextSyncTime');
+                    if (nextSyncElement) {
+                        nextSyncElement.textContent = `${secondsLeft}s`;
+                    }
+                }, 1000);
+            }
+
+            toggleAutoSync() {
+                this.autoSyncEnabled = !this.autoSyncEnabled;
+                
+                const btn = document.getElementById('toggleAutoSyncBtn');
+                const icon = btn.querySelector('i');
+                
+                if (this.autoSyncEnabled) {
+                    this.startAutoSync();
+                    btn.innerHTML = '<i data-lucide="pause" class="w-4 h-4"></i>Disabilita Auto-Sync';
+                    btn.className = btn.className.replace('bg-red-600 hover:bg-red-700', 'bg-green-600 hover:bg-green-700');
+                    this.showNotification('Sincronizzazione automatica ATTIVATA', 'success');
+                } else {
+                    this.stopAutoSync();
+                    btn.innerHTML = '<i data-lucide="play" class="w-4 h-4"></i>Abilita Auto-Sync';
+                    btn.className = btn.className.replace('bg-green-600 hover:bg-green-700', 'bg-red-600 hover:bg-red-700');
+                    this.showNotification('Sincronizzazione automatica DISATTIVATA', 'warning');
+                }
+                
+                this.saveBookings();
+                this.updateSystemStatus();
+                lucide.createIcons();
+            }
+
+            updateSystemStatus() {
+                const autoSyncStatus = document.getElementById('autoSyncStatus');
+                const nextSyncTime = document.getElementById('nextSyncTime');
+                const backupStatus = document.getElementById('backupStatus');
+                
+                if (autoSyncStatus) {
+                    autoSyncStatus.textContent = this.autoSyncEnabled ? 'ATTIVO' : 'DISATTIVATO';
+                    autoSyncStatus.className = this.autoSyncEnabled ? 'text-green-600 font-medium' : 'text-red-600 font-medium';
+                }
+                
+                if (nextSyncTime) {
+                    nextSyncTime.textContent = this.autoSyncEnabled ? '60s' : '--';
+                }
+                
+                if (backupStatus) {
+                    const hasBackup = localStorage.getItem('booking_calendar_backups');
+                    backupStatus.textContent = hasBackup ? 'OK' : 'NESSUNO';
+                    backupStatus.className = hasBackup ? 'text-blue-600 font-medium' : 'text-yellow-600 font-medium';
+                }
+            }
+
+            // Parser iCal migliorato
+            parseICalData(icalData, platform, property) {
+                const lines = icalData.split('\n');
+                const events = [];
+                let currentEvent = null;
+                
+                for (let line of lines) {
+                    line = line.trim();
+                    
+                    if (line === 'BEGIN:VEVENT') {
+                        currentEvent = {
+                            platform: platform,
+                            property: property,
+                            source: 'ical',
+                            status: 'confermata',
+                            guests: 1,
+                            guestEmail: '',
+                            guestPhone: '',
+                            notes: '',
+                            createdAt: new Date().toISOString()
+                        };
+                    } else if (line === 'END:VEVENT' && currentEvent) {
+                        if (currentEvent.checkIn && currentEvent.checkOut && currentEvent.guestName) {
+                            events.push({
+                                ...currentEvent,
+                                id: `${platform}-${property}-${currentEvent.checkIn}-${Math.random().toString(36).substr(2, 9)}`
+                            });
+                        }
+                        currentEvent = null;
+                    } else if (currentEvent) {
+                        if (line.startsWith('DTSTART')) {
+                            const dateMatch = line.match(/(\d{8})/);
+                            if (dateMatch) {
+                                const date = dateMatch[1];
+                                currentEvent.checkIn = `${date.substr(0,4)}-${date.substr(4,2)}-${date.substr(6,2)}`;
+                            }
+                        } else if (line.startsWith('DTEND')) {
+                            const dateMatch = line.match(/(\d{8})/);
+                            if (dateMatch) {
+                                const date = dateMatch[1];
+                                currentEvent.checkOut = `${date.substr(0,4)}-${date.substr(4,2)}-${date.substr(6,2)}`;
+                            }
+                        } else if (line.startsWith('SUMMARY')) {
+                            let summary = line.replace('SUMMARY:', '');
+                            summary = summary.replace(/\\n/g, ' ').replace(/\\,/g, ',').replace(/\\\\/g, '\\');
+                            
+                            if (summary.includes('Reserved') || summary.includes('Blocked') || summary.includes('Not available')) {
+                                currentEvent.guestName = 'Prenotazione Bloccata';
+                                currentEvent.status = 'confermata';
+                            } else {
+                                const matches = summary.match(/(.+?)(?:\s*\(|$)/);
+                                currentEvent.guestName = matches ? matches[1].trim() : summary;
+                            }
+                        } else if (line.startsWith('DESCRIPTION')) {
+                            let description = line.replace('DESCRIPTION:', '');
+                            description = description.replace(/\\n/g, '\n').replace(/\\,/g, ',').replace(/\\\\/g, '\\');
+                            currentEvent.notes = description;
+                            
+                            const priceMatch = description.match(/€\s*(\d+(?:[.,]\d{2})?)/i) || 
+                                             description.match(/EUR\s*(\d+(?:[.,]\d{2})?)/i) ||
+                                             description.match(/(\d+(?:[.,]\d{2})?)\s*€/i);
+                            if (priceMatch) {
+                                currentEvent.totalPrice = parseFloat(priceMatch[1].replace(',', '.'));
+                            } else {
+                                currentEvent.totalPrice = 0;
+                            }
+                        }
+                    }
+                }
+                
+                return events;
+            }
+
+            // Sincronizzazione iCal migliorata
+            async syncICalCalendars() {
+                if (this.isLoading) return;
+                
+                this.isLoading = true;
+                this.updateSyncButton(true);
+                
+                try {
+                    const newBookings = [];
+                    const corsProxy = 'https://api.allorigins.win/get?url=';
+                    
+                    const calendars = [
+                        { ...this.icalUrls.appCorte, property: 'App Corte' },
+                        { ...this.icalUrls.appTorre, property: 'App Torre' }
+                    ];
+                    
+                    let successfulSyncs = 0;
+                    let totalCalendars = 0;
+                    
+                    for (const calendar of calendars) {
+                        // Sincronizza Booking.com
+                        if (calendar.booking) {
+                            totalCalendars++;
+                            try {
+                                const response = await fetch(corsProxy + encodeURIComponent(calendar.booking));
+                                const data = await response.json();
+                                if (data.contents) {
+                                    const bookingEvents = this.parseICalData(data.contents, 'booking', calendar.property);
+                                    newBookings.push(...bookingEvents);
+                                    successfulSyncs++;
+                                }
+                            } catch (error) {
+                                console.error(`Errore sincronizzazione Booking.com per ${calendar.property}:`, error);
+                            }
+                        }
+                        
+                        // Sincronizza Airbnb
+                        if (calendar.airbnb) {
+                            totalCalendars++;
+                            try {
+                                const response = await fetch(corsProxy + encodeURIComponent(calendar.airbnb));
+                                const data = await response.json();
+                                if (data.contents) {
+                                    const airbnbEvents = this.parseICalData(data.contents, 'airbnb', calendar.property);
+                                    newBookings.push(...airbnbEvents);
+                                    successfulSyncs++;
+                                }
+                            } catch (error) {
+                                console.error(`Errore sincronizzazione Airbnb per ${calendar.property}:`, error);
+                            }
+                        }
+                    }
+                    
+                    // Rimuovi prenotazioni esistenti da iCal e aggiungi quelle nuove
+                    const manualBookings = this.bookings.filter(booking => booking.source !== 'ical');
+                    this.bookings = [...manualBookings, ...newBookings];
+                    
+                    // Rileva conflitti
+                    const conflicts = this.detectConflicts();
+                    if (conflicts.length > 0) {
+                        this.showNotification(`Rilevati ${conflicts.length} conflitti di date!`, 'warning');
+                    }
+                    
+                    this.lastSync = new Date();
+                    this.saveBookings();
+                    this.renderCalendar();
+                    this.updateSidebar();
+                    this.updateSyncInfo();
+                    
+                    const message = `Sincronizzate ${newBookings.length} prenotazioni (${successfulSyncs}/${totalCalendars} calendari)`;
+                    this.showNotification(message, successfulSyncs === totalCalendars ? 'success' : 'warning');
+                    
+                } catch (error) {
+                    console.error('Errore durante la sincronizzazione:', error);
+                    this.showNotification('Errore durante la sincronizzazione: ' + error.message, 'error');
+                } finally {
+                    this.isLoading = false;
+                    this.updateSyncButton(false);
+                }
+            }
+
+            // Rilevamento conflitti
+            detectConflicts() {
+                const conflicts = [];
+                const sortedBookings = [...this.bookings].sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn));
+                
+                for (let i = 0; i < sortedBookings.length - 1; i++) {
+                    const current = sortedBookings[i];
+                    const next = sortedBookings[i + 1];
+                    
+                    const currentOut = new Date(current.checkOut);
+                    const nextIn = new Date(next.checkIn);
+                    
+                    if (currentOut > nextIn) {
+                        conflicts.push({
+                            booking1: current,
+                            booking2: next,
+                            type: 'overlap'
+                        });
+                    }
+                }
+                
+                return conflicts;
+            }
+
+            updateSyncButton(loading) {
+                const btn = document.getElementById('syncBtn');
+                const icon = btn.querySelector('i');
+                const text = btn.querySelector('span');
+                
+                if (loading) {
+                    icon.classList.add('animate-spin');
+                    text.textContent = 'Sincronizzando...';
+                    btn.disabled = true;
+                    btn.classList.add('opacity-50');
+                } else {
+                    icon.classList.remove('animate-spin');
+                    text.textContent = 'Sincronizza';
+                    btn.disabled = false;
+                    btn.classList.remove('opacity-50');
+                }
+            }
+
+            updateSyncInfo() {
+                const syncInfo = document.getElementById('lastSyncInfo');
+                if (this.lastSync && syncInfo) {
+                    syncInfo.textContent = `Ultima sincronizzazione: ${this.lastSync.toLocaleString('it-IT')}`;
+                }
+            }
+
+            // Sistema di blocco date sulle piattaforme
+            async blockDatesOnPlatforms(booking) {
+                const results = {
+                    booking: false,
+                    airbnb: false,
+                    errors: []
+                };
+                
+                try {
+                    // Tentativo blocco su Booking.com
+                    if (booking.platform === 'booking' || booking.platform === 'manual') {
+                        try {
+                            const bookingResult = await this.blockOnBooking(booking);
+                            results.booking = bookingResult.success;
+                            if (!bookingResult.success) {
+                                results.errors.push(`Booking.com: ${bookingResult.error}`);
+                            }
+                        } catch (error) {
+                            results.errors.push(`Booking.com: ${error.message}`);
+                        }
+                    }
+                    
+                    // Tentativo blocco su Airbnb
+                    if (booking.platform === 'airbnb' || booking.platform === 'manual') {
+                        try {
+                            const airbnbResult = await this.blockOnAirbnb(booking);
+                            results.airbnb = airbnbResult.success;
+                            if (!airbnbResult.success) {
+                                results.errors.push(`Airbnb: ${airbnbResult.error}`);
+                            }
+                        } catch (error) {
+                            results.errors.push(`Airbnb: ${error.message}`);
+                        }
+                    }
+                    
+                } catch (error) {
+                    results.errors.push(`Errore generale: ${error.message}`);
+                }
+                
+                return results;
+            }
+
+            async blockOnBooking(booking) {
+                // Simulazione API Booking.com (da implementare con credenziali reali)
+                return new Promise((resolve) => {
+                    setTimeout(() => {
+                        resolve({
+                            success: false,
+                            error: 'API non configurata - credenziali partner richieste'
+                        });
+                    }, 1000);
+                });
+            }
+
+            async blockOnAirbnb(booking) {
+                // Simulazione API Airbnb (da implementare con token reale)
+                return new Promise((resolve) => {
+                    setTimeout(() => {
+                        resolve({
+                            success: false,
+                            error: 'Token di accesso host richiesto'
+                        });
+                    }, 1000);
+                });
+            }
+
+            // Sistema di notifiche migliorato
+            showNotification(message, type = 'info', duration = 4000) {
+                const notification = document.createElement('div');
+                notification.className = `notification ${type}`;
+                
+                const icon = this.getNotificationIcon(type);
+                notification.innerHTML = `
+                    <div class="flex items-center gap-2">
+                        <i data-lucide="${icon}" class="w-4 h-4"></i>
+                        <span>${message}</span>
+                    </div>
+                `;
+                
+                document.getElementById('notifications').appendChild(notification);
+                
+                // Show notification
+                setTimeout(() => {
+                    notification.classList.add('show');
+                    lucide.createIcons();
+                }, 100);
+                
+                // Hide and remove notification
+                setTimeout(() => {
+                    notification.classList.remove('show');
+                    setTimeout(() => notification.remove(), 300);
+                }, duration);
+            }
+
+            getNotificationIcon(type) {
+                switch (type) {
+                    case 'success': return 'check-circle';
+                    case 'error': return 'x-circle';
+                    case 'warning': return 'alert-triangle';
+                    case 'info': return 'info';
+                    default: return 'bell';
+                }
+            }
+
+            // Funzioni calendario
+            getDaysInMonth(date) {
+                return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+            }
+
+            getFirstDayOfMonth(date) {
+                const firstDay = new Date(date.getFullYear(), date.getMonth(), 1).getDay();
+                return firstDay === 0 ? 6 : firstDay - 1; // Lunedì = 0
+            }
+
+            formatDate(date) {
+                return date.toISOString().split('T')[0];
+            }
+
+            isDateBooked(day) {
+                const dateStr = this.formatDate(new Date(this.currentDate.getFullYear(), this.currentDate.getMonth(), day));
+                return this.bookings.some(booking => {
+                    const checkIn = new Date(booking.checkIn);
+                    const checkOut = new Date(booking.checkOut);
+                    const currentDateObj = new Date(dateStr);
+                    return currentDateObj >= checkIn && currentDateObj < checkOut;
+                });
+            }
+
+            getBookingForDate(day) {
+                const dateStr = this.formatDate(new Date(this.currentDate.getFullYear(), this.currentDate.getMonth(), day));
+                return this.bookings.find(booking => {
+                    const checkIn = new Date(booking.checkIn);
+                    const checkOut = new Date(booking.checkOut);
+                    const currentDateObj = new Date(dateStr);
+                    return currentDateObj >= checkIn && currentDateObj < checkOut;
+                });
+            }
+
+            handleDateClick(day) {
+                const booking = this.getBookingForDate(day);
+                if (booking) {
+                    this.showBookingDetails(booking);
+                } else {
+                    const dateStr = this.formatDate(new Date(this.currentDate.getFullYear(), this.currentDate.getMonth(), day));
+                    this.newBooking(dateStr);
+                }
+            }
+
+            // Modal per dettagli prenotazione
+            showBookingDetails(booking) {
+                this.selectedBooking = booking;
+                const modal = document.getElementById('bookingModal');
+                const title = document.getElementById('modalTitle');
+                const content = document.getElementById('modalContent');
+                
+                title.textContent = `Dettagli Prenotazione - ${booking.guestName}`;
+                
+                const isEditable = booking.source === 'manual';
+                const platformColor = this.getPlatformColor(booking.platform);
+                const statusColor = this.getStatusColor(booking.status);
+                
+                content.innerHTML = `
+                    <div class="space-y-6">
+                        <!-- Informazioni principali -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Piattaforma</label>
+                                    <div class="flex items-center gap-2">
+                                        <span class="${platformColor} text-white px-3 py-1 rounded text-sm font-medium uppercase">
+                                            ${booking.platform}
+                                        </span>
+                                        ${booking.source === 'ical' ? '<i data-lucide="wifi" class="w-4 h-4 text-green-600"></i>' : ''}
+                                    </div>
+                                </div>
+                                
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Nome Ospite</label>
+                                    <p class="text-gray-900 font-medium">${booking.guestName}</p>
+                                </div>
+                                
+                                ${booking.guestEmail ? `
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                                    <p class="text-gray-900">${booking.guestEmail}</p>
+                                </div>
+                                ` : ''}
+                                
+                                ${booking.guestPhone ? `
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Telefono</label>
+                                    <p class="text-gray-900">${booking.guestPhone}</p>
+                                </div>
+                                ` : ''}
+                            </div>
+                            
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Check-in</label>
+                                    <p class="text-gray-900 font-medium">${new Date(booking.checkIn).toLocaleDateString('it-IT', { 
+                                        weekday: 'long', 
+                                        year: 'numeric', 
+                                        month: 'long', 
+                                        day: 'numeric' 
+                                    })}</p>
+                                </div>
+                                
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Check-out</label>
+                                    <p class="text-gray-900 font-medium">${new Date(booking.checkOut).toLocaleDateString('it-IT', { 
+                                        weekday: 'long', 
+                                        year: 'numeric', 
+                                        month: 'long', 
+                                        day: 'numeric' 
+                                    })}</p>
+                                </div>
+                                
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Durata</label>
+                                    <p class="text-gray-900">${this.calculateNights(booking.checkIn, booking.checkOut)} notti</p>
+                                </div>
+                                
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">Ospiti</label>
+                                        <p class="text-gray-900 font-medium">${booking.guests}</p>
+                                    </div>
+                                    
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">Prezzo</label>
+                                        <p class="text-green-600 font-bold text-lg">€${booking.totalPrice}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Proprietà e stato -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            ${booking.property ? `
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Proprietà</label>
+                                <p class="text-gray-900">${booking.property}</p>
+                            </div>
+                            ` : ''}
+                            
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Stato</label>
+                                <span class="${statusColor} px-3 py-1 rounded text-sm font-medium">
+                                    ${booking.status.replace('_', ' ').toUpperCase()}
+                                </span>
+                            </div>
+                        </div>
+                        
+                        <!-- Note -->
+                        ${booking.notes ? `
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Note</label>
+                            <div class="bg-gray-50 p-3 rounded border">
+                                <p class="text-gray-900 whitespace-pre-line">${booking.notes}</p>
+                            </div>
+                        </div>
+                        ` : ''}
+                        
+                        <!-- Informazioni tecniche -->
+                        <div class="text-xs text-gray-500 border-t pt-4">
+                            <p>ID: ${booking.id}</p>
+                            <p>Sorgente: ${booking.source === 'ical' ? 'Sincronizzazione iCal' : 'Inserimento Manuale'}</p>
+                            ${booking.createdAt ? `<p>Creato: ${new Date(booking.createdAt).toLocaleString('it-IT')}</p>` : ''}
+                        </div>
+                        
+                        <!-- Azioni -->
+                        <div class="flex gap-3 pt-4 border-t">
+                            ${isEditable ? `
+                                <button id="editBookingBtn" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2">
+                                    <i data-lucide="edit-3" class="w-4 h-4"></i>
+                                    Modifica
+                                </button>
+                                <button id="deleteBookingBtn" class="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2">
+                                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                    Elimina
+                                </button>
+                            ` : `
+                                <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 flex-1">
+                                    <div class="flex items-center gap-2">
+                                        <i data-lucide="info" class="w-4 h-4 text-blue-600"></i>
+                                        <p class="text-blue-800 text-sm">
+                                            Questa prenotazione è stata sincronizzata automaticamente e non può essere modificata.
+                                        </p>
+                                    </div>
+                                </div>
+                            `}
+                            
+                            <button id="closeBookingDetailsBtn" class="px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors flex items-center gap-2">
+                                <i data-lucide="x" class="w-4 h-4"></i>
+                                Chiudi
+                            </button>
+                        </div>
+                    </div>
+                `;
+                
+                // Bind eventi
+                const editBtn = document.getElementById('editBookingBtn');
+                const deleteBtn = document.getElementById('deleteBookingBtn');
+                const closeBtn = document.getElementById('closeBookingDetailsBtn');
+                
+                if (editBtn) {
+                    editBtn.addEventListener('click', () => this.editBooking(booking));
+                }
+                
+                if (deleteBtn) {
+                    deleteBtn.addEventListener('click', () => this.deleteBooking(booking));
+                }
+                
+                if (closeBtn) {
+                    closeBtn.addEventListener('click', () => this.closeModal());
+                }
+                
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+                lucide.createIcons();
+            }
+
+            // Nuova prenotazione
+            newBooking(selectedDate = '') {
+                const modal = document.getElementById('bookingModal');
+                const title = document.getElementById('modalTitle');
+                const content = document.getElementById('modalContent');
+                
+                title.textContent = 'Nuova Prenotazione';
+                
+                const today = new Date().toISOString().split('T')[0];
+                const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+                
+                content.innerHTML = `
+                    <form id="bookingForm" class="space-y-6">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <!-- Colonna sinistra -->
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Piattaforma *</label>
+                                    <select id="platform" name="platform" required class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                        <option value="manual">Manuale</option>
+                                        <option value="airbnb">Airbnb</option>
+                                        <option value="booking">Booking.com</option>
+                                    </select>
+                                </div>
+                                
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Nome Ospite *</label>
+                                    <input type="text" id="guestName" name="guestName" required 
+                                           class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                           placeholder="Nome completo dell'ospite">
+                                </div>
+                                
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                                    <input type="email" id="guestEmail" name="guestEmail" 
+                                           class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                           placeholder="email@esempio.com">
+                                </div>
+                                
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Telefono</label>
+                                    <input type="tel" id="guestPhone" name="guestPhone" 
+                                           class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                           placeholder="+39 333 1234567">
+                                </div>
+                                
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Proprietà</label>
+                                    <select id="property" name="property" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                        <option value="">Seleziona proprietà</option>
+                                        <option value="App Corte">App Corte</option>
+                                        <option value="App Torre">App Torre</option>
+                                        <option value="Casa Vista Mare">Casa Vista Mare</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <!-- Colonna destra -->
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Check-in *</label>
+                                    <input type="date" id="checkIn" name="checkIn" required 
+                                           class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                           min="${today}" value="${selectedDate || today}">
+                                </div>
+                                
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Check-out *</label>
+                                    <input type="date" id="checkOut" name="checkOut" required 
+                                           class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                           min="${selectedDate || tomorrow}" value="${tomorrow}">
+                                </div>
+                                
+                                <div>
+                                    <label class
