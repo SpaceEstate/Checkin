@@ -1185,3 +1185,142 @@
                                 
                                 <div>
                                     <label class
+                                    // COMPLETAMENTO DEL CODICE JAVASCRIPT - Da aggiungere alla fine del file HTML esistente
+
+                                    <p class="font-medium mb-2">Blocco Automatico Date</p>
+                                    <label class="flex items-center gap-2">
+                                        <input type="checkbox" id="blockDates" name="blockDates" checked class="rounded">
+                                        <span>Tenta di bloccare automaticamente le date su tutte le piattaforme</span>
+                                    </label>
+                                    <p class="text-xs mt-1 text-yellow-700">
+                                        Nota: Richiede configurazione API per essere funzionale
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Pulsanti -->
+                        <div class="flex gap-3 pt-4 border-t">
+                            <button type="submit" id="saveBookingBtn" class="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2">
+                                <i data-lucide="check" class="w-4 h-4"></i>
+                                Salva Prenotazione
+                            </button>
+                            <button type="button" id="cancelBookingBtn" class="px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors flex items-center gap-2">
+                                <i data-lucide="x" class="w-4 h-4"></i>
+                                Annulla
+                            </button>
+                        </div>
+                    </form>
+                `;
+                
+                // Bind eventi form
+                const form = document.getElementById('bookingForm');
+                const cancelBtn = document.getElementById('cancelBookingBtn');
+                
+                form.addEventListener('submit', (e) => this.handleBookingSubmit(e));
+                cancelBtn.addEventListener('click', () => this.closeModal());
+                
+                // Auto-calcola checkout quando cambia checkin
+                const checkInInput = document.getElementById('checkIn');
+                const checkOutInput = document.getElementById('checkOut');
+                
+                checkInInput.addEventListener('change', () => {
+                    const checkInDate = new Date(checkInInput.value);
+                    const minCheckOut = new Date(checkInDate.getTime() + 86400000); // +1 giorno
+                    checkOutInput.min = minCheckOut.toISOString().split('T')[0];
+                    if (checkOutInput.value <= checkInInput.value) {
+                        checkOutInput.value = minCheckOut.toISOString().split('T')[0];
+                    }
+                });
+                
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+                lucide.createIcons();
+            }
+
+            // Modali - chiusura
+            closeModal() {
+                document.getElementById('bookingModal').classList.add('hidden');
+                document.getElementById('bookingModal').classList.remove('flex');
+            }
+
+            closeSettings() {
+                document.getElementById('settingsModal').classList.add('hidden');
+                document.getElementById('settingsModal').classList.remove('flex');
+            }
+
+            // Impostazioni modal
+            showSettings() {
+                document.getElementById('settingsModal').classList.remove('hidden');
+                document.getElementById('settingsModal').classList.add('flex');
+                lucide.createIcons();
+            }
+
+            // Funzioni di utilità per esportazione e pulizia
+            exportData() {
+                const dataToExport = {
+                    bookings: this.bookings,
+                    lastSync: this.lastSync,
+                    exportDate: new Date().toISOString(),
+                    version: '1.0'
+                };
+                
+                const blob = new Blob([JSON.stringify(dataToExport, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `booking_calendar_export_${new Date().toISOString().split('T')[0]}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+                
+                this.showNotification('Dati esportati con successo!', 'success');
+            }
+
+            clearAllData() {
+                if (!confirm('ATTENZIONE: Questa azione cancellerà TUTTI i dati del calendario.\n\nSei sicuro di voler continuare?')) {
+                    return;
+                }
+                
+                if (!confirm('ULTIMA CONFERMA: I dati verranno persi definitivamente.\n\nVuoi procedere con la cancellazione?')) {
+                    return;
+                }
+                
+                // Pulisci tutto
+                this.bookings = [];
+                this.lastSync = null;
+                localStorage.removeItem('booking_calendar_data');
+                localStorage.removeItem('booking_calendar_backups');
+                
+                // Aggiorna interfaccia
+                this.renderCalendar();
+                this.updateSidebar();
+                this.updateSyncInfo();
+                this.updateSystemStatus();
+                
+                this.showNotification('Tutti i dati sono stati cancellati', 'info');
+            }
+        }
+
+        // Inizializzazione dell'applicazione
+        let calendar;
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            calendar = new BookingCalendar();
+            
+            // Gestione cleanup quando la pagina viene chiusa
+            window.addEventListener('beforeunload', () => {
+                if (calendar) {
+                    calendar.stopAutoSync();
+                }
+            });
+        });
+
+        // Funzioni globali per gestire click sui giorni del calendario
+        window.handleDateClick = function(day) {
+            if (calendar) {
+                calendar.handleDateClick(day);
+            }
+        };
+    </script>
+</body>
+</html>
