@@ -1374,7 +1374,7 @@ nextMonth() {
                 const form = document.getElementById('bookingForm');
                 const cancelBtn = document.getElementById('cancelBookingBtn');
                 
-                form.addEventListener('submit', (e) => this.handleBookingSubmit(e));
+                form.addEventListener('submit', handleBookingSubmit);
                 cancelBtn.addEventListener('click', () => this.closeModal());
                 
                 // Auto-calcola checkout quando cambia checkin
@@ -1478,8 +1478,43 @@ nextMonth() {
                 calendar.handleDateClick(day);
             }
         };
-        handleBookingSubmit(e) {
+       // Funzione globale per il submit del form
+function handleBookingSubmit(e) {
     e.preventDefault();
+
+    const formData = new FormData(e.target);
+    const bookingData = {
+        id: `manual-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        platform: formData.get('platform') || 'manual',
+        checkIn: formData.get('checkIn'),
+        checkOut: formData.get('checkOut'),
+        guestName: formData.get('guestName'),
+        guestEmail: formData.get('guestEmail') || '',
+        guestPhone: formData.get('guestPhone') || '',
+        guests: parseInt(formData.get('guests')) || 1,
+        totalPrice: parseFloat(formData.get('totalPrice')) || 0,
+        status: formData.get('status'),
+        property: formData.get('property') || '',
+        notes: formData.get('notes') || '',
+        source: 'manual',
+        createdAt: new Date().toISOString()
+    };
+
+    // Validazione
+    if (new Date(bookingData.checkIn) >= new Date(bookingData.checkOut)) {
+        calendar.showNotification('La data di check-out deve essere successiva al check-in', 'error');
+        return;
+    }
+
+    calendar.bookings.push(bookingData);
+    calendar.saveBookings();
+    calendar.renderCalendar();
+    calendar.updateSidebar();
+    calendar.closeModal();
+
+    calendar.showNotification('Prenotazione aggiunta con successo!', 'success');
+}
+    
     
     const formData = new FormData(e.target);
     const bookingData = {
