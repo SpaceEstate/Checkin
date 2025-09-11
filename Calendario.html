@@ -584,6 +584,153 @@
                     backupStatus.className = hasBackup ? 'text-blue-600 font-medium' : 'text-yellow-600 font-medium';
                 }
             }
+            // Funzioni di rendering calendario
+renderCalendar() {
+    const monthYear = document.getElementById('currentMonthYear');
+    const calendarGrid = document.getElementById('calendarGrid');
+    
+    monthYear.textContent = `${this.monthNames[this.currentDate.getMonth()]} ${this.currentDate.getFullYear()}`;
+    
+    const daysInMonth = this.getDaysInMonth(this.currentDate);
+    const firstDay = this.getFirstDayOfMonth(this.currentDate);
+    const today = new Date();
+    const isCurrentMonth = today.getMonth() === this.currentDate.getMonth() && 
+                          today.getFullYear() === this.currentDate.getFullYear();
+    
+    calendarGrid.innerHTML = '';
+    
+    // Giorni del mese precedente (vuoti)
+    for (let i = 0; i < firstDay; i++) {
+        const dayCell = document.createElement('div');
+        dayCell.className = 'calendar-day bg-gray-50 border-b border-r border-gray-200';
+        calendarGrid.appendChild(dayCell);
+    }
+    
+    // Giorni del mese corrente
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dayCell = document.createElement('div');
+        const isToday = isCurrentMonth && day === today.getDate();
+        const booking = this.getBookingForDate(day);
+        
+        let className = 'calendar-day bg-white border-b border-r border-gray-200 p-2 cursor-pointer hover:bg-gray-50 relative';
+        
+        if (isToday) {
+            className += ' ring-2 ring-blue-500';
+        }
+        
+        dayCell.className = className;
+        dayCell.onclick = () => window.handleDateClick(day);
+        
+        let content = `<div class="font-medium text-gray-800">${day}</div>`;
+        
+        if (booking) {
+            const platformColor = this.getPlatformColor(booking.platform);
+            content += `
+                <div class="${platformColor} text-white text-xs px-2 py-1 rounded mt-1 truncate">
+                    ${booking.guestName}
+                </div>
+            `;
+        }
+        
+        dayCell.innerHTML = content;
+        calendarGrid.appendChild(dayCell);
+    }
+}
+
+updateSidebar() {
+    this.updateUpcomingBookings();
+    this.updateStats();
+}
+
+updateUpcomingBookings() {
+    const container = document.getElementById('upcomingBookings');
+    const now = new Date();
+    
+    const upcomingBookings = this.bookings
+        .filter(booking => new Date(booking.checkIn) >= now)
+        .sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn))
+        .slice(0, 5);
+    
+    if (upcomingBookings.length === 0) {
+        container.innerHTML = '<p class="text-gray-500 text-sm">Nessuna prenotazione prossima</p>';
+        return;
+    }
+    
+    container.innerHTML = upcomingBookings.map(booking => {
+        const platformColor = this.getPlatformColor(booking.platform);
+        return `
+            <div class="booking-card bg-white p-3 rounded-lg border border-gray-200 cursor-pointer" 
+                 onclick="calendar.showBookingDetails(${JSON.stringify(booking).replace(/"/g, '&quot;')})">
+                <div class="flex items-start justify-between">
+                    <div class="flex-1">
+                        <p class="font-medium text-gray-800 text-sm">${booking.guestName}</p>
+                        <p class="text-xs text-gray-600">${new Date(booking.checkIn).toLocaleDateString('it-IT')}</p>
+                        <div class="flex items-center gap-2 mt-1">
+                            <span class="${platformColor} text-white px-2 py-0.5 rounded text-xs uppercase">
+                                ${booking.platform}
+                            </span>
+                            ${booking.source === 'ical' ? '<i data-lucide="wifi" class="w-3 h-3 text-green-600"></i>' : ''}
+                        </div>
+                    </div>
+                    <p class="text-green-600 font-bold text-sm">€${booking.totalPrice}</p>
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    lucide.createIcons();
+}
+
+updateStats() {
+    const totalBookings = document.getElementById('totalBookings');
+    const totalRevenue = document.getElementById('totalRevenue');
+    const icalBookings = document.getElementById('icalBookings');
+    const manualBookings = document.getElementById('manualBookings');
+    
+    const total = this.bookings.length;
+    const revenue = this.bookings.reduce((sum, booking) => sum + (booking.totalPrice || 0), 0);
+    const ical = this.bookings.filter(b => b.source === 'ical').length;
+    const manual = this.bookings.filter(b => b.source === 'manual').length;
+    
+    totalBookings.textContent = total;
+    totalRevenue.textContent = `€${revenue}`;
+    icalBookings.textContent = ical;
+    manualBookings.textContent = manual;
+}
+
+getPlatformColor(platform) {
+    switch (platform) {
+        case 'airbnb': return 'bg-red-500';
+        case 'booking': return 'bg-blue-600';
+        case 'manual': return 'bg-green-600';
+        default: return 'bg-gray-600';
+    }
+}
+
+getStatusColor(status) {
+    switch (status) {
+        case 'confermata': return 'bg-green-100 text-green-800';
+        case 'in_attesa': return 'bg-yellow-100 text-yellow-800';
+        case 'cancellata': return 'bg-red-100 text-red-800';
+        default: return 'bg-gray-100 text-gray-800';
+    }
+}
+
+calculateNights(checkIn, checkOut) {
+    const start = new Date(checkIn);
+    const end = new Date(checkOut);
+    return Math.ceil((end - start) / (1000 * 60 * 60 * 24));
+}
+
+previousMonth() {
+    this.currentDate.setMonth(this.currentDate.getMonth() - 1);
+    this.renderCalendar();
+}
+
+nextMonth() {
+    this.currentDate.setMonth(this.currentDate.getMonth() + 1);
+    this.renderCalendar();
+}
 
             // Parser iCal migliorato
             parseICalData(icalData, platform, property) {
@@ -1126,14 +1273,27 @@
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <!-- Colonna sinistra -->
                             <div class="space-y-4">
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Piattaforma *</label>
-                                    <select id="platform" name="platform" required class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                                        <option value="manual">Manuale</option>
-                                        <option value="airbnb">Airbnb</option>
-                                        <option value="booking">Booking.com</option>
-                                    </select>
-                                </div>
+                               <div>
+    <label class="block text-sm font-medium text-gray-700 mb-1">Numero Ospiti</label>
+    <input type="number" id="guests" name="guests" min="1" max="10" value="2" 
+           class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+</div>
+
+<div>
+    <label class="block text-sm font-medium text-gray-700 mb-1">Prezzo Totale (€)</label>
+    <input type="number" id="totalPrice" name="totalPrice" min="0" step="0.01" 
+           class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+           placeholder="0.00">
+</div>
+
+<div>
+    <label class="block text-sm font-medium text-gray-700 mb-1">Stato</label>
+    <select id="status" name="status" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+        <option value="confermata">Confermata</option>
+        <option value="in_attesa">In Attesa</option>
+        <option value="cancellata">Cancellata</option>
+    </select>
+</div>
                                 
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 mb-1">Nome Ospite *</label>
@@ -1318,6 +1478,41 @@
                 calendar.handleDateClick(day);
             }
         };
+        handleBookingSubmit(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(e.target);
+    const bookingData = {
+        id: `manual-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        platform: formData.get('platform'),
+        checkIn: formData.get('checkIn'),
+        checkOut: formData.get('checkOut'),
+        guestName: formData.get('guestName'),
+        guestEmail: formData.get('guestEmail') || '',
+        guestPhone: formData.get('guestPhone') || '',
+        guests: parseInt(formData.get('guests')) || 1,
+        totalPrice: parseFloat(formData.get('totalPrice')) || 0,
+        status: formData.get('status'),
+        property: formData.get('property') || '',
+        notes: formData.get('notes') || '',
+        source: 'manual',
+        createdAt: new Date().toISOString()
+    };
+    
+    // Validazione
+    if (new Date(bookingData.checkIn) >= new Date(bookingData.checkOut)) {
+        this.showNotification('La data di check-out deve essere successiva al check-in', 'error');
+        return;
+    }
+    
+    this.bookings.push(bookingData);
+    this.saveBookings();
+    this.renderCalendar();
+    this.updateSidebar();
+    this.closeModal();
+    
+    this.showNotification('Prenotazione aggiunta con successo!', 'success');
+}
     </script>
 </body>
 </html>
