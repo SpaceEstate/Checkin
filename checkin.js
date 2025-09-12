@@ -834,7 +834,7 @@ window.procediAlPagamento = async function() {
   try {
     // Raccogli TUTTI i dati inclusi i documenti
     showNotification('Preparazione documenti in corso...', 'info');
-    const datiCompleti = await raccogliDatiPrenotazioneConDocumenti();
+    const datiCompleti = await raccogliDatiPrenotazione();
     
     // Procedi al pagamento
     payButton.innerHTML = '⏳ Creazione pagamento...';
@@ -870,7 +870,7 @@ function validaPrenotazioneCompleta() {
   return true;
 }
 
-function raccogliDatiPrenotazione() {
+async function raccogliDatiPrenotazione() {
   const datiPrenotazione = {
     dataCheckin: dataCheckin,
     appartamento: document.getElementById('appartamento')?.value,
