@@ -417,12 +417,12 @@ function generaHTMLRiepilogo(dati) {
 }
 
 async function inviaEmailConPDF(emailDestinatario, dati, pdfBuffer) {
-  // CORREZIONE: createTransport invece di createTransporter
+  // Configurazione per Yahoo Mail
   const transporter = nodemailer.createTransport({
-    service: 'gmail',
+    service: 'yahoo',
     auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASSWORD
+      user: process.env.EMAIL_USER, // tua.email@yahoo.com
+      pass: process.env.EMAIL_PASSWORD // password specifica per l'app
     }
   });
 
