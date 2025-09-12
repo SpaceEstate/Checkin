@@ -534,6 +534,101 @@ body {
   border-left: 4px solid #b89968;
 }
 
+.privacy-section {
+  background: linear-gradient(135deg, #faf9f6 0%, #f5f2e9 100%);
+  padding: 25px;
+  border-radius: 16px;
+  margin-bottom: 30px;
+  border: 2px solid #e8dcc0;
+}
+
+.privacy-checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 15px;
+}
+
+.privacy-input {
+  display: none;
+}
+
+.checkbox-custom {
+  width: 22px;
+  height: 22px;
+  border: 2px solid #d4c7b5;
+  border-radius: 4px;
+  background: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-top: 2px;
+  position: relative;
+}
+
+.checkbox-custom::after {
+  content: '✓';
+  color: white;
+  font-size: 14px;
+  font-weight: bold;
+  opacity: 0;
+  transform: scale(0.7);
+  transition: all 0.2s ease;
+}
+
+.privacy-input:checked + .privacy-label .checkbox-custom {
+  background: linear-gradient(135deg, #b89968 0%, #a67c52 100%);
+  border-color: #a67c52;
+  box-shadow: 0 2px 8px rgba(184, 153, 104, 0.3);
+}
+
+.privacy-input:checked + .privacy-label .checkbox-custom::after {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.privacy-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 15px;
+  cursor: pointer;
+  line-height: 1.6;
+}
+
+.privacy-text {
+  color: #8b7d6b;
+  font-size: 0.95rem;
+  text-align: justify;
+  flex: 1;
+}
+
+.privacy-label:hover .checkbox-custom {
+  border-color: #b89968;
+  box-shadow: 0 0 0 3px rgba(184, 153, 104, 0.15);
+}
+
+/* Validazione CSS pura per la checkbox privacy */
+.privacy-input:required:invalid ~ .button-group .btn-success {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.privacy-input:required:valid ~ .button-group .btn-success {
+  opacity: 1;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.btn.disabled,
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 .summary-title {
   font-size: 1.5rem;
   font-weight: 600;
@@ -689,5 +784,14 @@ body {
   .form-row {
     grid-template-columns: 1fr;
     gap: 10px;
+  }
+  
+  .privacy-checkbox {
+    flex-direction: column;
+    gap: 10px;
+  }
+  
+  .checkbox-custom {
+    align-self: flex-start;
   }
 }
