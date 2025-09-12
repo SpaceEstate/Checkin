@@ -50,10 +50,18 @@ export default async function handler(req, res) {
       const session = event.data.object;
       console.log('💰 Pagamento completato per sessione:', session.id);
       
-      // Scrivi dati su Google Sheets
+      // 1. Scrivi dati su Google Sheets (priorità)
       await scriviDatiSuGoogleSheets(session);
-      
       console.log('✅ Dati scritti con successo su Google Sheets');
+      
+      // 2. NUOVO: Genera PDF e invia email (non bloccante)
+      try {
+        await generaPDFEInviaEmail(session);
+        console.log('✅ PDF generato e email inviata');
+      } catch (pdfError) {
+        console.error('⚠️ Errore PDF/Email (non critico):', pdfError);
+        // Non blocchiamo il webhook per errori PDF
+      }
       
     } catch (error) {
       console.error('❌ Errore elaborazione webhook:', error);
@@ -62,6 +70,132 @@ export default async function handler(req, res) {
   }
 
   return res.status(200).json({ received: true });
+}
+
+// NUOVA FUNZIONE: Genera PDF e invia email
+async function generaPDFEInviaEmail(session) {
+  try {
+    console.log('📄 Inizio generazione PDF e invio email...');
+    
+    const metadata = session.metadata;
+    
+    // Ricostruisci dati prenotazione dal metadata
+    const datiPrenotazione = ricostruisciDatiPrenotazione(metadata);
+    
+    // Estrai email del cliente (se disponibile)
+    const emailCliente = session.customer_details?.email || 
+                        metadata.email_cliente || 
+                        process.env.EMAIL_PROPRIETARIO; // Fallback al tuo email
+    
+    if (!emailCliente) {
+      console.warn('⚠️ Email cliente non trovata, skip invio PDF');
+      return;
+    }
+    
+    // Determina l'URL base
+    const baseUrl = process.env.BASE_URL || 
+                   process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 
+                   'https://checkin-six-coral.vercel.app';
+    
+    console.log('🌐 Chiamata API PDF a:', `${baseUrl}/api/genera-pdf-email`);
+    
+    // Chiamata alla API di generazione PDF
+    const response = await fetch(`${baseUrl}/api/genera-pdf-email`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'CheckinWebhook/1.0'
+      },
+      body: JSON.stringify({
+        datiPrenotazione: datiPrenotazione,
+        emailDestinatario: emailDestinatario
+      }),
+      timeout: 30000 // 30 secondi timeout
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Errore API PDF (${response.status}): ${errorText}`);
+    }
+    
+    const result = await response.json();
+    console.log('✅ Risposta API PDF:', result.success ? 'SUCCESS' : result);
+    
+  } catch (error) {
+    console.error('❌ Errore generazione PDF/email:', error);
+    throw error; // Rilancia per logging, ma non blocca il webhook principale
+  }
+}
+
+// FUNZIONE: Ricostruisce i dati completi dal metadata Stripe
+function ricostruisciDatiPrenotazione(metadata) {
+  // Parsing altri ospiti se presenti
+  let altriOspiti = [];
+  if (metadata.altri_ospiti) {
+    try {
+      const ospitiCompatti = JSON.parse(metadata.altri_ospiti);
+      altriOspiti = ospitiCompatti.map(o => ({
+        numero: o.n,
+        cognome: o.c,
+        nome: o.no,
+        genere: o.g,
+        nascita: o.na,
+        eta: o.e,
+        cittadinanza: o.ci,
+        luogoNascita: o.ln,
+        comune: o.co || '',
+        provincia: o.p || ''
+      }));
+    } catch (e) {
+      console.warn('⚠️ Errore parsing altri ospiti:', e.message);
+    }
+  }
+  
+  // Ricostruisci documenti se presenti
+  let documenti = [];
+  if (metadata.documenti_base64) {
+    try {
+      documenti = JSON.parse(metadata.documenti_base64);
+      console.log(`📎 Trovati ${documenti.length} documenti`);
+    } catch (e) {
+      console.warn('⚠️ Errore parsing documenti:', e.message);
+    }
+  }
+  
+  // Ricostruisci array ospiti completo
+  const ospiti = [
+    // Responsabile
+    {
+      numero: 1,
+      cognome: metadata.resp_cognome || '',
+      nome: metadata.resp_nome || '',
+      genere: metadata.resp_genere || '',
+      nascita: metadata.resp_nascita || '',
+      eta: parseInt(metadata.resp_eta) || 0,
+      cittadinanza: metadata.resp_cittadinanza || '',
+      luogoNascita: metadata.resp_luogoNascita || '',
+      comune: metadata.resp_comune || '',
+      provincia: metadata.resp_provincia || '',
+      tipoDocumento: metadata.resp_tipoDocumento || '',
+      numeroDocumento: metadata.resp_numeroDocumento || '',
+      luogoRilascio: metadata.resp_luogoRilascio || '',
+      isResponsabile: true
+    },
+    // Altri ospiti
+    ...altriOspiti
+  ];
+  
+  return {
+    dataCheckin: metadata.dataCheckin || '',
+    appartamento: metadata.appartamento || '',
+    numeroOspiti: parseInt(metadata.numeroOspiti) || 0,
+    numeroNotti: parseInt(metadata.numeroNotti) || 0,
+    tipoGruppo: metadata.tipoGruppo || null,
+    totale: parseFloat(metadata.totale) || 0,
+    timestamp: metadata.timestamp || new Date().toISOString(),
+    ospiti: ospiti,
+    documenti: documenti
+  };
 }
 
 async function scriviDatiSuGoogleSheets(session) {
