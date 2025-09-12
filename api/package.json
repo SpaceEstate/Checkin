@@ -1,20 +1,41 @@
 {
-  "name": "checkin-form",
+  "name": "checkin-system",
   "version": "1.0.0",
-  "description": "Sistema di check-in con pagamento Stripe",
+  "description": "Sistema completo di check-in con pagamento Stripe, generazione PDF e integrazione Google Sheets",
+  "main": "index.js",
   "type": "module",
   "scripts": {
     "dev": "vercel dev",
-    "build": "echo 'Build completed'",
-    "start": "node server.js"
+    "build": "vercel build",
+    "deploy": "vercel --prod",
+    "start": "node server.js",
+    "test": "echo 'No tests specified'"
   },
   "dependencies": {
-    "stripe": "^14.0.0",
+    "stripe": "^14.11.0",
     "google-spreadsheet": "^5.0.2",
-    "google-auth-library": "^9.0.0"
-
+    "google-auth-library": "^9.4.1",
+    "puppeteer": "^21.6.1",
+    "nodemailer": "^6.9.8"
+  },
+  "devDependencies": {
+    "@vercel/node": "^3.0.12"
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "keywords": [
+    "checkin",
+    "stripe",
+    "pdf",
+    "google-sheets",
+    "vercel",
+    "nodejs"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/checkin-system.git"
   }
 }
