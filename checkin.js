@@ -66,6 +66,42 @@ const province = [
   "VI", "VT"
 ];
 
+// Converte file in base64 per l'invio
+async function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// Raccoglie tutti i documenti caricati
+async function raccogliDocumenti() {
+  const documenti = [];
+  
+  for (let i = 1; i <= numeroOspiti; i++) {
+    const fileInput = document.querySelector(`input[name="ospite${i}_documento_file"]`);
+    if (fileInput?.files?.[0]) {
+      try {
+        const file = fileInput.files[0];
+        const base64 = await fileToBase64(file);
+        
+        documenti.push({
+          ospiteNumero: i,
+          nomeFile: file.name,
+          tipo: file.type,
+          dimensione: file.size,
+          base64: base64
+        });
+      } catch (error) {
+        console.error(`Errore conversione documento ospite ${i}:`, error);
+      }
+    }
+  }
+  
+  return documenti;
+}
 // === FUNZIONI DI UTILITÀ ===
 function calcolaEta(dataNascita) {
   if (!dataNascita) return 0;
@@ -796,9 +832,14 @@ window.procediAlPagamento = async function() {
   }
   
   try {
-    // Salva dati e procedi al pagamento
-    const datiPrenotazione = raccogliDatiPrenotazione();
-    await creaLinkPagamento(datiPrenotazione);
+    // Raccogli TUTTI i dati inclusi i documenti
+    showNotification('Preparazione documenti in corso...', 'info');
+    const datiCompleti = await raccogliDatiPrenotazioneConDocumenti();
+    
+    // Procedi al pagamento
+    payButton.innerHTML = '⏳ Creazione pagamento...';
+    await creaLinkPagamento(datiCompleti);
+    
   } catch (error) {
     console.error('Errore nel pagamento:', error);
     
@@ -807,6 +848,7 @@ window.procediAlPagamento = async function() {
       payButton.disabled = false;
       payButton.innerHTML = `💳 Paga €${calcolaTotale().toFixed(2)} con Stripe`;
     }
+    showNotification('Errore nella preparazione: ' + error.message, 'error');
   }
 }
 
@@ -874,9 +916,11 @@ function raccogliDatiPrenotazione() {
     
     datiPrenotazione.ospiti.push(ospite);
   }
+   datiPrenotazione.documenti = await raccogliDocumenti();
 
   return datiPrenotazione;
 }
+
 
 async function creaLinkPagamento(datiPrenotazione) {
   console.log("Creazione pagamento per:", datiPrenotazione);
