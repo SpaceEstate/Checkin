@@ -7,7 +7,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  console.log('📄 Inizio generazione PDF e invio email');
+  console.log('Inizio generazione PDF e invio email');
 
   try {
     const { datiPrenotazione, emailDestinatario } = req.body;
@@ -22,14 +22,14 @@ export default async function handler(req, res) {
     const htmlContent = generaHTMLRiepilogo(datiPrenotazione);
     
     // 2. Crea PDF con Puppeteer
-    console.log('📄 Generazione PDF in corso...');
+    console.log('Generazione PDF in corso...');
     const pdfBuffer = await generaPDF(htmlContent);
     
     // 3. Invia email con PDF allegato
-    console.log('📧 Invio email in corso...');
+    console.log('Invio email in corso...');
     await inviaEmailConPDF(emailDestinatario, datiPrenotazione, pdfBuffer);
     
-    console.log('✅ PDF generato e email inviata con successo');
+    console.log('PDF generato e email inviata con successo');
     
     return res.status(200).json({ 
       success: true, 
@@ -37,7 +37,7 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
-    console.error('❌ Errore generazione PDF/email:', error);
+    console.error('Errore generazione PDF/email:', error);
     return res.status(500).json({ 
       error: 'Errore interno: ' + error.message 
     });
@@ -90,6 +90,10 @@ function generaHTMLRiepilogo(dati) {
     month: 'long',
     day: 'numeric'
   });
+
+  // Validazione sicura dei documenti
+  const documentiValidi = Array.isArray(dati.documenti) ? dati.documenti : [];
+  console.log(`Documenti trovati: ${documentiValidi.length}`);
 
   return `
     <!DOCTYPE html>
@@ -173,6 +177,7 @@ function generaHTMLRiepilogo(dati) {
           border-radius: 8px;
           padding: 20px;
           margin: 15px 0;
+          page-break-inside: avoid;
         }
         
         .ospite.responsabile {
@@ -225,6 +230,15 @@ function generaHTMLRiepilogo(dati) {
           display: block;
         }
         
+        .documento-info {
+          background: #f8f9fa;
+          padding: 10px;
+          border-radius: 4px;
+          margin: 10px 0;
+          font-size: 12px;
+          color: #6c757d;
+        }
+        
         .totale-section {
           background: #e8f5e8;
           border: 2px solid #28a745;
@@ -259,7 +273,11 @@ function generaHTMLRiepilogo(dati) {
         
         @media print {
           .documento-img {
-            max-height: 200px;
+            max-height: 250px;
+          }
+          
+          .page-break {
+            page-break-before: always;
           }
         }
       </style>
@@ -271,7 +289,7 @@ function generaHTMLRiepilogo(dati) {
       </div>
 
       <div class="section">
-        <h2>📍 Dettagli Soggiorno</h2>
+        <h2>Dettagli Soggiorno</h2>
         <div class="info-grid">
           <div class="info-item">
             <div class="info-label">Data Check-in</div>
@@ -279,15 +297,15 @@ function generaHTMLRiepilogo(dati) {
           </div>
           <div class="info-item">
             <div class="info-label">Appartamento</div>
-            <div class="info-value">${dati.appartamento}</div>
+            <div class="info-value">${dati.appartamento || 'Non specificato'}</div>
           </div>
           <div class="info-item">
             <div class="info-label">Numero Ospiti</div>
-            <div class="info-value">${dati.numeroOspiti}</div>
+            <div class="info-value">${dati.numeroOspiti || 0}</div>
           </div>
           <div class="info-item">
             <div class="info-label">Numero Notti</div>
-            <div class="info-value">${dati.numeroNotti}</div>
+            <div class="info-value">${dati.numeroNotti || 0}</div>
           </div>
           ${dati.tipoGruppo ? `
           <div class="info-item">
@@ -299,15 +317,18 @@ function generaHTMLRiepilogo(dati) {
       </div>
 
       <div class="section">
-        <h2>👥 Ospiti Registrati</h2>
-        ${dati.ospiti.map((ospite, index) => {
-          const documento = dati.documenti?.find(d => d.ospiteNumero === ospite.numero);
+        <h2>Ospiti Registrati</h2>
+        ${(dati.ospiti || []).map((ospite, index) => {
+          // Trova documento corrispondente con validazione sicura
+          const documento = documentiValidi.find(d => 
+            d && d.ospiteNumero && d.ospiteNumero === ospite.numero
+          );
           
           return `
             <div class="ospite ${ospite.isResponsabile ? 'responsabile' : ''}">
               <div class="ospite-header">
                 <div class="ospite-nome">
-                  ${ospite.cognome} ${ospite.nome}
+                  ${ospite.cognome || 'N/A'} ${ospite.nome || 'N/A'}
                 </div>
                 ${ospite.isResponsabile ? '<div class="ospite-badge">RESPONSABILE</div>' : ''}
               </div>
@@ -315,28 +336,28 @@ function generaHTMLRiepilogo(dati) {
               <div class="info-grid">
                 <div class="info-item">
                   <div class="info-label">Genere</div>
-                  <div class="info-value">${ospite.genere === 'M' ? 'Maschio' : 'Femmina'}</div>
+                  <div class="info-value">${ospite.genere === 'M' ? 'Maschio' : ospite.genere === 'F' ? 'Femmina' : 'Non specificato'}</div>
                 </div>
                 <div class="info-item">
                   <div class="info-label">Data di Nascita</div>
-                  <div class="info-value">${new Date(ospite.nascita).toLocaleDateString('it-IT')}</div>
+                  <div class="info-value">${ospite.nascita ? new Date(ospite.nascita).toLocaleDateString('it-IT') : 'Non specificata'}</div>
                 </div>
                 <div class="info-item">
                   <div class="info-label">Età</div>
-                  <div class="info-value">${ospite.eta} anni ${ospite.eta >= 4 ? '(soggetto a tassa)' : '(esente da tassa)'}</div>
+                  <div class="info-value">${ospite.eta || 0} anni ${(ospite.eta || 0) >= 4 ? '(soggetto a tassa)' : '(esente da tassa)'}</div>
                 </div>
                 <div class="info-item">
                   <div class="info-label">Cittadinanza</div>
-                  <div class="info-value">${ospite.cittadinanza}</div>
+                  <div class="info-value">${ospite.cittadinanza || 'Non specificata'}</div>
                 </div>
                 <div class="info-item">
                   <div class="info-label">Luogo di Nascita</div>
-                  <div class="info-value">${ospite.luogoNascita}</div>
+                  <div class="info-value">${ospite.luogoNascita || 'Non specificato'}</div>
                 </div>
                 ${ospite.comune ? `
                 <div class="info-item">
                   <div class="info-label">Comune</div>
-                  <div class="info-value">${ospite.comune} (${ospite.provincia})</div>
+                  <div class="info-value">${ospite.comune} (${ospite.provincia || 'N/A'})</div>
                 </div>
                 ` : ''}
               </div>
@@ -349,33 +370,39 @@ function generaHTMLRiepilogo(dati) {
                 </div>
                 <div class="info-item">
                   <div class="info-label">Numero Documento</div>
-                  <div class="info-value">${ospite.numeroDocumento}</div>
+                  <div class="info-value">${ospite.numeroDocumento || 'N/A'}</div>
                 </div>
                 <div class="info-item">
                   <div class="info-label">Luogo Rilascio</div>
-                  <div class="info-value">${ospite.luogoRilascio}</div>
+                  <div class="info-value">${ospite.luogoRilascio || 'N/A'}</div>
                 </div>
               </div>
               ` : ''}
               
               ${documento ? `
               <div class="documento-section">
-                <div class="documento-title">📄 Documento di Identità</div>
-                <p><strong>File:</strong> ${documento.nomeFile}</p>
+                <div class="documento-title">Documento di Identità</div>
+                <div class="documento-info">
+                  <strong>File:</strong> ${documento.nomeFile || 'Documento caricato'}<br>
+                  <strong>Tipo:</strong> ${documento.tipo || 'N/A'}<br>
+                  <strong>Dimensione:</strong> ${documento.dimensione ? Math.round(documento.dimensione / 1024) + ' KB' : 'N/A'}
+                </div>
+                ${documento.base64 ? `
                 <img src="${documento.base64}" alt="Documento ${ospite.cognome} ${ospite.nome}" class="documento-img" />
+                ` : '<p style="color: #dc3545;">Documento non disponibile</p>'}
               </div>
-              ` : ''}
+              ` : '<div class="documento-section"><p style="color: #ffc107;">Nessun documento caricato</p></div>'}
             </div>
           `;
         }).join('')}
       </div>
 
       <div class="totale-section">
-        <h2>💰 Totale Tassa di Soggiorno</h2>
-        <div class="totale-amount">€${dati.totale.toFixed(2)}</div>
+        <h2>Totale Tassa di Soggiorno</h2>
+        <div class="totale-amount">€${(dati.totale || 0).toFixed(2)}</div>
         <div class="note">
           Tassa di €1,50 per notte per ospiti dai 4 anni in su<br>
-          Calcolata su ${dati.ospiti.filter(o => o.eta >= 4).length} ospiti soggetti × ${dati.numeroNotti} notti
+          Calcolata su ${(dati.ospiti || []).filter(o => (o.eta || 0) >= 4).length} ospiti soggetti × ${dati.numeroNotti || 0} notti
         </div>
       </div>
 
@@ -390,35 +417,32 @@ function generaHTMLRiepilogo(dati) {
 }
 
 async function inviaEmailConPDF(emailDestinatario, dati, pdfBuffer) {
-  // Configurazione email (usa le tue credenziali)
-  const transporter = nodemailer.createTransporter({
-    service: 'gmail', // o altro provider
+  // CORREZIONE: createTransport invece di createTransporter
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
     auth: {
-      user: process.env.EMAIL_USER, // tuo.email@gmail.com
-      pass: process.env.EMAIL_PASSWORD // password app specifica
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASSWORD
     }
   });
 
-  const oggetto = `Riepilogo Check-in - ${dati.appartamento} - ${new Date(dati.dataCheckin).toLocaleDateString('it-IT')}`;
+  const oggetto = `Riepilogo Check-in - ${dati.appartamento || 'Appartamento'} - ${new Date(dati.dataCheckin).toLocaleDateString('it-IT')}`;
   
   const corpoEmail = `
-    Gentile cliente,
-
-    In allegato trova il riepilogo completo del suo check-in.
+    Nuovo check-in ricevuto!
 
     DETTAGLI SOGGIORNO:
     - Data check-in: ${new Date(dati.dataCheckin).toLocaleDateString('it-IT')}
-    - Appartamento: ${dati.appartamento}
-    - Ospiti: ${dati.numeroOspiti}
-    - Notti: ${dati.numeroNotti}
-    - Totale tassa soggiorno: €${dati.totale.toFixed(2)}
+    - Appartamento: ${dati.appartamento || 'Non specificato'}
+    - Ospiti: ${dati.numeroOspiti || 0}
+    - Notti: ${dati.numeroNotti || 0}
+    - Totale tassa soggiorno: €${(dati.totale || 0).toFixed(2)}
 
-    Il PDF allegato contiene tutti i dati inseriti e i documenti caricati.
+    Il PDF allegato contiene tutti i dati inseriti e i documenti caricati dagli ospiti.
 
-    Grazie per aver scelto la nostra struttura!
+    Responsabile: ${dati.ospiti?.[0]?.cognome || 'N/A'} ${dati.ospiti?.[0]?.nome || 'N/A'}
 
-    Cordiali saluti,
-    Staff Check-in
+    Sistema Check-in Automatico
   `;
 
   const mailOptions = {
@@ -428,7 +452,7 @@ async function inviaEmailConPDF(emailDestinatario, dati, pdfBuffer) {
     text: corpoEmail,
     attachments: [
       {
-        filename: `riepilogo-checkin-${Date.now()}.pdf`,
+        filename: `checkin-${Date.now()}.pdf`,
         content: pdfBuffer,
         contentType: 'application/pdf'
       }
