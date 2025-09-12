@@ -83,8 +83,24 @@
             <div id="summary-content"></div>
           </div>
 
-          <!-- Qui i bottoni verranno generati dinamicamente da aggiornaBottonePagamento() -->
-          <div class="button-group"></div>
+          <!-- Sezione Privacy e Termini -->
+          <div class="privacy-section">
+            <div class="privacy-checkbox">
+              <input type="checkbox" id="privacy-consent" name="privacy-consent" class="privacy-input" required>
+              <label for="privacy-consent" class="privacy-label">
+                <span class="checkbox-custom"></span>
+                <span class="privacy-text">
+                  Dichiaro di aver letto e compreso l'informativa privacy ai sensi del Regolamento UE 2016/679 e autorizzo il trattamento dei miei dati personali per le finalità legate alla registrazione presso la struttura e alla trasmissione alla Questura, come previsto dalla normativa vigente (art. 109 TULPS).
+                </span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Bottoni statici -->
+          <div class="button-group">
+            <button type="button" class="btn btn-secondary">Indietro</button>
+            <button type="submit" class="btn btn-success">Procedi al Pagamento</button>
+          </div>
         </div>
 
         <!-- Step successo -->
