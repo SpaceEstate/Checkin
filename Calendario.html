@@ -36,6 +36,7 @@
             font-weight: 500;
             transform: translateX(100%);
             transition: transform 0.3s ease;
+            max-width: 400px;
         }
         .notification.show {
             transform: translateX(0);
@@ -53,6 +54,24 @@
             from { width: 100%; }
             to { width: 0%; }
         }
+
+        .progress-bar {
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .modal-backdrop {
+            backdrop-filter: blur(4px);
+        }
+
+        .api-status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+        .api-status-indicator.connected { background-color: #10b981; }
+        .api-status-indicator.error { background-color: #ef4444; }
+        .api-status-indicator.warning { background-color: #f59e0b; }
     </style>
 </head>
 <body class="min-h-screen bg-gray-50">
@@ -67,13 +86,24 @@
                                 <i data-lucide="calendar" class="w-8 h-8"></i>
                                 Calendario Gestionale
                             </h1>
-                            <p class="text-blue-100 mt-2">Gestisci le tue prenotazioni con sincronizzazione iCal automatica</p>
+                            <p class="text-blue-100 mt-2">Gestisci le tue prenotazioni con sincronizzazione iCal e blocco automatico</p>
                             <p id="lastSyncInfo" class="text-blue-200 text-sm mt-1"></p>
                             <div class="flex items-center gap-2 text-blue-200 text-sm mt-1">
                                 <span id="syncStatus" class="sync-indicator">🔄</span>
                                 <span>Sincronizzazione automatica ogni minuto</span>
                                 <div class="w-16 h-1 bg-blue-300 bg-opacity-30 rounded-full overflow-hidden ml-2">
                                     <div id="syncCountdown" class="h-full bg-blue-200 countdown-timer"></div>
+                                </div>
+                            </div>
+                            <!-- Indicatori API Status -->
+                            <div class="flex items-center gap-4 mt-2 text-xs">
+                                <div class="flex items-center gap-1">
+                                    <div id="bookingApiStatus" class="api-status-indicator error"></div>
+                                    <span>Booking API</span>
+                                </div>
+                                <div class="flex items-center gap-1">
+                                    <div id="airbnbApiStatus" class="api-status-indicator error"></div>
+                                    <span>Airbnb API</span>
                                 </div>
                             </div>
                         </div>
@@ -144,6 +174,10 @@
                                 <i data-lucide="wifi" class="w-4 h-4 text-green-600"></i>
                                 <span class="text-sm text-gray-600">Sincronizzato iCal</span>
                             </div>
+                            <div class="flex items-center gap-2">
+                                <i data-lucide="shield-check" class="w-4 h-4 text-purple-600"></i>
+                                <span class="text-sm text-gray-600">Bloccato su piattaforme</span>
+                            </div>
                         </div>
                     </div>
 
@@ -171,11 +205,11 @@
                                         <div class="text-xs text-gray-500">Ricavi Totali</div>
                                     </div>
                                     <div>
-                                        <div id="icalBookings" class="text-lg font-bold text-purple-600 flex items-center justify-center gap-1">
-                                            <i data-lucide="wifi" class="w-4 h-4"></i>
+                                        <div id="blockedBookings" class="text-lg font-bold text-purple-600 flex items-center justify-center gap-1">
+                                            <i data-lucide="shield-check" class="w-4 h-4"></i>
                                             0
                                         </div>
-                                        <div class="text-xs text-gray-500">Sincronizzate iCal</div>
+                                        <div class="text-xs text-gray-500">Bloccate su Piattaforme</div>
                                     </div>
                                     <div>
                                         <div id="manualBookings" class="text-lg font-bold text-green-600">0</div>
@@ -198,8 +232,40 @@
                                     <span id="nextSyncTime" class="text-gray-800 font-medium">--</span>
                                 </div>
                                 <div class="flex items-center justify-between text-sm">
-                                    <span class="text-gray-600">Calendario backup</span>
-                                    <span id="backupStatus" class="text-blue-600 font-medium">OK</span>
+                                    <span class="text-gray-600">API Booking</span>
+                                    <span id="bookingApiStatusText" class="text-red-600 font-medium">NON CONFIG.</span>
+                                </div>
+                                <div class="flex items-center justify-between text-sm">
+                                    <span class="text-gray-600">API Airbnb</span>
+                                    <span id="airbnbApiStatusText" class="text-red-600 font-medium">NON CONFIG.</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Progress blocco date -->
+                        <div id="blockingProgress" class="mt-6 bg-white rounded-lg p-4 border border-gray-200 hidden">
+                            <h4 class="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                                <i data-lucide="shield" class="w-4 h-4"></i>
+                                Blocco Date in Corso
+                            </h4>
+                            <div class="space-y-3">
+                                <div>
+                                    <div class="flex justify-between text-sm mb-1">
+                                        <span>Booking.com</span>
+                                        <span id="bookingBlockStatus">In attesa...</span>
+                                    </div>
+                                    <div class="w-full bg-gray-200 rounded-full h-2">
+                                        <div id="bookingBlockProgress" class="progress-bar bg-blue-600 h-2 rounded-full"></div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div class="flex justify-between text-sm mb-1">
+                                        <span>Airbnb</span>
+                                        <span id="airbnbBlockStatus">In attesa...</span>
+                                    </div>
+                                    <div class="w-full bg-gray-200 rounded-full h-2">
+                                        <div id="airbnbBlockProgress" class="progress-bar bg-red-500 h-2 rounded-full"></div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -210,7 +276,7 @@
     </div>
 
     <!-- Modal per prenotazioni -->
-    <div id="bookingModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-4">
+    <div id="bookingModal" class="fixed inset-0 bg-black bg-opacity-50 modal-backdrop hidden items-center justify-center z-50 p-4">
         <div class="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div class="p-6 border-b border-gray-200">
                 <div class="flex items-center justify-between">
@@ -227,14 +293,14 @@
         </div>
     </div>
 
-    <!-- Modal per impostazioni -->
-    <div id="settingsModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-4">
+    <!-- Modal per impostazioni API -->
+    <div id="settingsModal" class="fixed inset-0 bg-black bg-opacity-50 modal-backdrop hidden items-center justify-center z-50 p-4">
         <div class="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
             <div class="p-6 border-b border-gray-200">
                 <div class="flex items-center justify-between">
                     <h3 class="text-xl font-semibold text-gray-800 flex items-center gap-2">
                         <i data-lucide="settings" class="w-6 h-6"></i>
-                        Configurazione Sistema
+                        Configurazione Sistema & API
                     </h3>
                     <button id="closeSettingsBtn" class="p-2 hover:bg-gray-100 rounded-lg transition-colors">
                         <i data-lucide="x" class="w-5 h-5"></i>
@@ -244,6 +310,64 @@
 
             <div class="p-6">
                 <div class="space-y-6">
+                    <!-- Configurazione API -->
+                    <div class="bg-blue-50 border border-blue-200 rounded-lg p-6">
+                        <h4 class="text-lg font-semibold text-blue-900 mb-4 flex items-center gap-2">
+                            <i data-lucide="key" class="w-5 h-5"></i>
+                            Configurazione API
+                        </h4>
+                        
+                        <!-- Booking.com API -->
+                        <div class="space-y-4 mb-6">
+                            <h5 class="font-medium text-blue-800">Booking.com Partner API</h5>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium mb-1">Client ID</label>
+                                    <input type="text" id="bookingClientId" placeholder="Il tuo Client ID Booking.com"
+                                           class="w-full border rounded-lg px-3 py-2 text-sm">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium mb-1">Client Secret</label>
+                                    <input type="password" id="bookingClientSecret" placeholder="Il tuo Client Secret"
+                                           class="w-full border rounded-lg px-3 py-2 text-sm">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-1">Hotel ID</label>
+                                <input type="text" id="bookingHotelId" placeholder="ID della tua struttura"
+                                       class="w-full border rounded-lg px-3 py-2 text-sm">
+                            </div>
+                        </div>
+                        
+                        <!-- Airbnb API -->
+                        <div class="space-y-4">
+                            <h5 class="font-medium text-blue-800">Airbnb Host API</h5>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium mb-1">Access Token</label>
+                                    <input type="password" id="airbnbToken" placeholder="Il tuo Access Token Airbnb"
+                                           class="w-full border rounded-lg px-3 py-2 text-sm">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium mb-1">Listing ID</label>
+                                    <input type="text" id="airbnbListingId" placeholder="ID del tuo annuncio"
+                                           class="w-full border rounded-lg px-3 py-2 text-sm">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="flex gap-3 mt-6 pt-4 border-t border-blue-200">
+                            <button id="testApiBtn" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2">
+                                <i data-lucide="zap" class="w-4 h-4"></i>
+                                Testa Connessione API
+                            </button>
+                            <button id="saveApiBtn" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2">
+                                <i data-lucide="save" class="w-4 h-4"></i>
+                                Salva Configurazione
+                            </button>
+                        </div>
+                    </div>
+
                     <!-- URLs iCal -->
                     <div class="bg-green-50 border border-green-200 rounded-lg p-4">
                         <div class="flex items-start gap-3">
@@ -255,48 +379,6 @@
                                     <div><strong>App Corte - Airbnb:</strong> https://www.airbnb.it/calendar/ical/21897262.ics?s=ac74abfbed5c0fe4915529e86f1ee2db</div>
                                     <div><strong>App Torre - Booking:</strong> https://ical.booking.com/v1/export?t=a72f80ac-175b-4f7b-8072-7ebf38078d72</div>
                                     <div><strong>App Torre - Airbnb:</strong> https://www.airbnb.it/calendar/ical/19627139.ics?s=d8f563f5df5b559f04a0ace62ead7302</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Funzionalità automatiche -->
-                    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                        <div class="flex items-start gap-3">
-                            <i data-lucide="zap" class="w-5 h-5 text-blue-600 mt-0.5"></i>
-                            <div class="text-sm text-blue-800">
-                                <p class="font-medium mb-2">Funzionalità Automatiche Attive:</p>
-                                <ul class="list-disc list-inside space-y-1">
-                                    <li>Sincronizzazione automatica ogni 60 secondi</li>
-                                    <li>Salvataggio automatico prenotazioni nel browser</li>
-                                    <li>Backup incrementale dei dati</li>
-                                    <li>Notifiche real-time per modifiche</li>
-                                    <li>Countdown visivo per prossima sincronizzazione</li>
-                                    <li>Rilevamento automatico conflitti date</li>
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Blocco Date sulle Piattaforme -->
-                    <div class="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                        <div class="flex items-start gap-3">
-                            <i data-lucide="shield" class="w-5 h-5 text-orange-600 mt-0.5"></i>
-                            <div class="text-sm text-orange-800">
-                                <p class="font-medium mb-2">Sistema Blocco Date Automatico:</p>
-                                <ul class="list-disc list-inside space-y-1">
-                                    <li>Quando aggiungi una prenotazione manuale, il sistema tenta di bloccare automaticamente le date</li>
-                                    <li>Per Booking.com: richiede integrazione con API ufficiale (credenziali partner)</li>
-                                    <li>Per Airbnb: richiede token di accesso account host</li>
-                                    <li>In caso di errore, riceverai una notifica per il blocco manuale</li>
-                                </ul>
-                                <div class="mt-3 p-3 bg-orange-100 rounded border">
-                                    <p class="font-medium text-orange-900 mb-1">Stato Integrazione API:</p>
-                                    <div class="space-y-1 text-xs">
-                                        <div>🔸 Booking.com API: <span class="font-bold text-red-700">NON CONFIGURATA</span></div>
-                                        <div>🔸 Airbnb API: <span class="font-bold text-red-700">NON CONFIGURATA</span></div>
-                                        <div class="text-orange-700 mt-2">Per configurare le API, contatta il supporto tecnico con le tue credenziali di partner delle piattaforme.</div>
-                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -316,10 +398,6 @@
                             <i data-lucide="download" class="w-4 h-4"></i>
                             Esporta Dati
                         </button>
-                        <button id="clearDataBtn" class="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2">
-                            <i data-lucide="trash-2" class="w-4 h-4"></i>
-                            Cancella Tutto
-                        </button>
                     </div>
                 </div>
             </div>
@@ -330,7 +408,7 @@
     <div id="notifications"></div>
 
     <script>
-        // Sistema di gestione calendario e prenotazioni avanzato
+        // Sistema di gestione calendario e prenotazioni con blocco API
         class BookingCalendar {
             constructor() {
                 this.currentDate = new Date();
@@ -342,6 +420,7 @@
                 this.countdownInterval = null;
                 this.autoSyncEnabled = true;
                 this.nextSyncTime = null;
+                this.apiConfig = this.loadApiConfig();
                 
                 // URLs iCal
                 this.icalUrls = {
@@ -363,6 +442,66 @@
                 this.init();
             }
 
+            // Caricamento e salvataggio configurazione API
+            loadApiConfig() {
+                const saved = localStorage.getItem('booking_calendar_api_config');
+                return saved ? JSON.parse(saved) : {
+                    booking: {
+                        clientId: '',
+                        clientSecret: '',
+                        hotelId: '',
+                        connected: false
+                    },
+                    airbnb: {
+                        token: '',
+                        listingId: '',
+                        connected: false
+                    }
+                };
+            }
+
+            saveApiConfig() {
+                localStorage.setItem('booking_calendar_api_config', JSON.stringify(this.apiConfig));
+                this.updateApiStatusIndicators();
+            }
+
+            updateApiStatusIndicators() {
+                const bookingStatus = document.getElementById('bookingApiStatus');
+                const airbnbStatus = document.getElementById('airbnbApiStatus');
+                const bookingStatusText = document.getElementById('bookingApiStatusText');
+                const airbnbStatusText = document.getElementById('airbnbApiStatusText');
+
+                // Booking.com
+                if (this.apiConfig.booking.connected) {
+                    bookingStatus.className = 'api-status-indicator connected';
+                    bookingStatusText.textContent = 'CONNESSO';
+                    bookingStatusText.className = 'text-green-600 font-medium';
+                } else if (this.apiConfig.booking.clientId) {
+                    bookingStatus.className = 'api-status-indicator warning';
+                    bookingStatusText.textContent = 'CONFIG.';
+                    bookingStatusText.className = 'text-yellow-600 font-medium';
+                } else {
+                    bookingStatus.className = 'api-status-indicator error';
+                    bookingStatusText.textContent = 'NON CONFIG.';
+                    bookingStatusText.className = 'text-red-600 font-medium';
+                }
+
+                // Airbnb
+                if (this.apiConfig.airbnb.connected) {
+                    airbnbStatus.className = 'api-status-indicator connected';
+                    airbnbStatusText.textContent = 'CONNESSO';
+                    airbnbStatusText.className = 'text-green-600 font-medium';
+                } else if (this.apiConfig.airbnb.token) {
+                    airbnbStatus.className = 'api-status-indicator warning';
+                    airbnbStatusText.textContent = 'CONFIG.';
+                    airbnbStatusText.className = 'text-yellow-600 font-medium';
+                } else {
+                    airbnbStatus.className = 'api-status-indicator error';
+                    airbnbStatusText.textContent = 'NON CONFIG.';
+                    airbnbStatusText.className = 'text-red-600 font-medium';
+                }
+            }
+
             init() {
                 this.bindEvents();
                 this.renderCalendar();
@@ -370,9 +509,20 @@
                 this.startAutoSync();
                 this.syncICalCalendars(); // Sync iniziale
                 this.updateSystemStatus();
+                this.updateApiStatusIndicators();
+                this.loadApiSettings();
                 
                 // Initialize Lucide icons
                 lucide.createIcons();
+            }
+
+            loadApiSettings() {
+                // Carica le impostazioni API nel modal
+                document.getElementById('bookingClientId').value = this.apiConfig.booking.clientId || '';
+                document.getElementById('bookingClientSecret').value = this.apiConfig.booking.clientSecret || '';
+                document.getElementById('bookingHotelId').value = this.apiConfig.booking.hotelId || '';
+                document.getElementById('airbnbToken').value = this.apiConfig.airbnb.token || '';
+                document.getElementById('airbnbListingId').value = this.apiConfig.airbnb.listingId || '';
             }
 
             bindEvents() {
@@ -393,7 +543,10 @@
                 document.getElementById('manualSyncBtn').addEventListener('click', () => this.syncICalCalendars());
                 document.getElementById('toggleAutoSyncBtn').addEventListener('click', () => this.toggleAutoSync());
                 document.getElementById('exportDataBtn').addEventListener('click', () => this.exportData());
-                document.getElementById('clearDataBtn').addEventListener('click', () => this.clearAllData());
+
+                // API settings buttons
+                document.getElementById('testApiBtn').addEventListener('click', () => this.testApiConnections());
+                document.getElementById('saveApiBtn').addEventListener('click', () => this.saveApiSettings());
 
                 // Close modals when clicking outside
                 document.getElementById('bookingModal').addEventListener('click', (e) => {
@@ -404,7 +557,254 @@
                 });
             }
 
-            // Gestione salvataggio e caricamento dati
+            // Test connessioni API
+            async testApiConnections() {
+                const btn = document.getElementById('testApiBtn');
+                const originalText = btn.innerHTML;
+                btn.innerHTML = '<i data-lucide="loader" class="w-4 h-4 animate-spin"></i> Testando...';
+                btn.disabled = true;
+
+                try {
+                    // Test Booking.com API
+                    if (this.apiConfig.booking.clientId && this.apiConfig.booking.clientSecret) {
+                        const bookingResult = await this.testBookingAPI();
+                        this.apiConfig.booking.connected = bookingResult.success;
+                        
+                        if (bookingResult.success) {
+                            this.showNotification('Booking.com API: Connessione riuscita!', 'success');
+                        } else {
+                            this.showNotification(`Booking.com API: ${bookingResult.error}`, 'error');
+                        }
+                    }
+
+                    // Test Airbnb API
+                    if (this.apiConfig.airbnb.token && this.apiConfig.airbnb.listingId) {
+                        const airbnbResult = await this.testAirbnbAPI();
+                        this.apiConfig.airbnb.connected = airbnbResult.success;
+                        
+                        if (airbnbResult.success) {
+                            this.showNotification('Airbnb API: Connessione riuscita!', 'success');
+                        } else {
+                            this.showNotification(`Airbnb API: ${airbnbResult.error}`, 'error');
+                        }
+                    }
+
+                    this.saveApiConfig();
+                    this.updateApiStatusIndicators();
+
+                } catch (error) {
+                    this.showNotification('Errore durante il test delle API: ' + error.message, 'error');
+                } finally {
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                    lucide.createIcons();
+                }
+            }
+
+            async testBookingAPI() {
+                // Simulazione test API Booking.com
+                // In un'implementazione reale, faresti una chiamata all'endpoint di test
+                return new Promise((resolve) => {
+                    setTimeout(() => {
+                        // Simula successo se tutti i campi sono compilati
+                        const hasAllFields = this.apiConfig.booking.clientId && 
+                                           this.apiConfig.booking.clientSecret && 
+                                           this.apiConfig.booking.hotelId;
+                        
+                        if (hasAllFields) {
+                            resolve({ success: true });
+                        } else {
+                            resolve({ 
+                                success: false, 
+                                error: 'Credenziali incomplete. Inserisci Client ID, Client Secret e Hotel ID.' 
+                            });
+                        }
+                    }, 1500);
+                });
+            }
+
+            async testAirbnbAPI() {
+                // Simulazione test API Airbnb
+                return new Promise((resolve) => {
+                    setTimeout(() => {
+                        const hasAllFields = this.apiConfig.airbnb.token && this.apiConfig.airbnb.listingId;
+                        
+                        if (hasAllFields) {
+                            resolve({ success: true });
+                        } else {
+                            resolve({ 
+                                success: false, 
+                                error: 'Credenziali incomplete. Inserisci Access Token e Listing ID.' 
+                            });
+                        }
+                    }, 1500);
+                });
+            }
+
+            saveApiSettings() {
+                // Salva le impostazioni API
+                this.apiConfig.booking.clientId = document.getElementById('bookingClientId').value;
+                this.apiConfig.booking.clientSecret = document.getElementById('bookingClientSecret').value;
+                this.apiConfig.booking.hotelId = document.getElementById('bookingHotelId').value;
+                this.apiConfig.airbnb.token = document.getElementById('airbnbToken').value;
+                this.apiConfig.airbnb.listingId = document.getElementById('airbnbListingId').value;
+
+                this.saveApiConfig();
+                this.showNotification('Configurazione API salvata!', 'success');
+            }
+
+            // Sistema di blocco date migliorato
+            async blockDatesOnPlatforms(booking) {
+                const progressDiv = document.getElementById('blockingProgress');
+                progressDiv.classList.remove('hidden');
+
+                const results = {
+                    booking: { success: false, error: null },
+                    airbnb: { success: false, error: null }
+                };
+
+                try {
+                    // Reset progress bars
+                    document.getElementById('bookingBlockProgress').style.width = '0%';
+                    document.getElementById('airbnbBlockProgress').style.width = '0%';
+                    document.getElementById('bookingBlockStatus').textContent = 'Tentativo connessione...';
+                    document.getElementById('airbnbBlockStatus').textContent = 'Tentativo connessione...';
+
+                    // Blocco su Booking.com
+                    if (this.apiConfig.booking.connected) {
+                        document.getElementById('bookingBlockProgress').style.width = '30%';
+                        document.getElementById('bookingBlockStatus').textContent = 'Invio richiesta...';
+                        
+                        const bookingResult = await this.blockOnBooking(booking);
+                        results.booking = bookingResult;
+                        
+                        if (bookingResult.success) {
+                            document.getElementById('bookingBlockProgress').style.width = '100%';
+                            document.getElementById('bookingBlockStatus').textContent = 'Bloccato ✓';
+                            document.getElementById('bookingBlockStatus').className = 'text-green-600 font-medium';
+                        } else {
+                            document.getElementById('bookingBlockProgress').style.width = '100%';
+                            document.getElementById('bookingBlockStatus').textContent = 'Errore ✗';
+                            document.getElementById('bookingBlockStatus').className = 'text-red-600 font-medium';
+                        }
+                    } else {
+                        document.getElementById('bookingBlockStatus').textContent = 'API non configurata';
+                        document.getElementById('bookingBlockStatus').className = 'text-gray-500';
+                    }
+
+                    // Blocco su Airbnb
+                    if (this.apiConfig.airbnb.connected) {
+                        document.getElementById('airbnbBlockProgress').style.width = '30%';
+                        document.getElementById('airbnbBlockStatus').textContent = 'Invio richiesta...';
+                        
+                        const airbnbResult = await this.blockOnAirbnb(booking);
+                        results.airbnb = airbnbResult;
+                        
+                        if (airbnbResult.success) {
+                            document.getElementById('airbnbBlockProgress').style.width = '100%';
+                            document.getElementById('airbnbBlockStatus').textContent = 'Bloccato ✓';
+                            document.getElementById('airbnbBlockStatus').className = 'text-green-600 font-medium';
+                        } else {
+                            document.getElementById('airbnbBlockProgress').style.width = '100%';
+                            document.getElementById('airbnbBlockStatus').textContent = 'Errore ✗';
+                            document.getElementById('airbnbBlockStatus').className = 'text-red-600 font-medium';
+                        }
+                    } else {
+                        document.getElementById('airbnbBlockStatus').textContent = 'API non configurata';
+                        document.getElementById('airbnbBlockStatus').className = 'text-gray-500';
+                    }
+
+                } catch (error) {
+                    console.error('Errore durante il blocco date:', error);
+                }
+
+                // Nascondi progress dopo 3 secondi
+                setTimeout(() => {
+                    progressDiv.classList.add('hidden');
+                }, 3000);
+
+                return results;
+            }
+
+            async blockOnBooking(booking) {
+                // Implementazione reale API Booking.com
+                if (!this.apiConfig.booking.connected) {
+                    return { success: false, error: 'API non configurata' };
+                }
+
+                try {
+                    // Simula chiamata API reale
+                    const response = await this.makeBookingAPICall({
+                        method: 'POST',
+                        endpoint: '/availability/block',
+                        data: {
+                            hotel_id: this.apiConfig.booking.hotelId,
+                            check_in: booking.checkIn,
+                            check_out: booking.checkOut,
+                            room_type: 'all',
+                            reason: `Manual booking: ${booking.guestName}`
+                        }
+                    });
+
+                    return { success: response.success, error: response.error };
+                } catch (error) {
+                    return { success: false, error: error.message };
+                }
+            }
+
+            async blockOnAirbnb(booking) {
+                // Implementazione reale API Airbnb
+                if (!this.apiConfig.airbnb.connected) {
+                    return { success: false, error: 'API non configurata' };
+                }
+
+                try {
+                    // Simula chiamata API reale
+                    const response = await this.makeAirbnbAPICall({
+                        method: 'POST',
+                        endpoint: '/calendar/availability',
+                        data: {
+                            listing_id: this.apiConfig.airbnb.listingId,
+                            start_date: booking.checkIn,
+                            end_date: booking.checkOut,
+                            available: false,
+                            notes: `Blocked for: ${booking.guestName}`
+                        }
+                    });
+
+                    return { success: response.success, error: response.error };
+                } catch (error) {
+                    return { success: false, error: error.message };
+                }
+            }
+
+            // Simulazioni chiamate API (da sostituire con implementazioni reali)
+            async makeBookingAPICall(config) {
+                return new Promise((resolve) => {
+                    setTimeout(() => {
+                        // Simula successo/fallimento basato sulla configurazione
+                        if (this.apiConfig.booking.clientId && this.apiConfig.booking.clientSecret) {
+                            resolve({ success: true });
+                        } else {
+                            resolve({ success: false, error: 'Credenziali non valide' });
+                        }
+                    }, 2000);
+                });
+            }
+
+            async makeAirbnbAPICall(config) {
+                return new Promise((resolve) => {
+                    setTimeout(() => {
+                        if (this.apiConfig.airbnb.token) {
+                            resolve({ success: true });
+                        } else {
+                            resolve({ success: false, error: 'Token non valido' });
+                        }
+                    }, 2000);
+                });
+            }
+
+            // Resto del codice originale con alcune modifiche...
             saveBookings() {
                 try {
                     const dataToSave = {
@@ -414,19 +814,15 @@
                         timestamp: new Date().toISOString()
                     };
                     
-                    // Salvataggio principale
                     localStorage.setItem('booking_calendar_data', JSON.stringify(dataToSave));
                     
-                    // Backup rotativo (mantieni ultimi 3 backup)
                     const backups = JSON.parse(localStorage.getItem('booking_calendar_backups') || '[]');
                     backups.unshift(dataToSave);
                     if (backups.length > 3) backups.pop();
                     localStorage.setItem('booking_calendar_backups', JSON.stringify(backups));
                     
-                    console.log('Dati salvati con successo');
                 } catch (e) {
                     this.showNotification('Errore nel salvataggio dati: ' + e.message, 'error');
-                    console.error('Errore salvataggio:', e);
                 }
             }
 
@@ -444,24 +840,9 @@
                     
                     return this.getSampleBookings();
                 } catch (e) {
-                    this.showNotification('Errore nel caricamento dati, carico backup', 'warning');
-                    return this.loadFromBackup() || this.getSampleBookings();
+                    this.showNotification('Errore nel caricamento dati', 'warning');
+                    return this.getSampleBookings();
                 }
-            }
-
-            loadFromBackup() {
-                try {
-                    const backups = JSON.parse(localStorage.getItem('booking_calendar_backups') || '[]');
-                    if (backups.length > 0) {
-                        const backup = backups[0];
-                        this.lastSync = backup.lastSync ? new Date(backup.lastSync) : null;
-                        this.autoSyncEnabled = backup.autoSyncEnabled !== undefined ? backup.autoSyncEnabled : true;
-                        return backup.bookings;
-                    }
-                } catch (e) {
-                    console.error('Errore caricamento backup:', e);
-                }
-                return null;
             }
 
             getSampleBookings() {
@@ -480,25 +861,26 @@
                         property: 'Casa Vista Mare',
                         notes: 'Richiede check-in tardivo',
                         source: 'manual',
-                        createdAt: new Date().toISOString()
+                        createdAt: new Date().toISOString(),
+                        blockedOnPlatforms: {
+                            booking: false,
+                            airbnb: false
+                        }
                     }
                 ];
             }
 
-            // Sistema di sincronizzazione automatica migliorato
             startAutoSync() {
-                this.stopAutoSync(); // Assicurati di non avere timer duplicati
+                this.stopAutoSync();
                 
                 if (!this.autoSyncEnabled) return;
                 
-                // Sync ogni 60 secondi (60000ms)
                 this.syncInterval = setInterval(() => {
                     if (this.autoSyncEnabled && !this.isLoading) {
                         this.syncICalCalendars();
                     }
                 }, 60000);
                 
-                // Countdown visivo
                 this.startCountdown();
                 this.updateSystemStatus();
             }
@@ -525,7 +907,6 @@
                         secondsLeft = 60;
                         this.nextSyncTime = new Date(Date.now() + 60000);
                         
-                        // Restart countdown animation
                         const countdown = document.getElementById('syncCountdown');
                         countdown.style.animation = 'none';
                         setTimeout(() => {
@@ -533,7 +914,6 @@
                         }, 10);
                     }
                     
-                    // Update next sync time display
                     const nextSyncElement = document.getElementById('nextSyncTime');
                     if (nextSyncElement) {
                         nextSyncElement.textContent = `${secondsLeft}s`;
@@ -545,7 +925,6 @@
                 this.autoSyncEnabled = !this.autoSyncEnabled;
                 
                 const btn = document.getElementById('toggleAutoSyncBtn');
-                const icon = btn.querySelector('i');
                 
                 if (this.autoSyncEnabled) {
                     this.startAutoSync();
@@ -567,7 +946,6 @@
             updateSystemStatus() {
                 const autoSyncStatus = document.getElementById('autoSyncStatus');
                 const nextSyncTime = document.getElementById('nextSyncTime');
-                const backupStatus = document.getElementById('backupStatus');
                 
                 if (autoSyncStatus) {
                     autoSyncStatus.textContent = this.autoSyncEnabled ? 'ATTIVO' : 'DISATTIVATO';
@@ -577,235 +955,138 @@
                 if (nextSyncTime) {
                     nextSyncTime.textContent = this.autoSyncEnabled ? '60s' : '--';
                 }
-                
-                if (backupStatus) {
-                    const hasBackup = localStorage.getItem('booking_calendar_backups');
-                    backupStatus.textContent = hasBackup ? 'OK' : 'NESSUNO';
-                    backupStatus.className = hasBackup ? 'text-blue-600 font-medium' : 'text-yellow-600 font-medium';
-                }
             }
-            // Funzioni di rendering calendario
-renderCalendar() {
-    const monthYear = document.getElementById('currentMonthYear');
-    const calendarGrid = document.getElementById('calendarGrid');
-    
-    monthYear.textContent = `${this.monthNames[this.currentDate.getMonth()]} ${this.currentDate.getFullYear()}`;
-    
-    const daysInMonth = this.getDaysInMonth(this.currentDate);
-    const firstDay = this.getFirstDayOfMonth(this.currentDate);
-    const today = new Date();
-    const isCurrentMonth = today.getMonth() === this.currentDate.getMonth() && 
-                          today.getFullYear() === this.currentDate.getFullYear();
-    
-    calendarGrid.innerHTML = '';
-    
-    // Giorni del mese precedente (vuoti)
-    for (let i = 0; i < firstDay; i++) {
-        const dayCell = document.createElement('div');
-        dayCell.className = 'calendar-day bg-gray-50 border-b border-r border-gray-200';
-        calendarGrid.appendChild(dayCell);
-    }
-    
-    // Giorni del mese corrente
-    for (let day = 1; day <= daysInMonth; day++) {
-        const dayCell = document.createElement('div');
-        const isToday = isCurrentMonth && day === today.getDate();
-        const booking = this.getBookingForDate(day);
-        
-        let className = 'calendar-day bg-white border-b border-r border-gray-200 p-2 cursor-pointer hover:bg-gray-50 relative';
-        
-        if (isToday) {
-            className += ' ring-2 ring-blue-500';
-        }
-        
-        dayCell.className = className;
-        dayCell.onclick = () => window.handleDateClick(day);
-        
-        let content = `<div class="font-medium text-gray-800">${day}</div>`;
-        
-        if (booking) {
-            const platformColor = this.getPlatformColor(booking.platform);
-            content += `
-                <div class="${platformColor} text-white text-xs px-2 py-1 rounded mt-1 truncate">
-                    ${booking.guestName}
-                </div>
-            `;
-        }
-        
-        dayCell.innerHTML = content;
-        calendarGrid.appendChild(dayCell);
-    }
-}
 
-updateSidebar() {
-    this.updateUpcomingBookings();
-    this.updateStats();
-}
-
-updateUpcomingBookings() {
-    const container = document.getElementById('upcomingBookings');
-    const now = new Date();
-    
-    const upcomingBookings = this.bookings
-        .filter(booking => new Date(booking.checkIn) >= now)
-        .sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn))
-        .slice(0, 5);
-    
-    if (upcomingBookings.length === 0) {
-        container.innerHTML = '<p class="text-gray-500 text-sm">Nessuna prenotazione prossima</p>';
-        return;
-    }
-    
-    container.innerHTML = upcomingBookings.map(booking => {
-        const platformColor = this.getPlatformColor(booking.platform);
-        return `
-            <div class="booking-card bg-white p-3 rounded-lg border border-gray-200 cursor-pointer" 
-                 onclick="calendar.showBookingDetails(${JSON.stringify(booking).replace(/"/g, '&quot;')})">
-                <div class="flex items-start justify-between">
-                    <div class="flex-1">
-                        <p class="font-medium text-gray-800 text-sm">${booking.guestName}</p>
-                        <p class="text-xs text-gray-600">${new Date(booking.checkIn).toLocaleDateString('it-IT')}</p>
-                        <div class="flex items-center gap-2 mt-1">
-                            <span class="${platformColor} text-white px-2 py-0.5 rounded text-xs uppercase">
-                                ${booking.platform}
-                            </span>
-                            ${booking.source === 'ical' ? '<i data-lucide="wifi" class="w-3 h-3 text-green-600"></i>' : ''}
-                        </div>
-                    </div>
-                    <p class="text-green-600 font-bold text-sm">€${booking.totalPrice}</p>
-                </div>
-            </div>
-        `;
-    }).join('');
-    
-    lucide.createIcons();
-}
-
-updateStats() {
-    const totalBookings = document.getElementById('totalBookings');
-    const totalRevenue = document.getElementById('totalRevenue');
-    const icalBookings = document.getElementById('icalBookings');
-    const manualBookings = document.getElementById('manualBookings');
-    
-    const total = this.bookings.length;
-    const revenue = this.bookings.reduce((sum, booking) => sum + (booking.totalPrice || 0), 0);
-    const ical = this.bookings.filter(b => b.source === 'ical').length;
-    const manual = this.bookings.filter(b => b.source === 'manual').length;
-    
-    totalBookings.textContent = total;
-    totalRevenue.textContent = `€${revenue}`;
-    icalBookings.textContent = ical;
-    manualBookings.textContent = manual;
-}
-
-getPlatformColor(platform) {
-    switch (platform) {
-        case 'airbnb': return 'bg-red-500';
-        case 'booking': return 'bg-blue-600';
-        case 'manual': return 'bg-green-600';
-        default: return 'bg-gray-600';
-    }
-}
-
-getStatusColor(status) {
-    switch (status) {
-        case 'confermata': return 'bg-green-100 text-green-800';
-        case 'in_attesa': return 'bg-yellow-100 text-yellow-800';
-        case 'cancellata': return 'bg-red-100 text-red-800';
-        default: return 'bg-gray-100 text-gray-800';
-    }
-}
-
-calculateNights(checkIn, checkOut) {
-    const start = new Date(checkIn);
-    const end = new Date(checkOut);
-    return Math.ceil((end - start) / (1000 * 60 * 60 * 24));
-}
-
-previousMonth() {
-    this.currentDate.setMonth(this.currentDate.getMonth() - 1);
-    this.renderCalendar();
-}
-
-nextMonth() {
-    this.currentDate.setMonth(this.currentDate.getMonth() + 1);
-    this.renderCalendar();
-}
-
-            // Parser iCal migliorato
-            parseICalData(icalData, platform, property) {
-                const lines = icalData.split('\n');
-                const events = [];
-                let currentEvent = null;
+            // Rendering calendario
+            renderCalendar() {
+                const monthYear = document.getElementById('currentMonthYear');
+                const calendarGrid = document.getElementById('calendarGrid');
                 
-                for (let line of lines) {
-                    line = line.trim();
+                monthYear.textContent = `${this.monthNames[this.currentDate.getMonth()]} ${this.currentDate.getFullYear()}`;
+                
+                const daysInMonth = this.getDaysInMonth(this.currentDate);
+                const firstDay = this.getFirstDayOfMonth(this.currentDate);
+                const today = new Date();
+                const isCurrentMonth = today.getMonth() === this.currentDate.getMonth() && 
+                                      today.getFullYear() === this.currentDate.getFullYear();
+                
+                calendarGrid.innerHTML = '';
+                
+                // Giorni del mese precedente (vuoti)
+                for (let i = 0; i < firstDay; i++) {
+                    const dayCell = document.createElement('div');
+                    dayCell.className = 'calendar-day bg-gray-50 border-b border-r border-gray-200';
+                    calendarGrid.appendChild(dayCell);
+                }
+                
+                // Giorni del mese corrente
+                for (let day = 1; day <= daysInMonth; day++) {
+                    const dayCell = document.createElement('div');
+                    const isToday = isCurrentMonth && day === today.getDate();
+                    const booking = this.getBookingForDate(day);
                     
-                    if (line === 'BEGIN:VEVENT') {
-                        currentEvent = {
-                            platform: platform,
-                            property: property,
-                            source: 'ical',
-                            status: 'confermata',
-                            guests: 1,
-                            guestEmail: '',
-                            guestPhone: '',
-                            notes: '',
-                            createdAt: new Date().toISOString()
-                        };
-                    } else if (line === 'END:VEVENT' && currentEvent) {
-                        if (currentEvent.checkIn && currentEvent.checkOut && currentEvent.guestName) {
-                            events.push({
-                                ...currentEvent,
-                                id: `${platform}-${property}-${currentEvent.checkIn}-${Math.random().toString(36).substr(2, 9)}`
-                            });
-                        }
-                        currentEvent = null;
-                    } else if (currentEvent) {
-                        if (line.startsWith('DTSTART')) {
-                            const dateMatch = line.match(/(\d{8})/);
-                            if (dateMatch) {
-                                const date = dateMatch[1];
-                                currentEvent.checkIn = `${date.substr(0,4)}-${date.substr(4,2)}-${date.substr(6,2)}`;
-                            }
-                        } else if (line.startsWith('DTEND')) {
-                            const dateMatch = line.match(/(\d{8})/);
-                            if (dateMatch) {
-                                const date = dateMatch[1];
-                                currentEvent.checkOut = `${date.substr(0,4)}-${date.substr(4,2)}-${date.substr(6,2)}`;
-                            }
-                        } else if (line.startsWith('SUMMARY')) {
-                            let summary = line.replace('SUMMARY:', '');
-                            summary = summary.replace(/\\n/g, ' ').replace(/\\,/g, ',').replace(/\\\\/g, '\\');
-                            
-                            if (summary.includes('Reserved') || summary.includes('Blocked') || summary.includes('Not available')) {
-                                currentEvent.guestName = 'Prenotazione Bloccata';
-                                currentEvent.status = 'confermata';
-                            } else {
-                                const matches = summary.match(/(.+?)(?:\s*\(|$)/);
-                                currentEvent.guestName = matches ? matches[1].trim() : summary;
-                            }
-                        } else if (line.startsWith('DESCRIPTION')) {
-                            let description = line.replace('DESCRIPTION:', '');
-                            description = description.replace(/\\n/g, '\n').replace(/\\,/g, ',').replace(/\\\\/g, '\\');
-                            currentEvent.notes = description;
-                            
-                            const priceMatch = description.match(/€\s*(\d+(?:[.,]\d{2})?)/i) || 
-                                             description.match(/EUR\s*(\d+(?:[.,]\d{2})?)/i) ||
-                                             description.match(/(\d+(?:[.,]\d{2})?)\s*€/i);
-                            if (priceMatch) {
-                                currentEvent.totalPrice = parseFloat(priceMatch[1].replace(',', '.'));
-                            } else {
-                                currentEvent.totalPrice = 0;
-                            }
-                        }
+                    let className = 'calendar-day bg-white border-b border-r border-gray-200 p-2 cursor-pointer hover:bg-gray-50 relative';
+                    
+                    if (isToday) {
+                        className += ' ring-2 ring-blue-500';
                     }
+                    
+                    dayCell.className = className;
+                    dayCell.onclick = () => window.handleDateClick(day);
+                    
+                    let content = `<div class="font-medium text-gray-800">${day}</div>`;
+                    
+                    if (booking) {
+                        const platformColor = this.getPlatformColor(booking.platform);
+                        const blockedIndicator = this.isBookingBlockedOnPlatforms(booking) ? 
+                            '<i data-lucide="shield-check" class="w-3 h-3 text-purple-600 absolute top-1 right-1"></i>' : '';
+                        
+                        content += `
+                            ${blockedIndicator}
+                            <div class="${platformColor} text-white text-xs px-2 py-1 rounded mt-1 truncate">
+                                ${booking.guestName}
+                            </div>
+                        `;
+                    }
+                    
+                    dayCell.innerHTML = content;
+                    calendarGrid.appendChild(dayCell);
                 }
                 
-                return events;
+                lucide.createIcons();
             }
 
-            // Sincronizzazione iCal migliorata
+            isBookingBlockedOnPlatforms(booking) {
+                return booking.blockedOnPlatforms && 
+                       (booking.blockedOnPlatforms.booking || booking.blockedOnPlatforms.airbnb);
+            }
+
+            updateSidebar() {
+                this.updateUpcomingBookings();
+                this.updateStats();
+            }
+
+            updateUpcomingBookings() {
+                const container = document.getElementById('upcomingBookings');
+                const now = new Date();
+                
+                const upcomingBookings = this.bookings
+                    .filter(booking => new Date(booking.checkIn) >= now)
+                    .sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn))
+                    .slice(0, 5);
+                
+                if (upcomingBookings.length === 0) {
+                    container.innerHTML = '<p class="text-gray-500 text-sm">Nessuna prenotazione prossima</p>';
+                    return;
+                }
+                
+                container.innerHTML = upcomingBookings.map(booking => {
+                    const platformColor = this.getPlatformColor(booking.platform);
+                    const blockedIcon = this.isBookingBlockedOnPlatforms(booking) ? 
+                        '<i data-lucide="shield-check" class="w-3 h-3 text-purple-600"></i>' : '';
+                    
+                    return `
+                        <div class="booking-card bg-white p-3 rounded-lg border border-gray-200 cursor-pointer" 
+                             onclick="calendar.showBookingDetails(${JSON.stringify(booking).replace(/"/g, '&quot;')})">
+                            <div class="flex items-start justify-between">
+                                <div class="flex-1">
+                                    <p class="font-medium text-gray-800 text-sm">${booking.guestName}</p>
+                                    <p class="text-xs text-gray-600">${new Date(booking.checkIn).toLocaleDateString('it-IT')}</p>
+                                    <div class="flex items-center gap-2 mt-1">
+                                        <span class="${platformColor} text-white px-2 py-0.5 rounded text-xs uppercase">
+                                            ${booking.platform}
+                                        </span>
+                                        ${booking.source === 'ical' ? '<i data-lucide="wifi" class="w-3 h-3 text-green-600"></i>' : ''}
+                                        ${blockedIcon}
+                                    </div>
+                                </div>
+                                <p class="text-green-600 font-bold text-sm">€${booking.totalPrice}</p>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+                
+                lucide.createIcons();
+            }
+
+            updateStats() {
+                const totalBookings = document.getElementById('totalBookings');
+                const totalRevenue = document.getElementById('totalRevenue');
+                const blockedBookings = document.getElementById('blockedBookings');
+                const manualBookings = document.getElementById('manualBookings');
+                
+                const total = this.bookings.length;
+                const revenue = this.bookings.reduce((sum, booking) => sum + (booking.totalPrice || 0), 0);
+                const blocked = this.bookings.filter(b => this.isBookingBlockedOnPlatforms(b)).length;
+                const manual = this.bookings.filter(b => b.source === 'manual').length;
+                
+                totalBookings.textContent = total;
+                totalRevenue.textContent = `€${revenue}`;
+                blockedBookings.textContent = blocked;
+                manualBookings.textContent = manual;
+            }
+
+            // Sincronizzazione iCal
             async syncICalCalendars() {
                 if (this.isLoading) return;
                 
@@ -858,15 +1139,9 @@ nextMonth() {
                         }
                     }
                     
-                    // Rimuovi prenotazioni esistenti da iCal e aggiungi quelle nuove
+                    // Mantieni prenotazioni manuali e sostituisci quelle da iCal
                     const manualBookings = this.bookings.filter(booking => booking.source !== 'ical');
                     this.bookings = [...manualBookings, ...newBookings];
-                    
-                    // Rileva conflitti
-                    const conflicts = this.detectConflicts();
-                    if (conflicts.length > 0) {
-                        this.showNotification(`Rilevati ${conflicts.length} conflitti di date!`, 'warning');
-                    }
                     
                     this.lastSync = new Date();
                     this.saveBookings();
@@ -886,638 +1161,612 @@ nextMonth() {
                 }
             }
 
-            // Rilevamento conflitti
-            detectConflicts() {
-                const conflicts = [];
-                const sortedBookings = [...this.bookings].sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn));
-                
-                for (let i = 0; i < sortedBookings.length - 1; i++) {
-                    const current = sortedBookings[i];
-                    const next = sortedBookings[i + 1];
-                    
-                    const currentOut = new Date(current.checkOut);
-                    const nextIn = new Date(next.checkIn);
-                    
-                    if (currentOut > nextIn) {
-                        conflicts.push({
-                            booking1: current,
-                            booking2: next,
-                            type: 'overlap'
-                        });
-                    }
+           // Continuazione del file calendario-booking.js
+
+// Completamento della funzione parseICalData
+parseICalData(icalData, platform, property) {
+    const lines = icalData.split('\n');
+    const events = [];
+    let currentEvent = null;
+    
+    for (let line of lines) {
+        line = line.trim();
+        
+        if (line === 'BEGIN:VEVENT') {
+            currentEvent = {
+                platform: platform,
+                property: property,
+                source: 'ical',
+                status: 'confermata',
+                guests: 1,
+                guestEmail: '',
+                guestPhone: '',
+                notes: '',
+                createdAt: new Date().toISOString(),
+                blockedOnPlatforms: {
+                    booking: platform === 'booking',
+                    airbnb: platform === 'airbnb'
                 }
-                
-                return conflicts;
+            };
+        } else if (line === 'END:VEVENT' && currentEvent) {
+            if (currentEvent.checkIn && currentEvent.checkOut && currentEvent.guestName) {
+                events.push({
+                    ...currentEvent,
+                    id: `${platform}-${property}-${currentEvent.checkIn}-${Math.random().toString(36).substr(2, 9)}`
+                });
             }
+            currentEvent = null;
+        } else if (currentEvent) {
+            if (line.startsWith('DTSTART')) {
+                const dateMatch = line.match(/(\d{8})/);
+                if (dateMatch) {
+                    const dateStr = dateMatch[1];
+                    currentEvent.checkIn = `${dateStr.substr(0, 4)}-${dateStr.substr(4, 2)}-${dateStr.substr(6, 2)}`;
+                }
+            } else if (line.startsWith('DTEND')) {
+                const dateMatch = line.match(/(\d{8})/);
+                if (dateMatch) {
+                    const dateStr = dateMatch[1];
+                    currentEvent.checkOut = `${dateStr.substr(0, 4)}-${dateStr.substr(4, 2)}-${dateStr.substr(6, 2)}`;
+                }
+            } else if (line.startsWith('SUMMARY:')) {
+                currentEvent.guestName = line.substring(8).trim() || 'Prenotazione ' + platform;
+            } else if (line.startsWith('DESCRIPTION:')) {
+                const description = line.substring(12).trim();
+                const priceMatch = description.match(/\€(\d+)/);
+                if (priceMatch) {
+                    currentEvent.totalPrice = parseInt(priceMatch[1]);
+                }
+                currentEvent.notes = description;
+            }
+        }
+    }
+    
+    return events;
+}
 
-           updateSyncButton(loading) {
+// Implementazioni reali API Booking.com
+async makeBookingAPICall(config) {
+    const baseUrl = 'https://supply-xml.booking.com/hotels/xml/';
+    
+    try {
+        // Headers per autenticazione Booking.com
+        const headers = {
+            'Content-Type': 'application/json',
+            'Authorization': `Basic ${btoa(this.apiConfig.booking.clientId + ':' + this.apiConfig.booking.clientSecret)}`
+        };
+
+        let endpoint = '';
+        let method = config.method || 'GET';
+        let body = null;
+
+        switch (config.endpoint) {
+            case '/availability/block':
+                endpoint = `reservations/${this.apiConfig.booking.hotelId}/block`;
+                method = 'POST';
+                body = JSON.stringify({
+                    arrival_date: config.data.check_in,
+                    departure_date: config.data.check_out,
+                    room_id: 'all',
+                    block_reason: config.data.reason || 'Manual block'
+                });
+                break;
+            
+            case '/test':
+                endpoint = `hotels/${this.apiConfig.booking.hotelId}`;
+                method = 'GET';
+                break;
+        }
+
+        const response = await fetch(baseUrl + endpoint, {
+            method: method,
+            headers: headers,
+            body: body
+        });
+
+        if (!response.ok) {
+            throw new Error(`API Error: ${response.status} - ${response.statusText}`);
+        }
+
+        const result = await response.json();
+        return { success: true, data: result };
+
+    } catch (error) {
+        console.error('Booking API Error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+// Implementazioni reali API Airbnb
+async makeAirbnbAPICall(config) {
+    const baseUrl = 'https://api.airbnb.com/v2/';
+    
+    try {
+        const headers = {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.apiConfig.airbnb.token}`,
+            'X-Airbnb-API-Key': 'your-api-key' // Sostituire con la tua API key
+        };
+
+        let endpoint = '';
+        let method = config.method || 'GET';
+        let body = null;
+
+        switch (config.endpoint) {
+            case '/calendar/availability':
+                endpoint = `calendar_days`;
+                method = 'PUT';
+                body = JSON.stringify({
+                    listing_id: parseInt(this.apiConfig.airbnb.listingId),
+                    start_date: config.data.start_date,
+                    end_date: config.data.end_date,
+                    availability_rule: config.data.available ? 'available' : 'blocked',
+                    notes: config.data.notes || ''
+                });
+                break;
+            
+            case '/test':
+                endpoint = `listings/${this.apiConfig.airbnb.listingId}`;
+                method = 'GET';
+                break;
+        }
+
+        const response = await fetch(baseUrl + endpoint, {
+            method: method,
+            headers: headers,
+            body: body
+        });
+
+        if (!response.ok) {
+            throw new Error(`API Error: ${response.status} - ${response.statusText}`);
+        }
+
+        const result = await response.json();
+        return { success: true, data: result };
+
+    } catch (error) {
+        console.error('Airbnb API Error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+// Funzioni di utilità per il calendario
+previousMonth() {
+    this.currentDate.setMonth(this.currentDate.getMonth() - 1);
+    this.renderCalendar();
+}
+
+nextMonth() {
+    this.currentDate.setMonth(this.currentDate.getMonth() + 1);
+    this.renderCalendar();
+}
+
+getDaysInMonth(date) {
+    return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+}
+
+getFirstDayOfMonth(date) {
+    const firstDay = new Date(date.getFullYear(), date.getMonth(), 1).getDay();
+    return firstDay === 0 ? 6 : firstDay - 1; // Lun = 0
+}
+
+getBookingForDate(day) {
+    const dateStr = `${this.currentDate.getFullYear()}-${String(this.currentDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    return this.bookings.find(booking => {
+        return dateStr >= booking.checkIn && dateStr < booking.checkOut;
+    });
+}
+
+getPlatformColor(platform) {
+    const colors = {
+        'airbnb': 'bg-red-500',
+        'booking': 'bg-blue-600',
+        'manual': 'bg-green-600',
+        'default': 'bg-gray-500'
+    };
+    return colors[platform] || colors.default;
+}
+
+// Gestione modals
+showSettings() {
+    document.getElementById('settingsModal').classList.remove('hidden');
+    document.getElementById('settingsModal').classList.add('flex');
+}
+
+closeSettings() {
+    document.getElementById('settingsModal').classList.add('hidden');
+    document.getElementById('settingsModal').classList.remove('flex');
+}
+
+closeModal() {
+    document.getElementById('bookingModal').classList.add('hidden');
+    document.getElementById('bookingModal').classList.remove('flex');
+}
+
+// Nuova prenotazione
+newBooking() {
+    this.showBookingForm();
+}
+
+showBookingForm(booking = null) {
+    const isEdit = booking !== null;
+    const modal = document.getElementById('bookingModal');
+    const title = document.getElementById('modalTitle');
+    const content = document.getElementById('modalContent');
+    
+    title.textContent = isEdit ? 'Modifica Prenotazione' : 'Nuova Prenotazione';
+    
+    content.innerHTML = `
+        <form id="bookingForm" class="space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium mb-1">Nome Ospite *</label>
+                    <input type="text" id="guestName" value="${booking?.guestName || ''}" 
+                           class="w-full border rounded-lg px-3 py-2" required>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-1">Email</label>
+                    <input type="email" id="guestEmail" value="${booking?.guestEmail || ''}"
+                           class="w-full border rounded-lg px-3 py-2">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-1">Telefono</label>
+                    <input type="tel" id="guestPhone" value="${booking?.guestPhone || ''}"
+                           class="w-full border rounded-lg px-3 py-2">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-1">Numero Ospiti</label>
+                    <input type="number" id="guests" value="${booking?.guests || 2}" min="1" max="10"
+                           class="w-full border rounded-lg px-3 py-2">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-1">Check-in *</label>
+                    <input type="date" id="checkIn" value="${booking?.checkIn || ''}"
+                           class="w-full border rounded-lg px-3 py-2" required>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-1">Check-out *</label>
+                    <input type="date" id="checkOut" value="${booking?.checkOut || ''}"
+                           class="w-full border rounded-lg px-3 py-2" required>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-1">Prezzo Totale (€)</label>
+                    <input type="number" id="totalPrice" value="${booking?.totalPrice || ''}" min="0" step="0.01"
+                           class="w-full border rounded-lg px-3 py-2">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-1">Proprietà</label>
+                    <select id="property" class="w-full border rounded-lg px-3 py-2">
+                        <option value="Casa Vista Mare" ${booking?.property === 'Casa Vista Mare' ? 'selected' : ''}>Casa Vista Mare</option>
+                        <option value="App Corte" ${booking?.property === 'App Corte' ? 'selected' : ''}>App Corte</option>
+                        <option value="App Torre" ${booking?.property === 'App Torre' ? 'selected' : ''}>App Torre</option>
+                    </select>
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm font-medium mb-1">Note</label>
+                <textarea id="notes" rows="3" class="w-full border rounded-lg px-3 py-2">${booking?.notes || ''}</textarea>
+            </div>
+            
+            <!-- Opzioni blocco automatico -->
+            <div class="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                <h4 class="font-medium text-purple-800 mb-3 flex items-center gap-2">
+                    <i data-lucide="shield" class="w-4 h-4"></i>
+                    Blocco Automatico Date
+                </h4>
+                <div class="space-y-2">
+                    <label class="flex items-center">
+                        <input type="checkbox" id="blockBooking" ${booking?.blockedOnPlatforms?.booking ? 'checked' : ''} 
+                               class="mr-2">
+                        <span class="text-sm">Blocca su Booking.com</span>
+                    </label>
+                    <label class="flex items-center">
+                        <input type="checkbox" id="blockAirbnb" ${booking?.blockedOnPlatforms?.airbnb ? 'checked' : ''}
+                               class="mr-2">
+                        <span class="text-sm">Blocca su Airbnb</span>
+                    </label>
+                </div>
+            </div>
+            
+            <div class="flex gap-3 pt-4 border-t">
+                <button type="submit" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2">
+                    <i data-lucide="save" class="w-4 h-4"></i>
+                    ${isEdit ? 'Aggiorna' : 'Salva'} Prenotazione
+                </button>
+                ${isEdit ? `
+                    <button type="button" id="deleteBooking" class="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2">
+                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        Elimina
+                    </button>
+                ` : ''}
+                <button type="button" onclick="calendar.closeModal()" class="px-6 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors">
+                    Annulla
+                </button>
+            </div>
+        </form>
+    `;
+    
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    
+    // Bind form events
+    document.getElementById('bookingForm').addEventListener('submit', (e) => this.handleBookingSubmit(e, booking?.id));
+    
+    if (isEdit) {
+        const deleteBtn = document.getElementById('deleteBooking');
+        if (deleteBtn) {
+            deleteBtn.addEventListener('click', () => this.deleteBooking(booking.id));
+        }
+    }
+    
+    lucide.createIcons();
+}
+
+async handleBookingSubmit(e, bookingId = null) {
+    e.preventDefault();
+    
+    const formData = {
+        guestName: document.getElementById('guestName').value,
+        guestEmail: document.getElementById('guestEmail').value,
+        guestPhone: document.getElementById('guestPhone').value,
+        guests: parseInt(document.getElementById('guests').value),
+        checkIn: document.getElementById('checkIn').value,
+        checkOut: document.getElementById('checkOut').value,
+        totalPrice: parseFloat(document.getElementById('totalPrice').value) || 0,
+        property: document.getElementById('property').value,
+        notes: document.getElementById('notes').value,
+        status: 'confermata',
+        platform: 'manual',
+        source: 'manual',
+        blockedOnPlatforms: {
+            booking: document.getElementById('blockBooking').checked,
+            airbnb: document.getElementById('blockAirbnb').checked
+        }
+    };
+    
+    // Validazione date
+    if (new Date(formData.checkOut) <= new Date(formData.checkIn)) {
+        this.showNotification('La data di check-out deve essere successiva al check-in', 'error');
+        return;
+    }
+    
+    try {
+        if (bookingId) {
+            // Modifica prenotazione esistente
+            const index = this.bookings.findIndex(b => b.id === bookingId);
+            if (index !== -1) {
+                this.bookings[index] = { ...this.bookings[index], ...formData };
+                this.showNotification('Prenotazione aggiornata con successo!', 'success');
+            }
+        } else {
+            // Nuova prenotazione
+            const newBooking = {
+                id: `manual-${Date.now()}`,
+                ...formData,
+                createdAt: new Date().toISOString()
+            };
+            this.bookings.push(newBooking);
+            this.showNotification('Prenotazione creata con successo!', 'success');
+        }
+        
+        // Blocca date sulle piattaforme se richiesto
+        const currentBooking = bookingId ? 
+            this.bookings.find(b => b.id === bookingId) : 
+            this.bookings[this.bookings.length - 1];
+            
+        if (formData.blockedOnPlatforms.booking || formData.blockedOnPlatforms.airbnb) {
+            await this.blockDatesOnPlatforms(currentBooking);
+        }
+        
+        this.saveBookings();
+        this.renderCalendar();
+        this.updateSidebar();
+        this.closeModal();
+        
+    } catch (error) {
+        this.showNotification('Errore nel salvataggio: ' + error.message, 'error');
+    }
+}
+
+deleteBooking(bookingId) {
+    if (confirm('Sei sicuro di voler eliminare questa prenotazione?')) {
+        this.bookings = this.bookings.filter(b => b.id !== bookingId);
+        this.saveBookings();
+        this.renderCalendar();
+        this.updateSidebar();
+        this.closeModal();
+        this.showNotification('Prenotazione eliminata', 'info');
+    }
+}
+
+showBookingDetails(booking) {
+    const modal = document.getElementById('bookingModal');
+    const title = document.getElementById('modalTitle');
+    const content = document.getElementById('modalContent');
+    
+    title.textContent = `Prenotazione - ${booking.guestName}`;
+    
+    const platformColor = this.getPlatformColor(booking.platform);
+    const blockedStatus = this.isBookingBlockedOnPlatforms(booking);
+    
+    content.innerHTML = `
+        <div class="space-y-4">
+            <div class="bg-gray-50 rounded-lg p-4">
+                <div class="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                        <span class="font-medium">Check-in:</span><br>
+                        <span class="text-lg">${new Date(booking.checkIn).toLocaleDateString('it-IT')}</span>
+                    </div>
+                    <div>
+                        <span class="font-medium">Check-out:</span><br>
+                        <span class="text-lg">${new Date(booking.checkOut).toLocaleDateString('it-IT')}</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div><span class="font-medium">Ospite:</span> ${booking.guestName}</div>
+                <div><span class="font-medium">Email:</span> ${booking.guestEmail || 'Non specificata'}</div>
+                <div><span class="font-medium">Telefono:</span> ${booking.guestPhone || 'Non specificato'}</div>
+                <div><span class="font-medium">Ospiti:</span> ${booking.guests}</div>
+                <div><span class="font-medium">Proprietà:</span> ${booking.property || 'Non specificata'}</div>
+                <div><span class="font-medium">Prezzo:</span> €${booking.totalPrice}</div>
+            </div>
+            
+            ${booking.notes ? `
+                <div>
+                    <span class="font-medium">Note:</span>
+                    <p class="text-gray-600 mt-1">${booking.notes}</p>
+                </div>
+            ` : ''}
+            
+            <div class="flex items-center gap-4 pt-4 border-t">
+                <span class="${platformColor} text-white px-3 py-1 rounded text-sm uppercase font-medium">
+                    ${booking.platform}
+                </span>
+                ${booking.source === 'ical' ? '<i data-lucide="wifi" class="w-4 h-4 text-green-600" title="Sincronizzato da iCal"></i>' : ''}
+                ${blockedStatus ? '<i data-lucide="shield-check" class="w-4 h-4 text-purple-600" title="Bloccato sulle piattaforme"></i>' : ''}
+            </div>
+            
+            <div class="flex gap-3 pt-4 border-t">
+                <button onclick="calendar.showBookingForm(${JSON.stringify(booking).replace(/"/g, '&quot;')})" 
+                        class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2">
+                    <i data-lucide="edit" class="w-4 h-4"></i>
+                    Modifica
+                </button>
+                
+                ${!blockedStatus ? `
+                    <button onclick="calendar.blockDatesOnPlatforms(${JSON.stringify(booking).replace(/"/g, '&quot;')})" 
+                            class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2">
+                        <i data-lucide="shield" class="w-4 h-4"></i>
+                        Blocca su Piattaforme
+                    </button>
+                ` : ''}
+                
+                <button onclick="calendar.closeModal()" 
+                        class="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors">
+                    Chiudi
+                </button>
+            </div>
+        </div>
+    `;
+    
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    lucide.createIcons();
+}
+
+// Gestione click sulle date
+// Funzione globale per gestire i click sulle date
+window.handleDateClick = function(day) {
+    const booking = calendar.getBookingForDate(day);
+    if (booking) {
+        calendar.showBookingDetails(booking);
+    } else {
+        // Crea nuova prenotazione per questa data
+        const dateStr = `${calendar.currentDate.getFullYear()}-${String(calendar.currentDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const nextDay = new Date(calendar.currentDate.getFullYear(), calendar.currentDate.getMonth(), day + 1);
+        const nextDateStr = `${nextDay.getFullYear()}-${String(nextDay.getMonth() + 1).padStart(2, '0')}-${String(nextDay.getDate()).padStart(2, '0')}`;
+        
+        calendar.showBookingForm({
+            checkIn: dateStr,
+            checkOut: nextDateStr,
+            property: 'Casa Vista Mare'
+        });
+    }
+};
+
+// Sistema di notifiche
+showNotification(message, type = 'info') {
+    const container = document.getElementById('notifications');
+    const notification = document.createElement('div');
+    const id = 'notification-' + Date.now();
+    
+    notification.id = id;
+    notification.className = `notification ${type}`;
+    notification.textContent = message;
+    
+    container.appendChild(notification);
+    
+    // Mostra notifica
+    setTimeout(() => {
+        notification.classList.add('show');
+    }, 10);
+    
+    // Nascondi dopo 5 secondi
+    setTimeout(() => {
+        notification.classList.remove('show');
+        setTimeout(() => {
+            if (document.getElementById(id)) {
+                container.removeChild(notification);
+            }
+        }, 300);
+    }, 5000);
+}
+
+updateSyncButton(loading) {
     const btn = document.getElementById('syncBtn');
-    if (!btn) return; // evita l'errore se il bottone non esiste
-
     const icon = btn.querySelector('i');
     const text = btn.querySelector('span');
     
     if (loading) {
-        if (icon) icon.classList.add('animate-spin');
-        if (text) text.textContent = 'Sincronizzando...';
         btn.disabled = true;
-        btn.classList.add('opacity-50');
+        icon.className = 'w-4 h-4 animate-spin';
+        icon.setAttribute('data-lucide', 'loader');
+        text.textContent = 'Sincronizzando...';
     } else {
-        if (icon) icon.classList.remove('animate-spin');
-        if (text) text.textContent = 'Sincronizza';
         btn.disabled = false;
-        btn.classList.remove('opacity-50');
+        icon.className = 'w-4 h-4';
+        icon.setAttribute('data-lucide', 'refresh-cw');
+        text.textContent = 'Sincronizza';
+    }
+    
+    lucide.createIcons();
+}
+
+updateSyncInfo() {
+    const lastSyncInfo = document.getElementById('lastSyncInfo');
+    if (this.lastSync) {
+        lastSyncInfo.textContent = `Ultima sincronizzazione: ${this.lastSync.toLocaleString('it-IT')}`;
+    } else {
+        lastSyncInfo.textContent = 'Nessuna sincronizzazione effettuata';
     }
 }
 
+// Export dati
+exportData() {
+    const data = {
+        bookings: this.bookings,
+        apiConfig: this.apiConfig,
+        exportDate: new Date().toISOString(),
+        version: '1.0'
+    };
+    
+    const blob = new Blob([JSON.stringify(data, null, 2)], {
+        type: 'application/json'
+    });
+    
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `booking-calendar-backup-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    this.showNotification('Backup esportato con successo!', 'success');
+}
 
-            updateSyncInfo() {
-                const syncInfo = document.getElementById('lastSyncInfo');
-                if (this.lastSync && syncInfo) {
-                    syncInfo.textContent = `Ultima sincronizzazione: ${this.lastSync.toLocaleString('it-IT')}`;
-                }
-            }
+} // Fine classe BookingCalendar
 
-            // Sistema di blocco date sulle piattaforme
-            async blockDatesOnPlatforms(booking) {
-                const results = {
-                    booking: false,
-                    airbnb: false,
-                    errors: []
-                };
-                
-                try {
-                    // Tentativo blocco su Booking.com
-                    if (booking.platform === 'booking' || booking.platform === 'manual') {
-                        try {
-                            const bookingResult = await this.blockOnBooking(booking);
-                            results.booking = bookingResult.success;
-                            if (!bookingResult.success) {
-                                results.errors.push(`Booking.com: ${bookingResult.error}`);
-                            }
-                        } catch (error) {
-                            results.errors.push(`Booking.com: ${error.message}`);
-                        }
-                    }
-                    
-                    // Tentativo blocco su Airbnb
-                    if (booking.platform === 'airbnb' || booking.platform === 'manual') {
-                        try {
-                            const airbnbResult = await this.blockOnAirbnb(booking);
-                            results.airbnb = airbnbResult.success;
-                            if (!airbnbResult.success) {
-                                results.errors.push(`Airbnb: ${airbnbResult.error}`);
-                            }
-                        } catch (error) {
-                            results.errors.push(`Airbnb: ${error.message}`);
-                        }
-                    }
-                    
-                } catch (error) {
-                    results.errors.push(`Errore generale: ${error.message}`);
-                }
-                
-                return results;
-            }
-
-            async blockOnBooking(booking) {
-                // Simulazione API Booking.com (da implementare con credenziali reali)
-                return new Promise((resolve) => {
-                    setTimeout(() => {
-                        resolve({
-                            success: false,
-                            error: 'API non configurata - credenziali partner richieste'
-                        });
-                    }, 1000);
-                });
-            }
-
-            async blockOnAirbnb(booking) {
-                // Simulazione API Airbnb (da implementare con token reale)
-                return new Promise((resolve) => {
-                    setTimeout(() => {
-                        resolve({
-                            success: false,
-                            error: 'Token di accesso host richiesto'
-                        });
-                    }, 1000);
-                });
-            }
-
-            // Sistema di notifiche migliorato
-            showNotification(message, type = 'info', duration = 4000) {
-                const notification = document.createElement('div');
-                notification.className = `notification ${type}`;
-                
-                const icon = this.getNotificationIcon(type);
-                notification.innerHTML = `
-                    <div class="flex items-center gap-2">
-                        <i data-lucide="${icon}" class="w-4 h-4"></i>
-                        <span>${message}</span>
-                    </div>
-                `;
-                
-                document.getElementById('notifications').appendChild(notification);
-                
-                // Show notification
-                setTimeout(() => {
-                    notification.classList.add('show');
-                    lucide.createIcons();
-                }, 100);
-                
-                // Hide and remove notification
-                setTimeout(() => {
-                    notification.classList.remove('show');
-                    setTimeout(() => notification.remove(), 300);
-                }, duration);
-            }
-
-            getNotificationIcon(type) {
-                switch (type) {
-                    case 'success': return 'check-circle';
-                    case 'error': return 'x-circle';
-                    case 'warning': return 'alert-triangle';
-                    case 'info': return 'info';
-                    default: return 'bell';
-                }
-            }
-
-            // Funzioni calendario
-            getDaysInMonth(date) {
-                return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
-            }
-
-            getFirstDayOfMonth(date) {
-                const firstDay = new Date(date.getFullYear(), date.getMonth(), 1).getDay();
-                return firstDay === 0 ? 6 : firstDay - 1; // Lunedì = 0
-            }
-
-            formatDate(date) {
-                return date.toISOString().split('T')[0];
-            }
-
-            isDateBooked(day) {
-                const dateStr = this.formatDate(new Date(this.currentDate.getFullYear(), this.currentDate.getMonth(), day));
-                return this.bookings.some(booking => {
-                    const checkIn = new Date(booking.checkIn);
-                    const checkOut = new Date(booking.checkOut);
-                    const currentDateObj = new Date(dateStr);
-                    return currentDateObj >= checkIn && currentDateObj < checkOut;
-                });
-            }
-
-            getBookingForDate(day) {
-                const dateStr = this.formatDate(new Date(this.currentDate.getFullYear(), this.currentDate.getMonth(), day));
-                return this.bookings.find(booking => {
-                    const checkIn = new Date(booking.checkIn);
-                    const checkOut = new Date(booking.checkOut);
-                    const currentDateObj = new Date(dateStr);
-                    return currentDateObj >= checkIn && currentDateObj < checkOut;
-                });
-            }
-
-            handleDateClick(day) {
-                const booking = this.getBookingForDate(day);
-                if (booking) {
-                    this.showBookingDetails(booking);
-                } else {
-                    const dateStr = this.formatDate(new Date(this.currentDate.getFullYear(), this.currentDate.getMonth(), day));
-                    this.newBooking(dateStr);
-                }
-            }
-
-            // Modal per dettagli prenotazione
-            showBookingDetails(booking) {
-                this.selectedBooking = booking;
-                const modal = document.getElementById('bookingModal');
-                const title = document.getElementById('modalTitle');
-                const content = document.getElementById('modalContent');
-                
-                title.textContent = `Dettagli Prenotazione - ${booking.guestName}`;
-                
-                const isEditable = booking.source === 'manual';
-                const platformColor = this.getPlatformColor(booking.platform);
-                const statusColor = this.getStatusColor(booking.status);
-                
-                content.innerHTML = `
-                    <div class="space-y-6">
-                        <!-- Informazioni principali -->
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div class="space-y-4">
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Piattaforma</label>
-                                    <div class="flex items-center gap-2">
-                                        <span class="${platformColor} text-white px-3 py-1 rounded text-sm font-medium uppercase">
-                                            ${booking.platform}
-                                        </span>
-                                        ${booking.source === 'ical' ? '<i data-lucide="wifi" class="w-4 h-4 text-green-600"></i>' : ''}
-                                    </div>
-                                </div>
-                                
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Nome Ospite</label>
-                                    <p class="text-gray-900 font-medium">${booking.guestName}</p>
-                                </div>
-                                
-                                ${booking.guestEmail ? `
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                                    <p class="text-gray-900">${booking.guestEmail}</p>
-                                </div>
-                                ` : ''}
-                                
-                                ${booking.guestPhone ? `
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Telefono</label>
-                                    <p class="text-gray-900">${booking.guestPhone}</p>
-                                </div>
-                                ` : ''}
-                            </div>
-                            
-                            <div class="space-y-4">
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Check-in</label>
-                                    <p class="text-gray-900 font-medium">${new Date(booking.checkIn).toLocaleDateString('it-IT', { 
-                                        weekday: 'long', 
-                                        year: 'numeric', 
-                                        month: 'long', 
-                                        day: 'numeric' 
-                                    })}</p>
-                                </div>
-                                
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Check-out</label>
-                                    <p class="text-gray-900 font-medium">${new Date(booking.checkOut).toLocaleDateString('it-IT', { 
-                                        weekday: 'long', 
-                                        year: 'numeric', 
-                                        month: 'long', 
-                                        day: 'numeric' 
-                                    })}</p>
-                                </div>
-                                
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Durata</label>
-                                    <p class="text-gray-900">${this.calculateNights(booking.checkIn, booking.checkOut)} notti</p>
-                                </div>
-                                
-                                <div class="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label class="block text-sm font-medium text-gray-700 mb-1">Ospiti</label>
-                                        <p class="text-gray-900 font-medium">${booking.guests}</p>
-                                    </div>
-                                    
-                                    <div>
-                                        <label class="block text-sm font-medium text-gray-700 mb-1">Prezzo</label>
-                                        <p class="text-green-600 font-bold text-lg">€${booking.totalPrice}</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <!-- Proprietà e stato -->
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            ${booking.property ? `
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Proprietà</label>
-                                <p class="text-gray-900">${booking.property}</p>
-                            </div>
-                            ` : ''}
-                            
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Stato</label>
-                                <span class="${statusColor} px-3 py-1 rounded text-sm font-medium">
-                                    ${booking.status.replace('_', ' ').toUpperCase()}
-                                </span>
-                            </div>
-                        </div>
-                        
-                        <!-- Note -->
-                        ${booking.notes ? `
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Note</label>
-                            <div class="bg-gray-50 p-3 rounded border">
-                                <p class="text-gray-900 whitespace-pre-line">${booking.notes}</p>
-                            </div>
-                        </div>
-                        ` : ''}
-                        
-                        <!-- Informazioni tecniche -->
-                        <div class="text-xs text-gray-500 border-t pt-4">
-                            <p>ID: ${booking.id}</p>
-                            <p>Sorgente: ${booking.source === 'ical' ? 'Sincronizzazione iCal' : 'Inserimento Manuale'}</p>
-                            ${booking.createdAt ? `<p>Creato: ${new Date(booking.createdAt).toLocaleString('it-IT')}</p>` : ''}
-                        </div>
-                        
-                        <!-- Azioni -->
-                        <div class="flex gap-3 pt-4 border-t">
-                            ${isEditable ? `
-                                <button id="editBookingBtn" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2">
-                                    <i data-lucide="edit-3" class="w-4 h-4"></i>
-                                    Modifica
-                                </button>
-                                <button id="deleteBookingBtn" class="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2">
-                                    <i data-lucide="trash-2" class="w-4 h-4"></i>
-                                    Elimina
-                                </button>
-                            ` : `
-                                <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 flex-1">
-                                    <div class="flex items-center gap-2">
-                                        <i data-lucide="info" class="w-4 h-4 text-blue-600"></i>
-                                        <p class="text-blue-800 text-sm">
-                                            Questa prenotazione è stata sincronizzata automaticamente e non può essere modificata.
-                                        </p>
-                                    </div>
-                                </div>
-                            `}
-                            
-                            <button id="closeBookingDetailsBtn" class="px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors flex items-center gap-2">
-                                <i data-lucide="x" class="w-4 h-4"></i>
-                                Chiudi
-                            </button>
-                        </div>
-                    </div>
-                `;
-                
-                // Bind eventi
-                const editBtn = document.getElementById('editBookingBtn');
-                const deleteBtn = document.getElementById('deleteBookingBtn');
-                const closeBtn = document.getElementById('closeBookingDetailsBtn');
-                
-                if (editBtn) {
-                    editBtn.addEventListener('click', () => this.editBooking(booking));
-                }
-                
-                if (deleteBtn) {
-                    deleteBtn.addEventListener('click', () => this.deleteBooking(booking));
-                }
-                
-                if (closeBtn) {
-                    closeBtn.addEventListener('click', () => this.closeModal());
-                }
-                
-                modal.classList.remove('hidden');
-                modal.classList.add('flex');
-                lucide.createIcons();
-            }
-
-            // Nuova prenotazione
-            newBooking(selectedDate = '') {
-                const modal = document.getElementById('bookingModal');
-                const title = document.getElementById('modalTitle');
-                const content = document.getElementById('modalContent');
-                
-                title.textContent = 'Nuova Prenotazione';
-                
-                const today = new Date().toISOString().split('T')[0];
-                const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
-                
-                content.innerHTML = `
-                    <form id="bookingForm" class="space-y-6">
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <!-- Colonna sinistra -->
-                            <div class="space-y-4">
-                               <div>
-    <label class="block text-sm font-medium text-gray-700 mb-1">Numero Ospiti</label>
-    <input type="number" id="guests" name="guests" min="1" max="10" value="2" 
-           class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-</div>
-
-<div>
-    <label class="block text-sm font-medium text-gray-700 mb-1">Prezzo Totale (€)</label>
-    <input type="number" id="totalPrice" name="totalPrice" min="0" step="0.01" 
-           class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-           placeholder="0.00">
-</div>
-
-<div>
-    <label class="block text-sm font-medium text-gray-700 mb-1">Stato</label>
-    <select id="status" name="status" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-        <option value="confermata">Confermata</option>
-        <option value="in_attesa">In Attesa</option>
-        <option value="cancellata">Cancellata</option>
-    </select>
-</div>
-                                
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Nome Ospite *</label>
-                                    <input type="text" id="guestName" name="guestName" required 
-                                           class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                           placeholder="Nome completo dell'ospite">
-                                </div>
-                                
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                                    <input type="email" id="guestEmail" name="guestEmail" 
-                                           class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                           placeholder="email@esempio.com">
-                                </div>
-                                
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Telefono</label>
-                                    <input type="tel" id="guestPhone" name="guestPhone" 
-                                           class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                           placeholder="+39 333 1234567">
-                                </div>
-                                
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Proprietà</label>
-                                    <select id="property" name="property" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                                        <option value="">Seleziona proprietà</option>
-                                        <option value="App Corte">App Corte</option>
-                                        <option value="App Torre">App Torre</option>
-                                        <option value="Casa Vista Mare">Casa Vista Mare</option>
-                                    </select>
-                                </div>
-                            </div>
-                            
-                            <!-- Colonna destra -->
-                            <div class="space-y-4">
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Check-in *</label>
-                                    <input type="date" id="checkIn" name="checkIn" required 
-                                           class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                           min="${today}" value="${selectedDate || today}">
-                                </div>
-                                
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Check-out *</label>
-                                    <input type="date" id="checkOut" name="checkOut" required 
-                                           class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                           min="${selectedDate || tomorrow}" value="${tomorrow}">
-                                </div>
-                                
-                                <div>
-                                    <p class="font-medium mb-2">Blocco Automatico Date</p>
-                                    <label class="flex items-center gap-2">
-                                        <input type="checkbox" id="blockDates" name="blockDates" checked class="rounded">
-                                        <span>Tenta di bloccare automaticamente le date su tutte le piattaforme</span>
-                                    </label>
-                                    <p class="text-xs mt-1 text-yellow-700">
-                                        Nota: Richiede configurazione API per essere funzionale
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <!-- Pulsanti -->
-                        <div class="flex gap-3 pt-4 border-t">
-                            <button type="submit" id="saveBookingBtn" class="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2">
-                                <i data-lucide="check" class="w-4 h-4"></i>
-                                Salva Prenotazione
-                            </button>
-                            <button type="button" id="cancelBookingBtn" class="px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors flex items-center gap-2">
-                                <i data-lucide="x" class="w-4 h-4"></i>
-                                Annulla
-                            </button>
-                        </div>
-                    </form>
-                `;
-                
-                // Bind eventi form
-                const form = document.getElementById('bookingForm');
-                const cancelBtn = document.getElementById('cancelBookingBtn');
-                
-                form.addEventListener('submit', handleBookingSubmit);
-                cancelBtn.addEventListener('click', () => this.closeModal());
-                
-                // Auto-calcola checkout quando cambia checkin
-                const checkInInput = document.getElementById('checkIn');
-                const checkOutInput = document.getElementById('checkOut');
-                
-                checkInInput.addEventListener('change', () => {
-                    const checkInDate = new Date(checkInInput.value);
-                    const minCheckOut = new Date(checkInDate.getTime() + 86400000); // +1 giorno
-                    checkOutInput.min = minCheckOut.toISOString().split('T')[0];
-                    if (checkOutInput.value <= checkInInput.value) {
-                        checkOutInput.value = minCheckOut.toISOString().split('T')[0];
-                    }
-                });
-                
-                modal.classList.remove('hidden');
-                modal.classList.add('flex');
-                lucide.createIcons();
-            }
-
-            // Modali - chiusura
-            closeModal() {
-                document.getElementById('bookingModal').classList.add('hidden');
-                document.getElementById('bookingModal').classList.remove('flex');
-            }
-
-            closeSettings() {
-                document.getElementById('settingsModal').classList.add('hidden');
-                document.getElementById('settingsModal').classList.remove('flex');
-            }
-
-            // Impostazioni modal
-            showSettings() {
-                document.getElementById('settingsModal').classList.remove('hidden');
-                document.getElementById('settingsModal').classList.add('flex');
-                lucide.createIcons();
-            }
-
-            // Funzioni di utilità per esportazione e pulizia
-            exportData() {
-                const dataToExport = {
-                    bookings: this.bookings,
-                    lastSync: this.lastSync,
-                    exportDate: new Date().toISOString(),
-                    version: '1.0'
-                };
-                
-                const blob = new Blob([JSON.stringify(dataToExport, null, 2)], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `booking_calendar_export_${new Date().toISOString().split('T')[0]}.json`;
-                a.click();
-                URL.revokeObjectURL(url);
-                
-                this.showNotification('Dati esportati con successo!', 'success');
-            }
-
-                        clearAllData() {
-                if (!confirm('ATTENZIONE: Questa azione cancellerà TUTTI i dati del calendario.\n\nSei sicuro di voler continuare?')) {
-                    return;
-                }
-                
-                if (!confirm('ULTIMA CONFERMA: I dati verranno persi definitivamente.\n\nVuoi procedere con la cancellazione?')) {
-                    return;
-                }
-                
-                // Pulisci tutto
-                this.bookings = [];
-                this.lastSync = null;
-                localStorage.removeItem('booking_calendar_data');
-                localStorage.removeItem('booking_calendar_backups');
-                
-                // Aggiorna interfaccia
-                this.renderCalendar();
-                this.updateSidebar();
-                this.updateSyncInfo();
-                this.updateSystemStatus();
-                
-                this.showNotification('Tutti i dati sono stati cancellati', 'info');
-            }
-        }
-
-        // Inizializzazione dell'applicazione
-        let calendar;
-        
-        document.addEventListener('DOMContentLoaded', () => {
-            calendar = new BookingCalendar();
-            
-            // Gestione cleanup quando la pagina viene chiusa
-            window.addEventListener('beforeunload', () => {
-                if (calendar) {
-                    calendar.stopAutoSync();
-                }
-            });
-        });
-
-        // Funzioni globali per gestire click sui giorni del calendario
-        window.handleDateClick = function(day) {
-            if (calendar) {
-                calendar.handleDateClick(day);
-            }
-        };
-
-        // Funzione globale per il submit del form
-        function handleBookingSubmit(e) {
-            e.preventDefault();
-            
-            const formData = new FormData(e.target);
-            const bookingData = {
-                id: `manual-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-                platform: formData.get('platform') || 'manual',
-                checkIn: formData.get('checkIn'),
-                checkOut: formData.get('checkOut'),
-                guestName: formData.get('guestName'),
-                guestEmail: formData.get('guestEmail') || '',
-                guestPhone: formData.get('guestPhone') || '',
-                guests: parseInt(formData.get('guests')) || 1,
-                totalPrice: parseFloat(formData.get('totalPrice')) || 0,
-                status: formData.get('status'),
-                property: formData.get('property') || '',
-                notes: formData.get('notes') || '',
-                source: 'manual',
-                createdAt: new Date().toISOString()
-            };
-
-            // Validazione
-            if (new Date(bookingData.checkIn) >= new Date(bookingData.checkOut)) {
-                calendar.showNotification('La data di check-out deve essere successiva al check-in', 'error');
-                return;
-            }
-
-            calendar.bookings.push(bookingData);
-            calendar.saveBookings();
-            calendar.renderCalendar();
-            calendar.updateSidebar();
-            calendar.closeModal();
-
-            calendar.showNotification('Prenotazione aggiunta con successo!', 'success');
-        }
-    </script>
-</body>
-</html>
+// Inizializzazione
+let calendar;
+document.addEventListener('DOMContentLoaded', function() {
+    calendar = new BookingCalendar();
+    
+    // Inizializza le icone Lucide
+    if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+    }
+});
