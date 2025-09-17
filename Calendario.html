@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="it">
-<head> 
+<head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Calendario Gestionale - Sistema Prenotazioni</title>
@@ -780,30 +780,15 @@
 
             // Simulazioni chiamate API (da sostituire con implementazioni reali)
             async makeBookingAPICall(config) {
-                return new Promise((resolve) => {
-                    setTimeout(() => {
-                        // Simula successo/fallimento basato sulla configurazione
-                        if (this.apiConfig.booking.clientId && this.apiConfig.booking.clientSecret) {
-                            resolve({ success: true });
-                        } else {
-                            resolve({ success: false, error: 'Credenziali non valide' });
-                        }
-                    }, 2000);
-                });
-            }
+    return { success: true }; // finto successo
+}
 
-            async makeAirbnbAPICall(config) {
-                return new Promise((resolve) => {
-                    setTimeout(() => {
-                        if (this.apiConfig.airbnb.token) {
-                            resolve({ success: true });
-                        } else {
-                            resolve({ success: false, error: 'Token non valido' });
-                        }
-                    }, 2000);
-                });
-            }
+async makeAirbnbAPICall(config) {
+    return { success: true }; // finto successo
+}
 
+
+           
             // Resto del codice originale con alcune modifiche...
             saveBookings() {
                 try {
