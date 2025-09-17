@@ -1189,13 +1189,16 @@ parseICalData(icalData, platform, property) {
                 }
             };
         } else if (line === 'END:VEVENT' && currentEvent) {
-            if (currentEvent.checkIn && currentEvent.checkOut && currentEvent.guestName) {
-                events.push({
-                    ...currentEvent,
-                    id: `${platform}-${property}-${currentEvent.checkIn}-${Math.random().toString(36).substr(2, 9)}`
-                });
-            }
-            currentEvent = null;
+    if (currentEvent.checkIn && currentEvent.checkOut) {
+        if (!currentEvent.guestName || currentEvent.guestName.trim() === '') {
+            currentEvent.guestName = 'Blocco ' + platform;
+        }
+        events.push({
+            ...currentEvent,
+            id: `${platform}-${property}-${currentEvent.checkIn}-${Math.random().toString(36).substr(2, 9)}`
+        });
+    }
+    currentEvent = null;
         } else if (currentEvent) {
             if (line.startsWith('DTSTART')) {
                 const dateMatch = line.match(/(\d{8})/);
