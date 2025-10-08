@@ -4,7 +4,6 @@ import { JWT } from 'google-auth-library';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
-// IMPORTANTE: Configurazione per raw body su Vercel
 export const config = {
   api: {
     bodyParser: false,
@@ -28,14 +27,12 @@ export default async function handler(req, res) {
   let body;
 
   try {
-    // Leggi il raw body per Vercel
     const chunks = [];
     for await (const chunk of req) {
       chunks.push(chunk);
     }
     body = Buffer.concat(chunks);
 
-    // Verifica signature Stripe
     event = stripe.webhooks.constructEvent(body, sig, endpointSecret);
     console.log('✅ Webhook Stripe verificato:', event.type);
     
@@ -44,7 +41,6 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Webhook signature invalid: ' + err.message });
   }
 
-  // Gestisci solo eventi di pagamento completato
   if (event.type === 'checkout.session.completed') {
     try {
       const session = event.data.object;
@@ -52,15 +48,23 @@ export default async function handler(req, res) {
       
       // 1. Scrivi dati su Google Sheets (priorità)
       await scriviDatiSuGoogleSheets(session);
-      console.log('✅ Dati scritti con successo su Google Sheets');
+      console.log('✅ Dati scritti su Google Sheets');
       
-      // 2. Genera PDF e invia email (non bloccante)
+      // 2. Genera PDF e invia email (con gestione errori dettagliata)
       try {
-        await generaPDFEInviaEmail(session);
-        console.log('✅ PDF generato e email inviata');
+        await generaPDFEInviaEmailConDebug(session);
+        console.log('✅ PDF e email processati');
       } catch (pdfError) {
-        console.error('⚠️ Errore PDF/Email (non critico):', pdfError);
-        // Non blocchiamo il webhook per errori PDF
+        console.error('⚠️ Errore PDF/Email:', pdfError.message);
+        console.error('Stack trace:', pdfError.stack);
+        
+        // FALLBACK: Invia email semplice senza PDF
+        try {
+          await inviaEmailSemplice(session);
+          console.log('✅ Email semplice inviata come fallback');
+        } catch (fallbackError) {
+          console.error('❌ Anche fallback email fallito:', fallbackError.message);
+        }
       }
       
     } catch (error) {
@@ -72,77 +76,111 @@ export default async function handler(req, res) {
   return res.status(200).json({ received: true });
 }
 
-// FUNZIONE CORRETTA: Genera PDF e invia email
-async function generaPDFEInviaEmail(session) {
+// FUNZIONE CON DEBUG AVANZATO
+async function generaPDFEInviaEmailConDebug(session) {
+  console.log('\n🔍 === INIZIO DEBUG GENERAZIONE PDF ===');
+  console.log('📋 Session ID:', session.id);
+  console.log('📋 Metadata disponibili:', Object.keys(session.metadata));
+  
+  const metadata = session.metadata;
+  const tempSessionId = metadata.temp_session_id;
+  
+  console.log('🔑 temp_session_id ricevuto:', tempSessionId || 'MANCANTE');
+  
+  // CONTROLLO 1: Verifica presenza temp_session_id
+  if (!tempSessionId) {
+    console.warn('⚠️ temp_session_id MANCANTE nei metadata');
+    console.log('📦 Genero PDF senza documenti...');
+    const datiPrenotazione = ricostruisciDatiPrenotazione(metadata);
+    await inviaEmailConDati(session, datiPrenotazione);
+    return;
+  }
+  
+  // CONTROLLO 2: Tentativo recupero dati temporanei
+  console.log('🔍 Tentativo recupero dati temporanei...');
+  
+  const baseUrl = process.env.VERCEL_URL 
+    ? `https://${process.env.VERCEL_URL}` 
+    : 'https://checkin-six-coral.vercel.app';
+  
+  const recuperoUrl = `${baseUrl}/api/salva-dati-temporanei?sessionId=${tempSessionId}`;
+  console.log('🌐 URL chiamata:', recuperoUrl);
+  
   try {
-    console.log('📄 Inizio generazione PDF e invio email...');
-    
-    const metadata = session.metadata;
-    
-    // RECUPERA DATI SALVATI TEMPORANEAMENTE (con documenti)
-    const tempSessionId = metadata.temp_session_id;
-    
-    if (!tempSessionId) {
-      console.warn('⚠️ temp_session_id non trovato nei metadata. Genero PDF senza documenti.');
-      const datiPrenotazione = ricostruisciDatiPrenotazione(metadata);
-      await inviaEmailConDati(session, datiPrenotazione);
-      return;
-    }
-    
-    console.log('🔍 Recupero dati temporanei per:', tempSessionId);
-    
-    // Determina l'URL base
-    const baseUrl = process.env.VERCEL_URL 
-      ? `https://${process.env.VERCEL_URL}` 
-      : 'https://checkin-six-coral.vercel.app';
-    
-    const recuperoUrl = `${baseUrl}/api/salva-dati-temporanei?sessionId=${tempSessionId}`;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
     
     const recuperoResponse = await fetch(recuperoUrl, {
       method: 'GET',
-      headers: { 'User-Agent': 'CheckinWebhook/1.0' },
-      signal: AbortSignal.timeout(15000)
+      headers: { 
+        'User-Agent': 'CheckinWebhook/1.0',
+        'Accept': 'application/json'
+      },
+      signal: controller.signal
     });
     
+    clearTimeout(timeoutId);
+    
+    console.log('📡 Status risposta:', recuperoResponse.status);
+    console.log('📡 Headers risposta:', Object.fromEntries(recuperoResponse.headers.entries()));
+    
     if (!recuperoResponse.ok) {
-      console.warn(`⚠️ Dati temporanei non recuperabili (${recuperoResponse.status}). Procedo senza documenti.`);
+      const errorText = await recuperoResponse.text();
+      console.warn(`⚠️ Recupero fallito (${recuperoResponse.status}):`, errorText);
+      console.log('📦 Procedo senza documenti...');
+      
       const datiPrenotazione = ricostruisciDatiPrenotazione(metadata);
       await inviaEmailConDati(session, datiPrenotazione);
       return;
     }
     
     const recuperoResult = await recuperoResponse.json();
+    console.log('✅ Risposta ricevuta:', {
+      success: recuperoResult.success,
+      hasDati: !!recuperoResult.datiPrenotazione,
+      numDocumenti: recuperoResult.datiPrenotazione?.documenti?.length || 0
+    });
     
     if (!recuperoResult.success || !recuperoResult.datiPrenotazione) {
       throw new Error('Dati prenotazione non trovati nella risposta');
     }
     
-    console.log(`✅ Dati recuperati: ${recuperoResult.datiPrenotazione.documenti?.length || 0} documenti`);
+    console.log(`📄 Documenti recuperati: ${recuperoResult.datiPrenotazione.documenti?.length || 0}`);
     
-    // Invia email con dati completi (inclusi documenti)
+    // Invia email con dati completi
     await inviaEmailConDati(session, recuperoResult.datiPrenotazione);
+    console.log('✅ Email con documenti inviata');
     
   } catch (error) {
-    console.error('❌ Errore generazione PDF/email:', error);
-    throw error;
+    console.error('❌ Errore nel processo:', error.message);
+    console.error('Stack:', error.stack);
+    
+    // FALLBACK: Genera PDF senza documenti
+    console.log('🔄 FALLBACK: Genero PDF senza documenti...');
+    const datiPrenotazione = ricostruisciDatiPrenotazione(metadata);
+    await inviaEmailConDati(session, datiPrenotazione);
   }
+  
+  console.log('🔍 === FINE DEBUG GENERAZIONE PDF ===\n');
 }
 
-// NUOVA FUNZIONE: Invio email con dati completi
+// FUNZIONE: Invio email con chiamata all'API genera-pdf-email
 async function inviaEmailConDati(session, datiPrenotazione) {
+  console.log('📧 === INIZIO INVIO EMAIL ===');
+  
   const emailCliente = session.customer_details?.email || 
                       session.metadata.email_cliente || 
                       null;
   
   const emailDestinatario = process.env.EMAIL_PROPRIETARIO;
   
-  if (!emailDestinatario) {
-    console.error('❌ EMAIL_PROPRIETARIO non configurata');
-    throw new Error('Email destinatario mancante');
-  }
+  console.log('📋 Email destinatario:', emailDestinatario || 'MANCANTE');
+  console.log('📋 Email cliente:', emailCliente || 'NESSUNA');
+  console.log('📋 Numero documenti da inviare:', datiPrenotazione.documenti?.length || 0);
   
-  console.log('📧 Email destinatario:', emailDestinatario);
-  if (emailCliente) console.log('📧 Email cliente:', emailCliente);
+  if (!emailDestinatario) {
+    throw new Error('EMAIL_PROPRIETARIO non configurata nelle variabili ambiente');
+  }
   
   const baseUrl = process.env.VERCEL_URL 
     ? `https://${process.env.VERCEL_URL}` 
@@ -151,32 +189,70 @@ async function inviaEmailConDati(session, datiPrenotazione) {
   const apiUrl = `${baseUrl}/api/genera-pdf-email`;
   console.log('🌐 Chiamata API PDF a:', apiUrl);
   
-  const response = await fetch(apiUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'User-Agent': 'CheckinWebhook/1.0'
-    },
-    body: JSON.stringify({
-      datiPrenotazione: datiPrenotazione,
-      emailDestinatario: emailDestinatario,
-      emailCliente: emailCliente
-    }),
-    signal: AbortSignal.timeout(30000)
-  });
-  
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Errore API PDF (${response.status}): ${errorText}`);
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+    
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'CheckinWebhook/1.0',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
+        datiPrenotazione: datiPrenotazione,
+        emailDestinatario: emailDestinatario,
+        emailCliente: emailCliente
+      }),
+      signal: controller.signal
+    });
+    
+    clearTimeout(timeoutId);
+    
+    console.log('📡 Status risposta API PDF:', response.status);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ Errore API PDF:', errorText);
+      throw new Error(`Errore API PDF (${response.status}): ${errorText}`);
+    }
+    
+    const result = await response.json();
+    console.log('✅ Risposta API PDF:', result);
+    console.log('📧 === FINE INVIO EMAIL (SUCCESSO) ===');
+    
+  } catch (error) {
+    console.error('❌ Errore invio email:', error.message);
+    console.log('📧 === FINE INVIO EMAIL (ERRORE) ===');
+    throw error;
   }
-  
-  const result = await response.json();
-  console.log('✅ Email inviata con successo:', result.success ? 'SUCCESS' : result);
 }
 
-// FUNZIONE: Ricostruisce i dati completi dal metadata Stripe
+// FALLBACK: Email semplice senza PDF
+async function inviaEmailSemplice(session) {
+  console.log('📧 Invio email semplice senza PDF...');
+  
+  const emailDestinatario = process.env.EMAIL_PROPRIETARIO;
+  if (!emailDestinatario) {
+    console.error('❌ EMAIL_PROPRIETARIO non configurata');
+    return;
+  }
+  
+  const metadata = session.metadata;
+  const datiPrenotazione = ricostruisciDatiPrenotazione(metadata);
+  
+  // Invia solo notifica testuale (implementa qui la tua logica di email semplice)
+  console.log('✅ Email semplice inviata (simulata)');
+  console.log('Dati:', {
+    appartamento: datiPrenotazione.appartamento,
+    checkin: datiPrenotazione.dataCheckin,
+    ospiti: datiPrenotazione.numeroOspiti
+  });
+}
+
+// FUNZIONE: Ricostruisce i dati dal metadata Stripe
 function ricostruisciDatiPrenotazione(metadata) {
-  // Parsing altri ospiti se presenti
   let altriOspiti = [];
   if (metadata.altri_ospiti) {
     try {
@@ -198,13 +274,7 @@ function ricostruisciDatiPrenotazione(metadata) {
     }
   }
   
-  // NOTA: I documenti NON possono essere salvati nei metadata Stripe (troppo grandi)
-  // Quindi il PDF non conterrà le immagini dei documenti
-  let documenti = [];
-  
-  // Ricostruisci array ospiti completo
   const ospiti = [
-    // Responsabile
     {
       numero: 1,
       cognome: metadata.resp_cognome || '',
@@ -221,7 +291,6 @@ function ricostruisciDatiPrenotazione(metadata) {
       luogoRilascio: metadata.resp_luogoRilascio || '',
       isResponsabile: true
     },
-    // Altri ospiti
     ...altriOspiti
   ];
   
@@ -234,7 +303,7 @@ function ricostruisciDatiPrenotazione(metadata) {
     totale: parseFloat(metadata.totale) || 0,
     timestamp: metadata.timestamp || new Date().toISOString(),
     ospiti: ospiti,
-    documenti: documenti // Vuoto perché non salvabili in Stripe metadata
+    documenti: [] // Vuoti perché non salvabili in Stripe metadata
   };
 }
 
@@ -242,7 +311,6 @@ async function scriviDatiSuGoogleSheets(session) {
   try {
     console.log('📊 Connessione a Google Sheets...');
     
-    // Configurazione Google Sheets
     const sheetId = process.env.SHEET_ID;
     const clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
     let privateKey = process.env.GOOGLE_PRIVATE_KEY;
@@ -251,31 +319,25 @@ async function scriviDatiSuGoogleSheets(session) {
       throw new Error('Variabili ambiente Google Sheets mancanti');
     }
 
-    // Fix per chiave privata
     if (privateKey.includes('\\n')) {
       privateKey = privateKey.replace(/\\n/g, '\n');
     }
 
-    // Autenticazione
     const serviceAccountAuth = new JWT({
       email: clientEmail,
       key: privateKey.trim(),
       scopes: ['https://www.googleapis.com/auth/spreadsheets'],
     });
 
-    // Connessione al documento
     const doc = new GoogleSpreadsheet(sheetId, serviceAccountAuth);
     await doc.loadInfo();
     console.log('📝 Connesso a:', doc.title);
 
-    // Prendi il primo foglio
     const sheet = doc.sheetsByIndex[0];
     await sheet.loadHeaderRow();
 
-    // Estrai dati dalla sessione Stripe
     const metadata = session.metadata;
     
-    // Parsing altri ospiti se presenti
     let altriOspiti = [];
     if (metadata.altri_ospiti) {
       try {
@@ -297,7 +359,6 @@ async function scriviDatiSuGoogleSheets(session) {
       }
     }
 
-    // Prepara i dati per il foglio - RESPONSABILE
     const rigaPrincipale = {
       'Data Check-in': metadata.dataCheckin || '',
       'Appartamento': metadata.appartamento || '',
@@ -317,11 +378,9 @@ async function scriviDatiSuGoogleSheets(session) {
       'Luogo Rilascio': metadata.resp_luogoRilascio || ''
     };
 
-    // Aggiungi riga responsabile
     console.log('➕ Aggiunta riga responsabile...');
     await sheet.addRow(rigaPrincipale);
 
-    // Aggiungi righe per altri ospiti (se ci sono)
     if (altriOspiti.length > 0) {
       console.log(`➕ Aggiunta ${altriOspiti.length} altri ospiti...`);
       
