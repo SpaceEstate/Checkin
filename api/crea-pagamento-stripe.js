@@ -29,7 +29,7 @@ export default async function handler(req, res) {
       totale,
       ospiti = [],
       timestamp,
-      // AGGIUNTO: URL di ritorno dal frontend
+      tempSessionId, // NUOVO: ID sessione temporanea per recuperare documenti
       successUrl,
       cancelUrl
     } = req.body;
@@ -54,6 +54,7 @@ export default async function handler(req, res) {
       numeroOspiti,
       totale,
       responsabile: `${responsabile.nome} ${responsabile.cognome}`,
+      tempSessionId: tempSessionId || 'N/A',
       successUrl,
       cancelUrl
     });
@@ -67,6 +68,9 @@ export default async function handler(req, res) {
       tipoGruppo: tipoGruppo || '',
       totale: totale.toString(),
       timestamp: timestamp || new Date().toISOString(),
+      
+      // IMPORTANTE: Salva temp_session_id per il webhook
+      temp_session_id: tempSessionId || '',
       
       // Dati responsabile
       resp_cognome: responsabile.cognome || '',
@@ -83,7 +87,7 @@ export default async function handler(req, res) {
       resp_luogoRilascio: responsabile.luogoRilascio || '',
     };
 
-    // Serializza altri ospiti
+    // Serializza altri ospiti (SENZA documenti - troppo grandi)
     const altriOspiti = ospiti.filter(o => o.numero !== 1 && !o.isResponsabile);
     if (altriOspiti.length > 0) {
       const ospitiCompatti = altriOspiti.map(o => ({
@@ -110,6 +114,7 @@ export default async function handler(req, res) {
     });
 
     console.log("💳 Creazione sessione Stripe...");
+    console.log("🔑 Metadata temp_session_id:", metadata.temp_session_id);
 
     // CORREZIONE: URL dinamiche o di fallback
     const finalSuccessUrl = successUrl || "https://spaceestate.github.io/checkin/successo-pagamento.html?session_id={CHECKOUT_SESSION_ID}";
