@@ -5,15 +5,19 @@ import { kv } from '@vercel/kv';
 
 export default async function handler(req, res) {
   // ✅ CORS Headers SEMPRE per TUTTE le richieste
+  res.setHeader("Access-Control-Allow-Credentials", "true");
   res.setHeader("Access-Control-Allow-Origin", "https://spaceestate.github.io");
-  res.setHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Accept");
-  res.setHeader("Access-Control-Max-Age", "86400"); // Cache preflight per 24h
+  res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS,PATCH,DELETE,POST,PUT");
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version"
+  );
   
   // ✅ Gestione preflight OPTIONS
   if (req.method === "OPTIONS") {
     console.log('✅ Preflight OPTIONS handled');
-    return res.status(200).end();
+    res.status(200).end();
+    return;
   }
 
   // === SALVATAGGIO DATI (POST) ===
