@@ -54,7 +54,7 @@ export default async function handler(req, res) {
       await scriviDatiSuGoogleSheets(session);
       console.log('✅ Dati scritti con successo su Google Sheets');
       
-      // 2. NUOVO: Genera PDF e invia email (non bloccante)
+      // 2. Genera PDF e invia email (non bloccante)
       try {
         await generaPDFEInviaEmail(session);
         console.log('✅ PDF generato e email inviata');
@@ -72,59 +72,106 @@ export default async function handler(req, res) {
   return res.status(200).json({ received: true });
 }
 
-// NUOVA FUNZIONE: Genera PDF e invia email
+// FUNZIONE CORRETTA: Genera PDF e invia email
 async function generaPDFEInviaEmail(session) {
   try {
     console.log('📄 Inizio generazione PDF e invio email...');
     
     const metadata = session.metadata;
     
-    // Ricostruisci dati prenotazione dal metadata
-    const datiPrenotazione = ricostruisciDatiPrenotazione(metadata);
+    // RECUPERA DATI SALVATI TEMPORANEAMENTE (con documenti)
+    const tempSessionId = metadata.temp_session_id;
     
-    // Estrai email del cliente (se disponibile)
-    const emailCliente = session.customer_details?.email || 
-                        metadata.email_cliente || 
-                        process.env.EMAIL_PROPRIETARIO; // Fallback al tuo email
-    
-    if (!emailCliente) {
-      console.warn('⚠️ Email cliente non trovata, skip invio PDF');
+    if (!tempSessionId) {
+      console.warn('⚠️ temp_session_id non trovato nei metadata. Genero PDF senza documenti.');
+      const datiPrenotazione = ricostruisciDatiPrenotazione(metadata);
+      await inviaEmailConDati(session, datiPrenotazione);
       return;
     }
     
+    console.log('🔍 Recupero dati temporanei per:', tempSessionId);
+    
     // Determina l'URL base
-    const baseUrl = process.env.BASE_URL || 
-                   process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 
-                   'https://checkin-six-coral.vercel.app';
+    const baseUrl = process.env.VERCEL_URL 
+      ? `https://${process.env.VERCEL_URL}` 
+      : 'https://checkin-six-coral.vercel.app';
     
-    console.log('🌐 Chiamata API PDF a:', `${baseUrl}/api/genera-pdf-email`);
+    const recuperoUrl = `${baseUrl}/api/salva-dati-temporanei?sessionId=${tempSessionId}`;
     
-    // Chiamata alla API di generazione PDF
-    const response = await fetch(`${baseUrl}/api/genera-pdf-email`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': 'CheckinWebhook/1.0'
-      },
-      body: JSON.stringify({
-        datiPrenotazione: datiPrenotazione,
-        emailDestinatario: emailDestinatario
-      }),
-      timeout: 30000 // 30 secondi timeout
+    const recuperoResponse = await fetch(recuperoUrl, {
+      method: 'GET',
+      headers: { 'User-Agent': 'CheckinWebhook/1.0' },
+      signal: AbortSignal.timeout(15000)
     });
     
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Errore API PDF (${response.status}): ${errorText}`);
+    if (!recuperoResponse.ok) {
+      console.warn(`⚠️ Dati temporanei non recuperabili (${recuperoResponse.status}). Procedo senza documenti.`);
+      const datiPrenotazione = ricostruisciDatiPrenotazione(metadata);
+      await inviaEmailConDati(session, datiPrenotazione);
+      return;
     }
     
-    const result = await response.json();
-    console.log('✅ Risposta API PDF:', result.success ? 'SUCCESS' : result);
+    const recuperoResult = await recuperoResponse.json();
+    
+    if (!recuperoResult.success || !recuperoResult.datiPrenotazione) {
+      throw new Error('Dati prenotazione non trovati nella risposta');
+    }
+    
+    console.log(`✅ Dati recuperati: ${recuperoResult.datiPrenotazione.documenti?.length || 0} documenti`);
+    
+    // Invia email con dati completi (inclusi documenti)
+    await inviaEmailConDati(session, recuperoResult.datiPrenotazione);
     
   } catch (error) {
     console.error('❌ Errore generazione PDF/email:', error);
-    throw error; // Rilancia per logging, ma non blocca il webhook principale
+    throw error;
   }
+}
+
+// NUOVA FUNZIONE: Invio email con dati completi
+async function inviaEmailConDati(session, datiPrenotazione) {
+  const emailCliente = session.customer_details?.email || 
+                      session.metadata.email_cliente || 
+                      null;
+  
+  const emailDestinatario = process.env.EMAIL_PROPRIETARIO;
+  
+  if (!emailDestinatario) {
+    console.error('❌ EMAIL_PROPRIETARIO non configurata');
+    throw new Error('Email destinatario mancante');
+  }
+  
+  console.log('📧 Email destinatario:', emailDestinatario);
+  if (emailCliente) console.log('📧 Email cliente:', emailCliente);
+  
+  const baseUrl = process.env.VERCEL_URL 
+    ? `https://${process.env.VERCEL_URL}` 
+    : 'https://checkin-six-coral.vercel.app';
+  
+  const apiUrl = `${baseUrl}/api/genera-pdf-email`;
+  console.log('🌐 Chiamata API PDF a:', apiUrl);
+  
+  const response = await fetch(apiUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'User-Agent': 'CheckinWebhook/1.0'
+    },
+    body: JSON.stringify({
+      datiPrenotazione: datiPrenotazione,
+      emailDestinatario: emailDestinatario,
+      emailCliente: emailCliente
+    }),
+    signal: AbortSignal.timeout(30000)
+  });
+  
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Errore API PDF (${response.status}): ${errorText}`);
+  }
+  
+  const result = await response.json();
+  console.log('✅ Email inviata con successo:', result.success ? 'SUCCESS' : result);
 }
 
 // FUNZIONE: Ricostruisce i dati completi dal metadata Stripe
@@ -140,7 +187,7 @@ function ricostruisciDatiPrenotazione(metadata) {
         nome: o.no,
         genere: o.g,
         nascita: o.na,
-        eta: o.e,
+        eta: parseInt(o.e) || 0,
         cittadinanza: o.ci,
         luogoNascita: o.ln,
         comune: o.co || '',
@@ -151,16 +198,9 @@ function ricostruisciDatiPrenotazione(metadata) {
     }
   }
   
-  // Ricostruisci documenti se presenti
+  // NOTA: I documenti NON possono essere salvati nei metadata Stripe (troppo grandi)
+  // Quindi il PDF non conterrà le immagini dei documenti
   let documenti = [];
-  if (metadata.documenti_base64) {
-    try {
-      documenti = JSON.parse(metadata.documenti_base64);
-      console.log(`📎 Trovati ${documenti.length} documenti`);
-    } catch (e) {
-      console.warn('⚠️ Errore parsing documenti:', e.message);
-    }
-  }
   
   // Ricostruisci array ospiti completo
   const ospiti = [
@@ -194,7 +234,7 @@ function ricostruisciDatiPrenotazione(metadata) {
     totale: parseFloat(metadata.totale) || 0,
     timestamp: metadata.timestamp || new Date().toISOString(),
     ospiti: ospiti,
-    documenti: documenti
+    documenti: documenti // Vuoto perché non salvabili in Stripe metadata
   };
 }
 
@@ -240,7 +280,6 @@ async function scriviDatiSuGoogleSheets(session) {
     if (metadata.altri_ospiti) {
       try {
         const ospitiCompatti = JSON.parse(metadata.altri_ospiti);
-        // Decompatta i dati (da formato compatto a formato completo)
         altriOspiti = ospitiCompatti.map(o => ({
           numero: o.n,
           cognome: o.c,
