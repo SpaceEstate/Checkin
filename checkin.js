@@ -410,4 +410,375 @@ function generaStepOspiti() {
         <div class="document-upload">
           <div class="upload-group">
             <label for="ospite${i}_documento_file" class="upload-label">📎 Scegli file</label>
-            <input type="file" id="ospite${i}_documento_file" name="ospite${i}_documento_file"
+            <input type="file" id="ospite${i}_documento_file" name="ospite${i}_documento_file" 
+                   class="upload-input" accept="image/*,.pdf" onchange="handleFileUpload(this, ${i})">
+          </div>
+          <div class="camera-group">
+            <button type="button" class="camera-btn" onclick="openCamera(${i})">📷 Fotografa documento</button>
+          </div>
+        </div>
+        <div id="camera-preview-${i}" class="camera-preview" style="display: none;">
+          <video id="camera-video-${i}" autoplay playsinline></video>
+          <canvas id="camera-canvas-${i}" style="display: none;"></canvas>
+          <div class="camera-controls">
+            <button type="button" class="capture-btn" onclick="capturePhoto(${i})">📸 Scatta</button>
+            <button type="button" class="close-camera-btn" onclick="closeCamera(${i})">✕ Chiudi</button>
+          </div>
+        </div>
+      </div>
+      <div class="button-group">
+        <button type="button" class="btn btn-secondary" onclick="indietroStep()">← Indietro</button>
+        <button type="button" class="btn btn-primary" onclick="prossimoStep()">
+          ${i === numeroOspiti ? 'Vai al riepilogo →' : 'Prossimo ospite →'}
+        </button>
+      </div>
+    `;
+    form.insertBefore(stepDiv, stepFinal);
+  }
+}
+
+function preparaRiepilogo() {
+  const totale = calcolaTotale();
+  const summaryContent = document.getElementById('summary-content');
+  if (!summaryContent) return;
+  
+  let ospitiHTML = '';
+  for (let i = 1; i <= numeroOspiti; i++) {
+    const cognome = document.querySelector(`input[name="ospite${i}_cognome"]`)?.value || '';
+    const nome = document.querySelector(`input[name="ospite${i}_nome"]`)?.value || '';
+    const nascita = document.querySelector(`input[name="ospite${i}_nascita"]`)?.value || '';
+    const eta = nascita ? calcolaEta(nascita) : 0;
+    ospitiHTML += `
+      <div class="guest-summary">
+        <strong>${cognome} ${nome}</strong> ${i === 1 ? '(Responsabile)' : ''}
+        <span class="age">Età: ${eta} anni ${eta >= 4 ? '(soggetto a tassa)' : '(esente)'}</span>
+      </div>
+    `;
+  }
+  
+  summaryContent.innerHTML = `
+    <div class="summary-section">
+      <h3>📍 Dettagli soggiorno</h3>
+      <div class="summary-item"><span>Data Check-in:</span><span><strong>${formatDataItaliana(dataCheckin)}</strong></span></div>
+      <div class="summary-item"><span>Appartamento:</span><span><strong>${document.getElementById('appartamento')?.value || 'N/A'}</strong></span></div>
+      <div class="summary-item"><span>Numero ospiti:</span><span><strong>${numeroOspiti}</strong></span></div>
+      <div class="summary-item"><span>Numero notti:</span><span><strong>${numeroNotti}</strong></span></div>
+    </div>
+    <div class="summary-section">
+      <h3>👥 Ospiti</h3>
+      ${ospitiHTML}
+    </div>
+    <div class="summary-section">
+      <h3>💰 Totale tassa di soggiorno</h3>
+      <div class="total-amount">€${totale.toFixed(2)}</div>
+      <small class="tax-note">Tassa di €1,50 per notte per ospiti dai 4 anni in su</small>
+    </div>
+  `;
+  aggiornaBottonePagamento(totale);
+}
+
+function aggiornaBottonePagamento(totale) {
+  const finalStep = document.getElementById('step-final');
+  const buttonGroup = finalStep?.querySelector('.button-group');
+  if (!buttonGroup) return;
+  buttonGroup.innerHTML = `
+    <button type="button" class="btn btn-secondary" onclick="indietroStep()">← Indietro</button>
+    <button type="button" class="btn btn-primary btn-payment" onclick="procediAlPagamento()">
+      💳 Paga €${totale.toFixed(2)} con Stripe
+    </button>
+  `;
+}
+
+// Gestione fotocamera
+let currentStream = null;
+
+window.handleFileUpload = function(input, ospiteNum) {
+  const file = input.files?.[0];
+  const label = input.previousElementSibling;
+  if (!label) return;
+  if (file) {
+    if (file.size > 5 * 1024 * 1024) {
+      showNotification('Il file è troppo grande. Dimensione massima: 5MB', 'error');
+      input.value = '';
+      return;
+    }
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+    if (!allowedTypes.includes(file.type)) {
+      showNotification('Formato file non supportato. Usa: JPG, PNG, WebP o PDF', 'error');
+      input.value = '';
+      return;
+    }
+    label.textContent = `✅ ${file.name}`;
+    label.classList.add('has-file');
+    showNotification('Documento caricato con successo', 'success');
+  } else {
+    label.textContent = '📎 Scegli file';
+    label.classList.remove('has-file');
+  }
+}
+
+window.openCamera = async function(ospiteNum) {
+  const preview = document.getElementById(`camera-preview-${ospiteNum}`);
+  const video = document.getElementById(`camera-video-${ospiteNum}`);
+  if (!preview || !video) return;
+  try {
+    const constraints = { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } };
+    currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+    video.srcObject = currentStream;
+    preview.style.display = 'block';
+    showNotification('Fotocamera attivata. Posiziona il documento nel riquadro', 'info');
+  } catch (err) {
+    try {
+      const fallbackConstraints = { video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } } };
+      currentStream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
+      video.srcObject = currentStream;
+      preview.style.display = 'block';
+      showNotification('Fotocamera frontale attivata', 'info');
+    } catch (fallbackErr) {
+      showNotification('Impossibile accedere alla fotocamera: ' + fallbackErr.message, 'error');
+    }
+  }
+}
+
+window.capturePhoto = function(ospiteNum) {
+  const video = document.getElementById(`camera-video-${ospiteNum}`);
+  const canvas = document.getElementById(`camera-canvas-${ospiteNum}`);
+  if (!video || !canvas) return;
+  const ctx = canvas.getContext('2d');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  ctx.drawImage(video, 0, 0);
+  canvas.toBlob((blob) => {
+    if (!blob) {
+      showNotification('Errore nella cattura della foto', 'error');
+      return;
+    }
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+    const fileName = `documento_ospite_${ospiteNum}_${timestamp}.jpg`;
+    const file = new File([blob], fileName, { type: 'image/jpeg' });
+    const fileInput = document.getElementById(`ospite${ospiteNum}_documento_file`);
+    if (fileInput) {
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      fileInput.files = dt.files;
+      const label = fileInput.previousElementSibling;
+      if (label) {
+        label.textContent = `📷 ${fileName}`;
+        label.classList.add('has-file');
+      }
+    }
+    showNotification('Foto acquisita con successo!', 'success');
+  }, 'image/jpeg', 0.85);
+  closeCamera(ospiteNum);
+}
+
+window.closeCamera = function(ospiteNum) {
+  const preview = document.getElementById(`camera-preview-${ospiteNum}`);
+  if (currentStream) {
+    currentStream.getTracks().forEach(track => track.stop());
+    currentStream = null;
+  }
+  if (preview) preview.style.display = 'none';
+}
+
+// === NUOVA FUNZIONE: PAGAMENTO CON SALVATAGGIO DATI ===
+window.procediAlPagamento = async function() {
+  if (!validaPrenotazioneCompleta()) return;
+  
+  const payButton = document.querySelector('.btn-payment');
+  if (payButton) {
+    payButton.disabled = true;
+    payButton.innerHTML = '⏳ Preparazione dati...';
+  }
+  
+  try {
+    // 1. RACCOGLI TUTTI I DATI (inclusi documenti)
+    showNotification('📦 Raccolta documenti in corso...', 'info');
+    const datiCompleti = await raccogliDatiPrenotazione();
+    
+    console.log(`✅ Dati raccolti: ${datiCompleti.ospiti.length} ospiti, ${datiCompleti.documenti.length} documenti`);
+    
+    // 2. GENERA SESSION ID TEMPORANEO
+    const tempSessionId = 'temp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    console.log('🔑 Session ID temporaneo:', tempSessionId);
+    
+    // 3. SALVA DATI SUL SERVER (inclusi documenti base64)
+    if (payButton) payButton.innerHTML = '⏳ Salvataggio dati...';
+    
+    const salvataggioResponse = await fetch(`${API_BASE_URL}/salva-dati-temporanei`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sessionId: tempSessionId,
+        datiPrenotazione: datiCompleti
+      })
+    });
+    
+    if (!salvataggioResponse.ok) {
+      throw new Error('Errore nel salvataggio dei dati');
+    }
+    
+    console.log('💾 Dati salvati temporaneamente sul server');
+    
+    // 4. CREA PAGAMENTO STRIPE (senza documenti nei metadata)
+    if (payButton) payButton.innerHTML = '⏳ Creazione pagamento...';
+    
+    await creaLinkPagamentoConSessionId(datiCompleti, tempSessionId);
+    
+  } catch (error) {
+    console.error('💥 Errore nel processo di pagamento:', error);
+    if (payButton) {
+      payButton.disabled = false;
+      payButton.innerHTML = `💳 Paga €${calcolaTotale().toFixed(2)} con Stripe`;
+    }
+    showNotification('Errore: ' + error.message, 'error');
+  }
+}
+
+function validaPrenotazioneCompleta() {
+  if (!validaStep1()) {
+    showNotification('Errore nei dati generali della prenotazione', 'error');
+    return false;
+  }
+  for (let i = 1; i <= numeroOspiti; i++) {
+    if (!validaStepOspite(i)) {
+      showNotification(`Errore nei dati dell'ospite ${i}`, 'error');
+      return false;
+    }
+  }
+  return true;
+}
+
+async function raccogliDatiPrenotazione() {
+  const datiPrenotazione = {
+    dataCheckin: dataCheckin,
+    appartamento: document.getElementById('appartamento')?.value,
+    numeroOspiti: numeroOspiti,
+    numeroNotti: numeroNotti,
+    tipoGruppo: document.getElementById('tipo-gruppo')?.value || null,
+    totale: calcolaTotale(),
+    ospiti: [],
+    timestamp: new Date().toISOString()
+  };
+
+  for (let i = 1; i <= numeroOspiti; i++) {
+    const ospite = {
+      numero: i,
+      cognome: document.querySelector(`input[name="ospite${i}_cognome"]`)?.value?.trim(),
+      nome: document.querySelector(`input[name="ospite${i}_nome"]`)?.value?.trim(),
+      genere: document.querySelector(`select[name="ospite${i}_genere"]`)?.value,
+      nascita: document.querySelector(`input[name="ospite${i}_nascita"]`)?.value,
+      eta: 0,
+      cittadinanza: document.querySelector(`select[name="ospite${i}_cittadinanza"]`)?.value,
+      luogoNascita: document.querySelector(`select[name="ospite${i}_luogo_nascita"]`)?.value
+    };
+    
+    if (ospite.nascita) ospite.eta = calcolaEta(ospite.nascita);
+    
+    if (ospite.luogoNascita === 'Italia') {
+      ospite.comune = document.querySelector(`input[name="ospite${i}_comune"]`)?.value?.trim();
+      ospite.provincia = document.querySelector(`select[name="ospite${i}_provincia"]`)?.value;
+    }
+    
+    if (i === 1) {
+      ospite.tipoDocumento = document.querySelector(`select[name="ospite1_tipo_documento"]`)?.value;
+      ospite.numeroDocumento = document.querySelector(`input[name="ospite1_numero_documento"]`)?.value?.trim();
+      ospite.luogoRilascio = document.querySelector(`select[name="ospite1_luogo_rilascio"]`)?.value;
+      ospite.isResponsabile = true;
+    }
+    
+    datiPrenotazione.ospiti.push(ospite);
+  }
+  
+  datiPrenotazione.documenti = await raccogliDocumenti();
+  return datiPrenotazione;
+}
+
+async function creaLinkPagamentoConSessionId(datiPrenotazione, tempSessionId) {
+  console.log("💳 Creazione link pagamento Stripe");
+
+  const isLocalhost = window.location.hostname === 'localhost' || 
+                     window.location.hostname === '127.0.0.1';
+
+  if (isLocalhost) {
+    console.log("🧪 MODALITÀ TEST");
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    const sessionId = 'test_session_' + Date.now();
+    window.location.href = `successo-pagamento.html?session_id=${sessionId}&temp_session=${tempSessionId}&success=true`;
+    return;
+  }
+
+  try {
+    const API_ENDPOINT = `${API_BASE_URL}/crea-pagamento-stripe`;
+    console.log("🌐 Chiamata API ->", API_ENDPOINT);
+
+    // Aggiungi il temp_session_id ai metadata per il webhook
+    const datiConMetadata = {
+      ...datiPrenotazione,
+      tempSessionId: tempSessionId, // IMPORTANTE: il webhook userà questo per recuperare i documenti
+      successUrl: `https://spaceestate.github.io/Checkin/successo-pagamento.html?session_id={CHECKOUT_SESSION_ID}&temp_session=${tempSessionId}`,
+      cancelUrl: `${window.location.href}?canceled=true`
+    };
+    
+    const response = await fetch(API_ENDPOINT, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify(datiConMetadata)
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Errore server (${response.status}): ${errorText}`);
+    }
+
+    const result = await response.json();
+    if (!result.checkoutUrl) {
+      throw new Error("URL di pagamento non ricevuto dal server");
+    }
+
+    console.log("🔄 Redirect a Stripe:", result.checkoutUrl);
+    window.location.href = result.checkoutUrl;
+
+  } catch (error) {
+    console.error("💥 Errore creazione pagamento:", error);
+    showNotification("Errore: " + error.message, "error");
+    throw error;
+  }
+}
+
+function gestisciRitornoStripe() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const canceled = urlParams.get('canceled');
+  
+  if (canceled === 'true') {
+    console.log("👈 Pagamento annullato");
+    showNotification('Pagamento annullato. Puoi riprovare quando vuoi.', 'info');
+    const url = new URL(window.location);
+    url.searchParams.delete('canceled');
+    window.history.replaceState({}, document.title, url.toString());
+    const payButton = document.querySelector('.btn-payment');
+    if (payButton) {
+      payButton.disabled = false;
+      payButton.innerHTML = `💳 Paga €${calcolaTotale().toFixed(2)} con Stripe`;
+    }
+  }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  console.log('🚀 Check-in form inizializzato');
+  const dataCheckinInput = document.getElementById('data-checkin');
+  if (dataCheckinInput) {
+    const oggi = new Date().toISOString().split('T')[0];
+    dataCheckinInput.min = oggi;
+  }
+  document.querySelectorAll('.step').forEach(step => step.classList.remove('active'));
+  const firstStep = document.getElementById('step-1');
+  if (firstStep) firstStep.classList.add('active');
+  gestisciRitornoStripe();
+  window.addEventListener('beforeunload', function() {
+    if (currentStream) currentStream.getTracks().forEach(track => track.stop());
+  });
+});
