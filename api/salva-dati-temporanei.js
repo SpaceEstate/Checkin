@@ -1,13 +1,7 @@
 // api/salva-dati-temporanei.js
-// VERSIONE MIGLIORATA con logging dettagliato
+// VERSIONE CON VERCEL KV (Redis) - Risolve il problema della persistenza
 
-// IMPORTANTE: Su Vercel, la Map in memoria si resetta tra richieste
-// Per produzione, considera l'uso di:
-// - Vercel KV (Redis)
-// - Upstash Redis
-// - Database temporaneo
-
-const datiTemporanei = new Map();
+import { kv } from '@vercel/kv';
 
 export default async function handler(req, res) {
   // CORS Headers
@@ -22,7 +16,7 @@ export default async function handler(req, res) {
   // === SALVATAGGIO DATI (POST) ===
   if (req.method === "POST") {
     try {
-      console.log('\n💾 === INIZIO SALVATAGGIO DATI TEMPORANEI ===');
+      console.log('\n💾 === INIZIO SALVATAGGIO DATI (VERCEL KV) ===');
       
       const { sessionId, datiPrenotazione } = req.body;
 
@@ -30,16 +24,14 @@ export default async function handler(req, res) {
       if (!sessionId) {
         console.error('❌ sessionId mancante');
         return res.status(400).json({ 
-          error: "sessionId è obbligatorio",
-          received: { sessionId: !!sessionId }
+          error: "sessionId è obbligatorio"
         });
       }
 
       if (!datiPrenotazione) {
         console.error('❌ datiPrenotazione mancanti');
         return res.status(400).json({ 
-          error: "datiPrenotazione sono obbligatori",
-          received: { datiPrenotazione: !!datiPrenotazione }
+          error: "datiPrenotazione sono obbligatori"
         });
       }
 
@@ -70,35 +62,32 @@ export default async function handler(req, res) {
         });
       }
 
-      // Salva in memoria
+      // Salva su Vercel KV con TTL di 1 ora (3600 secondi)
+      const ttlSeconds = 3600;
       const timestamp = Date.now();
-      const ttl = 3600000; // 1 ora
       
-      datiTemporanei.set(sessionId, {
+      const dataToStore = {
         dati: datiPrenotazione,
         timestamp: timestamp,
-        ttl: ttl,
-        expiresAt: new Date(timestamp + ttl).toISOString()
-      });
+        expiresAt: new Date(timestamp + (ttlSeconds * 1000)).toISOString()
+      };
+      
+      await kv.setex(sessionId, ttlSeconds, JSON.stringify(dataToStore));
 
-      // Cleanup automatico
-      pulisciDatiScaduti();
-
-      // Log stato attuale
-      console.log(`✅ Dati salvati con successo`);
-      console.log(`📦 Sessioni attive in memoria: ${datiTemporanei.size}`);
-      console.log(`⏰ Scadenza: ${new Date(timestamp + ttl).toISOString()}`);
+      console.log(`✅ Dati salvati su Vercel KV con successo`);
+      console.log(`⏰ Scadenza: ${dataToStore.expiresAt}`);
       console.log('💾 === FINE SALVATAGGIO ===\n');
 
       return res.status(200).json({ 
         success: true,
-        message: "Dati salvati temporaneamente",
+        message: "Dati salvati temporaneamente su Vercel KV",
         sessionId: sessionId,
         details: {
           numeroOspiti: datiPrenotazione.ospiti?.length || 0,
           numeroDocumenti: datiPrenotazione.documenti?.length || 0,
           documentiSizeKB: (documentiSize / 1024).toFixed(2),
-          expiresAt: new Date(timestamp + ttl).toISOString()
+          expiresAt: dataToStore.expiresAt,
+          storage: 'Vercel KV (Redis)'
         }
       });
 
@@ -114,7 +103,7 @@ export default async function handler(req, res) {
   // === RECUPERO DATI (GET) ===
   if (req.method === "GET") {
     try {
-      console.log('\n🔍 === INIZIO RECUPERO DATI TEMPORANEI ===');
+      console.log('\n🔍 === INIZIO RECUPERO DATI (VERCEL KV) ===');
       
       const { sessionId } = req.query;
 
@@ -127,46 +116,28 @@ export default async function handler(req, res) {
       }
 
       console.log(`🔑 Richiesta recupero per: ${sessionId}`);
-      console.log(`📦 Sessioni attive: ${datiTemporanei.size}`);
-      
-      // Log tutte le chiavi disponibili (per debug)
-      if (datiTemporanei.size > 0) {
-        console.log('📋 Chiavi disponibili:');
-        for (const [key] of datiTemporanei.entries()) {
-          console.log(`  - ${key}`);
-        }
-      }
 
-      const datiSalvati = datiTemporanei.get(sessionId);
+      // Recupera da Vercel KV
+      const dataString = await kv.get(sessionId);
 
-      if (!datiSalvati) {
+      if (!dataString) {
         console.warn(`⚠️ Dati NON TROVATI per sessione: ${sessionId}`);
-        console.warn('❗ ATTENZIONE: Su Vercel, i dati in memoria si perdono tra invocazioni diverse');
-        console.warn('💡 Soluzione: Usa Vercel KV, Upstash Redis, o un database');
         
         return res.status(404).json({ 
           error: "Dati non trovati o scaduti",
           sessionId: sessionId,
-          note: "Su Vercel, i dati in memoria possono essere persi tra invocazioni. Considera l'uso di Vercel KV o Redis per storage persistente."
+          storage: 'Vercel KV'
         });
       }
 
-      // Verifica TTL
+      // Parse dei dati
+      const datiSalvati = JSON.parse(dataString);
+
+      // Verifica età dati
       const ora = Date.now();
       const etaDati = ora - datiSalvati.timestamp;
       
       console.log(`⏰ Età dati: ${(etaDati / 1000).toFixed(0)} secondi`);
-      console.log(`⏰ TTL rimanente: ${((datiSalvati.ttl - etaDati) / 1000).toFixed(0)} secondi`);
-      
-      if (etaDati > datiSalvati.ttl) {
-        console.warn('⚠️ Dati scaduti');
-        datiTemporanei.delete(sessionId);
-        return res.status(404).json({ 
-          error: "Dati scaduti",
-          expiredAt: new Date(datiSalvati.timestamp + datiSalvati.ttl).toISOString()
-        });
-      }
-
       console.log(`✅ Dati recuperati con successo`);
       console.log(`📊 Ospiti: ${datiSalvati.dati.ospiti?.length || 0}`);
       console.log(`📄 Documenti: ${datiSalvati.dati.documenti?.length || 0}`);
@@ -184,8 +155,8 @@ export default async function handler(req, res) {
       }
 
       // Elimina i dati dopo il recupero (uso singolo)
-      datiTemporanei.delete(sessionId);
-      console.log('🗑️ Dati eliminati dalla memoria (uso singolo)');
+      await kv.del(sessionId);
+      console.log('🗑️ Dati eliminati da Vercel KV (uso singolo)');
       console.log('🔍 === FINE RECUPERO (SUCCESSO) ===\n');
 
       return res.status(200).json({ 
@@ -193,7 +164,8 @@ export default async function handler(req, res) {
         datiPrenotazione: datiSalvati.dati,
         metadata: {
           salvataAlle: new Date(datiSalvati.timestamp).toISOString(),
-          etaSecondi: (etaDati / 1000).toFixed(0)
+          etaSecondi: (etaDati / 1000).toFixed(0),
+          storage: 'Vercel KV'
         }
       });
 
@@ -212,21 +184,4 @@ export default async function handler(req, res) {
     error: "Metodo non consentito",
     allowed: ["POST", "GET", "OPTIONS"]
   });
-}
-
-// Funzione di pulizia dei dati scaduti
-function pulisciDatiScaduti() {
-  const ora = Date.now();
-  let eliminati = 0;
-
-  for (const [sessionId, dati] of datiTemporanei.entries()) {
-    if (ora - dati.timestamp > dati.ttl) {
-      datiTemporanei.delete(sessionId);
-      eliminati++;
-    }
-  }
-
-  if (eliminati > 0) {
-    console.log(`🧹 Pulizia: ${eliminati} sessioni scadute eliminate`);
-  }
 }
