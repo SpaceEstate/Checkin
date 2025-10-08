@@ -1,15 +1,18 @@
 // api/salva-dati-temporanei.js
-// VERSIONE CON VERCEL KV (Redis) - Risolve il problema della persistenza
+// VERSIONE CON CORS CORRETTO
 
 import { kv } from '@vercel/kv';
 
 export default async function handler(req, res) {
-  // CORS Headers
+  // ✅ CORS Headers SEMPRE per TUTTE le richieste
   res.setHeader("Access-Control-Allow-Origin", "https://spaceestate.github.io");
   res.setHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Accept");
+  res.setHeader("Access-Control-Max-Age", "86400"); // Cache preflight per 24h
   
+  // ✅ Gestione preflight OPTIONS
   if (req.method === "OPTIONS") {
+    console.log('✅ Preflight OPTIONS handled');
     return res.status(200).end();
   }
 
