@@ -1,7 +1,7 @@
 {
   "version": 2,
   "headers": [
-    {
+    { 
       "source": "/api/(.*)",
       "headers": [
         { "key": "Access-Control-Allow-Origin", "value": "https://spaceestate.github.io" },
