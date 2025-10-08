@@ -1,7 +1,39 @@
 // api/salva-dati-temporanei.js
-// VERSIONE CON CORS CORRETTO
+// VERSIONE CON REDIS
 
-import { kv } from '@vercel/kv';
+import { createClient } from 'redis';
+
+// Variabile globale per riutilizzare la connessione
+let redisClient = null;
+
+async function getRedisClient() {
+  if (redisClient && redisClient.isOpen) {
+    return redisClient;
+  }
+
+  const redisUrl = process.env.REDIS_URL || process.env.KV_URL;
+  
+  if (!redisUrl) {
+    throw new Error('REDIS_URL o KV_URL non configurato nelle variabili d\'ambiente');
+  }
+
+  redisClient = createClient({
+    url: redisUrl,
+    socket: {
+      tls: true,
+      rejectUnauthorized: false
+    }
+  });
+
+  redisClient.on('error', (err) => {
+    console.error('Redis Client Error:', err);
+  });
+
+  await redisClient.connect();
+  console.log('✅ Redis connesso');
+  
+  return redisClient;
+}
 
 export default async function handler(req, res) {
   // ✅ CORS Headers SEMPRE per TUTTE le richieste
@@ -22,8 +54,10 @@ export default async function handler(req, res) {
 
   // === SALVATAGGIO DATI (POST) ===
   if (req.method === "POST") {
+    let client = null;
+    
     try {
-      console.log('\n💾 === INIZIO SALVATAGGIO DATI (VERCEL KV) ===');
+      console.log('\n💾 === INIZIO SALVATAGGIO DATI (REDIS) ===');
       
       const { sessionId, datiPrenotazione } = req.body;
 
@@ -69,7 +103,10 @@ export default async function handler(req, res) {
         });
       }
 
-      // Salva su Vercel KV con TTL di 1 ora (3600 secondi)
+      // Connessione a Redis
+      client = await getRedisClient();
+
+      // Salva su Redis con TTL di 1 ora (3600 secondi)
       const ttlSeconds = 3600;
       const timestamp = Date.now();
       
@@ -79,22 +116,22 @@ export default async function handler(req, res) {
         expiresAt: new Date(timestamp + (ttlSeconds * 1000)).toISOString()
       };
       
-      await kv.setex(sessionId, ttlSeconds, JSON.stringify(dataToStore));
+      await client.setEx(sessionId, ttlSeconds, JSON.stringify(dataToStore));
 
-      console.log(`✅ Dati salvati su Vercel KV con successo`);
+      console.log(`✅ Dati salvati su Redis con successo`);
       console.log(`⏰ Scadenza: ${dataToStore.expiresAt}`);
       console.log('💾 === FINE SALVATAGGIO ===\n');
 
       return res.status(200).json({ 
         success: true,
-        message: "Dati salvati temporaneamente su Vercel KV",
+        message: "Dati salvati temporaneamente su Redis",
         sessionId: sessionId,
         details: {
           numeroOspiti: datiPrenotazione.ospiti?.length || 0,
           numeroDocumenti: datiPrenotazione.documenti?.length || 0,
           documentiSizeKB: (documentiSize / 1024).toFixed(2),
           expiresAt: dataToStore.expiresAt,
-          storage: 'Vercel KV (Redis)'
+          storage: 'Redis'
         }
       });
 
@@ -109,8 +146,10 @@ export default async function handler(req, res) {
 
   // === RECUPERO DATI (GET) ===
   if (req.method === "GET") {
+    let client = null;
+    
     try {
-      console.log('\n🔍 === INIZIO RECUPERO DATI (VERCEL KV) ===');
+      console.log('\n🔍 === INIZIO RECUPERO DATI (REDIS) ===');
       
       const { sessionId } = req.query;
 
@@ -124,8 +163,11 @@ export default async function handler(req, res) {
 
       console.log(`🔑 Richiesta recupero per: ${sessionId}`);
 
-      // Recupera da Vercel KV
-      const dataString = await kv.get(sessionId);
+      // Connessione a Redis
+      client = await getRedisClient();
+
+      // Recupera da Redis
+      const dataString = await client.get(sessionId);
 
       if (!dataString) {
         console.warn(`⚠️ Dati NON TROVATI per sessione: ${sessionId}`);
@@ -133,7 +175,7 @@ export default async function handler(req, res) {
         return res.status(404).json({ 
           error: "Dati non trovati o scaduti",
           sessionId: sessionId,
-          storage: 'Vercel KV'
+          storage: 'Redis'
         });
       }
 
@@ -162,8 +204,8 @@ export default async function handler(req, res) {
       }
 
       // Elimina i dati dopo il recupero (uso singolo)
-      await kv.del(sessionId);
-      console.log('🗑️ Dati eliminati da Vercel KV (uso singolo)');
+      await client.del(sessionId);
+      console.log('🗑️ Dati eliminati da Redis (uso singolo)');
       console.log('🔍 === FINE RECUPERO (SUCCESSO) ===\n');
 
       return res.status(200).json({ 
@@ -172,7 +214,7 @@ export default async function handler(req, res) {
         metadata: {
           salvataAlle: new Date(datiSalvati.timestamp).toISOString(),
           etaSecondi: (etaDati / 1000).toFixed(0),
-          storage: 'Vercel KV'
+          storage: 'Redis'
         }
       });
 
