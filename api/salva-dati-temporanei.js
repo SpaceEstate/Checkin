@@ -18,26 +18,40 @@ async function getRedisClient() {
   }
 
   console.log('🔌 Creazione nuovo client Redis...');
+  console.log('📋 URL format:', redisUrl.split('@')[0]); // Log senza password
+  
+  // Determina se usare TLS in base all'URL
+  const useTLS = redisUrl.startsWith('rediss://');
   
   redisClient = createClient({
     url: redisUrl,
     socket: {
-      tls: true,
+      tls: useTLS,
       rejectUnauthorized: false,
       connectTimeout: 10000,
     },
   });
 
   redisClient.on("error", (err) => {
-    console.error("❌ Redis Error:", err);
+    console.error("❌ Redis Error:", err.message);
   });
 
   redisClient.on("connect", () => {
-    console.log("✅ Redis connesso");
+    console.log("✅ Redis connesso!");
   });
 
-  await redisClient.connect();
-  return redisClient;
+  redisClient.on("ready", () => {
+    console.log("✅ Redis pronto!");
+  });
+
+  try {
+    await redisClient.connect();
+    console.log("✅ Connessione Redis stabilita");
+    return redisClient;
+  } catch (error) {
+    console.error("❌ Errore connessione Redis:", error.message);
+    throw error;
+  }
 }
 
 export default async function handler(req, res) {
