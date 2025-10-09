@@ -1,135 +1,4 @@
-// api/genera-pdf-email.js
-// VERSIONE BROWSERLESS con FALLBACK - Funziona su Vercel!
-import nodemailer from 'nodemailer';
-
-export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Metodo non consentito' });
-  }
-
-  console.log('📧 Inizio generazione PDF e invio email (Browserless)');
-
-  try {
-    const { datiPrenotazione, emailDestinatario } = req.body;
-
-    if (!datiPrenotazione || !emailDestinatario) {
-      return res.status(400).json({ 
-        error: 'Dati prenotazione ed email destinatario sono obbligatori' 
-      });
-    }
-
-    // 1. Genera HTML per il PDF
-    const htmlContent = generaHTMLRiepilogo(datiPrenotazione);
-    
-    let pdfBuffer = null;
-    let pdfGenerato = false;
-
-    // 2. PROVA a generare PDF con Browserless (con gestione errori)
-    try {
-      console.log('🌐 Tentativo generazione PDF con Browserless...');
-      pdfBuffer = await generaPDFConBrowserless(htmlContent);
-      pdfGenerato = true;
-      console.log('✅ PDF generato con successo');
-    } catch (pdfError) {
-      console.warn('⚠️ Impossibile generare PDF:', pdfError.message);
-      console.log('📧 Procedo con invio email senza PDF');
-    }
-    
-    // 3. Invia email (con o senza PDF)
-    console.log('📧 Invio email in corso...');
-    if (pdfGenerato && pdfBuffer) {
-      await inviaEmailConPDF(emailDestinatario, datiPrenotazione, pdfBuffer);
-      console.log('✅ Email inviata CON PDF allegato');
-    } else {
-      await inviaEmailSenzaPDF(emailDestinatario, datiPrenotazione);
-      console.log('✅ Email inviata SENZA PDF (solo testo)');
-    }
-    
-    return res.status(200).json({ 
-      success: true, 
-      message: pdfGenerato 
-        ? 'PDF generato e email inviata con successo' 
-        : 'Email inviata con successo (PDF non disponibile)',
-      pdfGenerato: pdfGenerato
-    });
-
-  } catch (error) {
-    console.error('❌ Errore finale:', error);
-    return res.status(500).json({ 
-      error: 'Errore interno: ' + error.message 
-    });
-  }
-}
-
-// FUNZIONE: Genera PDF usando Browserless API
-async function generaPDFConBrowserless(htmlContent) {
-  const browserlessToken = process.env.BROWSERLESS_API_TOKEN;
-  
-  // DEBUG: Verifica token
-  console.log('🔍 DEBUG Token:', {
-    isDefined: !!browserlessToken,
-    length: browserlessToken?.length || 0,
-    first10: browserlessToken?.substring(0, 10) || 'N/A'
-  });
-  
-  if (!browserlessToken) {
-    throw new Error('BROWSERLESS_API_TOKEN non configurato nelle variabili ambiente');
-  }
-
-  try {
-    console.log('📤 Invio richiesta a Browserless...');
-    console.log('🔗 URL: https://production-sfo.browserless.io/pdf');
-    
-    // ⚠️ IMPORTANTE: Il token va nell'URL come query parameter!
-    const url = `https://production-sfo.browserless.io/pdf?token=${browserlessToken}`;
-    
-    const requestBody = {
-      html: htmlContent,
-      options: {
-        format: 'A4',
-        margin: {
-          top: '20mm',
-          bottom: '20mm',
-          left: '20mm',
-          right: '20mm'
-        },
-        printBackground: true,
-        scale: 1
-      }
-    };
-
-    console.log('📦 Request body size:', JSON.stringify(requestBody).length, 'bytes');
-    
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Cache-Control': 'no-cache'
-      },
-      body: JSON.stringify(requestBody)
-    });
-
-    console.log('📡 Response status:', response.status);
-    console.log('📡 Response headers:', Object.fromEntries(response.headers.entries()));
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ Errore Browserless:', errorText);
-      throw new Error(`Browserless error (${response.status}): ${errorText}`);
-    }
-
-    const pdfBuffer = await response.arrayBuffer();
-    const sizeKB = (pdfBuffer.byteLength / 1024).toFixed(2);
-    console.log(`✅ PDF generato: ${sizeKB} KB`);
-    
-    return Buffer.from(pdfBuffer);
-    
-  } catch (error) {
-    console.error('❌ Errore generazione PDF:', error.message);
-    throw error;
-  }
-}
-
+// Funzione CORRETTA per generare HTML del PDF con TUTTI i campi
 function generaHTMLRiepilogo(dati) {
   const dataFormattata = new Date(dati.dataCheckin).toLocaleDateString('it-IT', {
     weekday: 'long',
@@ -349,6 +218,16 @@ function generaHTMLRiepilogo(dati) {
                   <div class="info-label">Cittadinanza</div>
                   <div class="info-value">${ospite.cittadinanza || 'N/A'}</div>
                 </div>
+                <div class="info-item">
+                  <div class="info-label">Luogo Nascita</div>
+                  <div class="info-value">${ospite.luogoNascita || 'N/A'}</div>
+                </div>
+                ${ospite.comune && ospite.provincia ? `
+                <div class="info-item">
+                  <div class="info-label">Comune/Provincia</div>
+                  <div class="info-value">${ospite.comune} (${ospite.provincia})</div>
+                </div>
+                ` : ''}
               </div>
               
               ${ospite.isResponsabile && ospite.tipoDocumento ? `
@@ -360,6 +239,10 @@ function generaHTMLRiepilogo(dati) {
                 <div class="info-item">
                   <div class="info-label">Numero Documento</div>
                   <div class="info-value">${ospite.numeroDocumento || 'N/A'}</div>
+                </div>
+                <div class="info-item">
+                  <div class="info-label">Luogo Rilascio</div>
+                  <div class="info-value">${ospite.luogoRilascio || 'N/A'}</div>
                 </div>
               </div>
               ` : ''}
@@ -392,54 +275,7 @@ function generaHTMLRiepilogo(dati) {
   `;
 }
 
-// FUNZIONE: Invia email CON PDF
-async function inviaEmailConPDF(emailDestinatario, dati, pdfBuffer) {
-  const transporter = nodemailer.createTransport({
-    service: 'yahoo',
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASSWORD
-    }
-  });
-
-  const oggetto = `Riepilogo Check-in - ${dati.appartamento || 'Appartamento'} - ${new Date(dati.dataCheckin).toLocaleDateString('it-IT')}`;
-  
-  const corpoEmail = `
-Nuovo check-in ricevuto!
-
-DETTAGLI SOGGIORNO:
-- Data check-in: ${new Date(dati.dataCheckin).toLocaleDateString('it-IT')}
-- Appartamento: ${dati.appartamento || 'Non specificato'}
-- Ospiti: ${dati.numeroOspiti || 0}
-- Notti: ${dati.numeroNotti || 0}
-- Totale tassa soggiorno: €${(dati.totale || 0).toFixed(2)}
-
-Responsabile: ${dati.ospiti?.[0]?.cognome || 'N/A'} ${dati.ospiti?.[0]?.nome || 'N/A'}
-
-📎 Vedi PDF allegato per il riepilogo completo con i documenti degli ospiti.
-
----
-Sistema Check-in Automatico
-  `;
-
-  const mailOptions = {
-    from: process.env.EMAIL_USER,
-    to: emailDestinatario,
-    subject: oggetto,
-    text: corpoEmail,
-    attachments: [
-      {
-        filename: `checkin-${Date.now()}.pdf`,
-        content: pdfBuffer,
-        contentType: 'application/pdf'
-      }
-    ]
-  };
-
-  await transporter.sendMail(mailOptions);
-}
-
-// FUNZIONE: Invia email SENZA PDF (fallback)
+// Anche per l'email SENZA PDF, aggiungi i campi nella lista ospiti:
 async function inviaEmailSenzaPDF(emailDestinatario, dati) {
   const transporter = nodemailer.createTransport({
     service: 'yahoo',
@@ -451,7 +287,7 @@ async function inviaEmailSenzaPDF(emailDestinatario, dati) {
 
   const oggetto = `Check-in Ricevuto - ${dati.appartamento || 'Appartamento'} - ${new Date(dati.dataCheckin).toLocaleDateString('it-IT')}`;
   
-  // Genera lista ospiti dettagliata
+  // Genera lista ospiti dettagliata CON luogo nascita e rilascio
   let listaOspiti = '';
   (dati.ospiti || []).forEach((ospite, index) => {
     listaOspiti += `
@@ -460,6 +296,9 @@ ${index + 1}. ${ospite.cognome} ${ospite.nome}${ospite.isResponsabile ? ' (RESPO
    - Data nascita: ${ospite.nascita ? new Date(ospite.nascita).toLocaleDateString('it-IT') : 'N/A'}
    - Età: ${ospite.eta || 0} anni
    - Cittadinanza: ${ospite.cittadinanza || 'N/A'}
+   - Luogo nascita: ${ospite.luogoNascita || 'N/A'}${ospite.comune ? ` (${ospite.comune}, ${ospite.provincia})` : ''}${ospite.isResponsabile && ospite.tipoDocumento ? `
+   - Documento: ${ospite.tipoDocumento} - ${ospite.numeroDocumento || 'N/A'}
+   - Luogo rilascio: ${ospite.luogoRilascio || 'N/A'}` : ''}
 `;
   });
   
@@ -487,7 +326,9 @@ RESPONSABILE DELLA PRENOTAZIONE
 ═══════════════════════════════════════
 Nome: ${dati.ospiti?.[0]?.nome || 'N/A'}
 Cognome: ${dati.ospiti?.[0]?.cognome || 'N/A'}
-${dati.ospiti?.[0]?.tipoDocumento ? `Documento: ${dati.ospiti[0].tipoDocumento} - ${dati.ospiti[0].numeroDocumento}` : ''}
+Luogo nascita: ${dati.ospiti?.[0]?.luogoNascita || 'N/A'}
+${dati.ospiti?.[0]?.tipoDocumento ? `Documento: ${dati.ospiti[0].tipoDocumento} - ${dati.ospiti[0].numeroDocumento}
+Luogo rilascio: ${dati.ospiti[0].luogoRilascio || 'N/A'}` : ''}
 
 ---
 Sistema Check-in Automatico
