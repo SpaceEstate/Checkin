@@ -851,4 +851,380 @@ body {
   .checkbox-custom {
     align-self: flex-start;
   }
+    /* === MIGLIORAMENTI PER MOBILE - SEZIONE DATE INPUT === */
+
+/* Fix completo per input date su iOS e Android */
+.form-input[type="date"],
+.form-input[type="datetime-local"],
+.form-input[type="month"],
+.form-input[type="time"],
+.form-input[type="week"] {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-color: white;
+  padding: 12px 14px;
+  font-size: 16px; /* Previene lo zoom su iOS */
+  font-family: inherit;
+  border: 2px solid #e8dcc0;
+  border-radius: 12px;
+  width: 100%;
+  color: #8b7d6b;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+/* Rimuovi icona predefinita per Android */
+.form-input[type="date"]::-webkit-calendar-picker-indicator {
+  display: none;
+}
+
+.form-input[type="date"]::-webkit-datetime-edit {
+  padding: 0;
+}
+
+.form-input[type="date"]::-webkit-datetime-edit-fields-wrapper {
+  padding: 0;
+}
+
+.form-input[type="date"]::-webkit-datetime-edit-text {
+  color: #8b7d6b;
+  padding: 0 2px;
+}
+
+.form-input[type="date"]::-webkit-datetime-edit-month-field,
+.form-input[type="date"]::-webkit-datetime-edit-day-field,
+.form-input[type="date"]::-webkit-datetime-edit-year-field,
+.form-input[type="date"]::-webkit-datetime-edit-hour-field,
+.form-input[type="date"]::-webkit-datetime-edit-minute-field {
+  color: #8b7d6b;
+  font-size: inherit;
+}
+
+.form-input[type="date"]::-webkit-outer-spin-button,
+.form-input[type="date"]::-webkit-inner-spin-button {
+  display: none;
+}
+
+/* Aggiungi icona custom per i desktop */
+.form-input[type="date"]::after {
+  content: '📅';
+  position: absolute;
+  right: 12px;
+  pointer-events: none;
+}
+
+/* Focus state migliorate */
+.form-input[type="date"]:focus,
+.form-input[type="datetime-local"]:focus {
+  outline: none;
+  border-color: #b89968;
+  box-shadow: 0 0 0 3px rgba(184, 153, 104, 0.15);
+  transform: translateY(-2px);
+}
+
+/* === CONTENITORE CUSTOM DATE INPUT PER MOBILE === */
+.date-input-wrapper {
+  position: relative;
+  display: block;
+}
+
+/* Classe per indicare quando è mobile */
+.date-input-wrapper.mobile-date-input {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.date-input-wrapper.mobile-date-input input {
+  flex: 1;
+  text-align: center;
+  padding: 12px;
+  font-size: 16px;
+  border: 2px solid #e8dcc0;
+  border-radius: 8px;
+  background: white;
+  color: #8b7d6b;
+}
+
+.date-input-wrapper.mobile-date-input input::placeholder {
+  color: #d4c7b5;
+}
+
+.date-input-wrapper.mobile-date-input input:focus {
+  outline: none;
+  border-color: #b89968;
+  box-shadow: 0 0 0 3px rgba(184, 153, 104, 0.15);
+}
+
+/* === SPINNER PERSONALIZZATO PER NUMERI === */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+/* === MIGLIORAMENTI SELECT PER MOBILE === */
+.form-select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%238b7d6b' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 20px;
+  padding-right: 40px;
+  font-size: 16px;
+  min-height: 48px;
+}
+
+.form-select:focus {
+  outline: none;
+  border-color: #b89968;
+  box-shadow: 0 0 0 3px rgba(184, 153, 104, 0.15);
+}
+
+/* === GESTIONE KEYBOARD VIRTUAL MOBILE === */
+@media (max-width: 768px) {
+  /* Aumenta padding per evitare tastiera virtuale */
+  .form-input,
+  .form-select {
+    font-size: 16px; /* Previene zoom su iOS quando focus */
+    min-height: 48px;
+    padding: 12px 14px;
+  }
+
+  /* Ripulisci form per mobile */
+  .form-group {
+    margin-bottom: 20px;
+  }
+
+  .form-label {
+    font-size: 0.95rem;
+    margin-bottom: 8px;
+  }
+
+  /* Date input più grande su mobile */
+  .form-input[type="date"],
+  .form-input[type="datetime-local"] {
+    font-size: 16px;
+    min-height: 50px;
+    padding: 14px 12px;
+  }
+
+  /* Select più grandi su mobile */
+  .form-select {
+    min-height: 50px;
+    font-size: 16px;
+  }
+
+  /* Ridimensiona il riquadro form su Android */
+  .form-container {
+    padding: 20px;
+  }
+
+  .form-grid {
+    gap: 15px;
+  }
+
+  /* Migliora usabilità bottoni */
+  .btn {
+    min-height: 48px;
+    font-size: 1rem;
+    padding: 14px 24px;
+  }
+
+  /* Aggiungi spazio extra dopo l'ultimo input prima della tastiera */
+  .form-group:last-of-type {
+    margin-bottom: 30px;
+  }
+
+  /* Riduci header su mobile */
+  .header h1 {
+    font-size: 1.8rem;
+  }
+
+  .header p {
+    font-size: 1rem;
+  }
+
+  .step-title {
+    font-size: 1.5rem;
+  }
+
+  /* Camera preview responsive */
+  .camera-preview video {
+    max-width: 100%;
+    height: auto;
+  }
+
+  /* Documenti sezione */
+  .document-upload {
+    grid-template-columns: 1fr;
+    gap: 15px;
+  }
+
+  .document-section {
+    padding: 20px;
+    margin: 20px 0;
+  }
+
+  /* Privacy checkbox alignment */
+  .privacy-checkbox {
+    flex-direction: row;
+    gap: 12px;
+  }
+
+  .checkbox-custom {
+    min-width: 22px;
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+    margin-top: 0;
+  }
+
+  .privacy-text {
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+
+  /* Summary section su mobile */
+  .summary-section {
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+
+  .summary-title {
+    font-size: 1.2rem;
+  }
+
+  .summary-item {
+    font-size: 0.95rem;
+    padding: 8px 0;
+  }
+
+  /* Riduci gap bottoni */
+  .button-group {
+    gap: 10px;
+    margin-top: 30px;
+  }
+
+  .btn {
+    width: 100%;
+    margin-bottom: 0;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+}
+
+/* === OTTIMIZZAZIONE ULTRA-MOBILE (< 480px) === */
+@media (max-width: 480px) {
+  .form-input,
+  .form-select,
+  .btn {
+    font-size: 16px; /* Cruciale per iOS */
+  }
+
+  .form-container {
+    padding: 15px;
+  }
+
+  .header {
+    padding: 30px 15px;
+  }
+
+  .header h1 {
+    font-size: 1.6rem;
+    margin-bottom: 8px;
+  }
+
+  .header p {
+    font-size: 0.95rem;
+  }
+
+  .step-title {
+    font-size: 1.3rem;
+    margin-bottom: 8px;
+  }
+
+  .step-subtitle {
+    font-size: 0.95rem;
+  }
+
+  .form-group {
+    margin-bottom: 15px;
+  }
+
+  .form-label {
+    font-size: 0.9rem;
+    margin-bottom: 6px;
+  }
+
+  .form-input,
+  .form-select {
+    min-height: 48px;
+    padding: 12px;
+    font-size: 16px;
+  }
+
+  .btn {
+    padding: 12px 20px;
+    min-height: 48px;
+    border-radius: 8px;
+  }
+
+  .summary-item {
+    padding: 6px 0;
+    font-size: 0.9rem;
+  }
+
+  .privacy-text {
+    font-size: 0.85rem;
+  }
+
+  .document-section {
+    padding: 15px;
+    margin: 15px 0;
+  }
+
+  .capture-btn,
+  .close-camera-btn,
+  .camera-btn {
+    padding: 12px 20px;
+    font-size: 0.9rem;
+    min-height: 44px;
+  }
+}
+
+/* === ACCESSIBILITÀ TOUCH === */
+@media (hover: none) and (pointer: coarse) {
+  /* Touch devices */
+  .btn,
+  .form-input,
+  .form-select,
+  .upload-label,
+  .camera-btn,
+  .checkbox-custom {
+    min-height: 44px;
+    min-width: 44px;
+    /* AA WCAG - minimo 44x44 pixel per target touch */
+  }
+
+  /* Rimuovi hover effects su touch */
+  .btn:hover::before,
+  .form-input:hover,
+  .form-select:hover,
+  .upload-label:hover {
+    transform: none;
+  }
+
+  .btn:active {
+    transform: scale(0.98);
+  }
+
 }
