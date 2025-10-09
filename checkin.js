@@ -4,7 +4,7 @@ let numeroOspiti = 0;
 let numeroNotti = 0;
 let dataCheckin = '';
 let stepGenerated = false;
-
+ 
 const API_BASE_URL = 'https://checkin-six-coral.vercel.app/api';
 
 // Stati, documenti, province (come prima - omessi per brevità)
