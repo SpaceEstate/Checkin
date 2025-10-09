@@ -78,10 +78,10 @@ async function generaPDFConBrowserless(htmlContent) {
 
   try {
     console.log('📤 Invio richiesta a Browserless...');
-    console.log('🔗 URL: https://chrome.browserless.io/pdf');
+    console.log('🔗 URL: https://production-sfo.browserless.io/pdf');
     
     // ⚠️ IMPORTANTE: Il token va nell'URL come query parameter!
-    const url = `https://chrome.browserless.io/pdf?token=${browserlessToken}`;
+    const url = `https://production-sfo.browserless.io/pdf?token=${browserlessToken}`;
     
     const requestBody = {
       html: htmlContent,
