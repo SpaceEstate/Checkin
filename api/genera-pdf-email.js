@@ -80,8 +80,10 @@ async function generaPDFConBrowserless(htmlContent) {
     console.log('📤 Invio richiesta a Browserless...');
     console.log('🔗 URL: https://chrome.browserless.io/pdf');
     
+    // ⚠️ IMPORTANTE: Il token va nell'URL come query parameter!
+    const url = `https://chrome.browserless.io/pdf?token=${browserlessToken}`;
+    
     const requestBody = {
-      token: browserlessToken,
       html: htmlContent,
       options: {
         format: 'A4',
@@ -98,7 +100,7 @@ async function generaPDFConBrowserless(htmlContent) {
 
     console.log('📦 Request body size:', JSON.stringify(requestBody).length, 'bytes');
     
-    const response = await fetch('https://chrome.browserless.io/pdf', {
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
