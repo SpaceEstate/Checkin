@@ -7,7 +7,7 @@
     "stripe": "^14.11.0",
     "google-spreadsheet": "^5.0.2",
     "google-auth-library": "^9.4.1",
-    "puppeteer": "^21.6.1",
+    
     "nodemailer": "^6.9.8",
     "redis": "^4.7.0"
   },
