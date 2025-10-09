@@ -1,9 +1,15 @@
 { 
   "name": "space-estate",
   "version": "1.0.0",
+  "description": "Sistema check-in con pagamento Stripe e gestione documenti",
+  "type": "module",
   "dependencies": {
-    "stripe": "^14.0.0",
-    "redis": "^4.10.0"
+    "stripe": "^14.11.0",
+    "google-spreadsheet": "^5.0.2",
+    "google-auth-library": "^9.4.1",
+    "puppeteer": "^21.6.1",
+    "nodemailer": "^6.9.8",
+    "redis": "^4.7.0"
   },
   "engines": {
     "node": ">=18.0.0"
