@@ -1,13 +1,13 @@
 // api/genera-pdf-email.js
-import puppeteer from 'puppeteer';
+// VERSIONE BROWSERLESS - Funziona su Vercel!
 import nodemailer from 'nodemailer';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    return res.status(405).json({ error: 'Metodo non consentito' });
   }
 
-  console.log('Inizio generazione PDF e invio email');
+  console.log('📧 Inizio generazione PDF e invio email (Browserless)');
 
   try {
     const { datiPrenotazione, emailDestinatario } = req.body;
@@ -21,15 +21,15 @@ export default async function handler(req, res) {
     // 1. Genera HTML per il PDF
     const htmlContent = generaHTMLRiepilogo(datiPrenotazione);
     
-    // 2. Crea PDF con Puppeteer
-    console.log('Generazione PDF in corso...');
-    const pdfBuffer = await generaPDF(htmlContent);
+    // 2. Genera PDF con Browserless
+    console.log('🌐 Generazione PDF con Browserless...');
+    const pdfBuffer = await generaPDFConBrowserless(htmlContent);
     
     // 3. Invia email con PDF allegato
-    console.log('Invio email in corso...');
+    console.log('📧 Invio email in corso...');
     await inviaEmailConPDF(emailDestinatario, datiPrenotazione, pdfBuffer);
     
-    console.log('PDF generato e email inviata con successo');
+    console.log('✅ PDF generato e email inviata con successo');
     
     return res.status(200).json({ 
       success: true, 
@@ -37,49 +37,63 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
-    console.error('Errore generazione PDF/email:', error);
+    console.error('❌ Errore:', error);
     return res.status(500).json({ 
       error: 'Errore interno: ' + error.message 
     });
   }
 }
 
-async function generaPDF(htmlContent) {
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-accelerated-2d-canvas',
-      '--no-first-run',
-      '--no-zygote',
-      '--disable-gpu'
-    ]
-  });
+// FUNZIONE: Genera PDF usando Browserless API
+async function generaPDFConBrowserless(htmlContent) {
+  const browserlessToken = process.env.BROWSERLESS_API_TOKEN;
+  
+  if (!browserlessToken) {
+    console.warn('⚠️ BROWSERLESS_API_TOKEN non configurato');
+    console.log('📧 Genero email senza PDF');
+    throw new Error('Token Browserless non configurato');
+  }
 
   try {
-    const page = await browser.newPage();
+    console.log('📤 Invio richiesta a Browserless...');
     
-    await page.setContent(htmlContent, {
-      waitUntil: 'networkidle0',
-      timeout: 30000
-    });
-    
-    const pdfBuffer = await page.pdf({
-      format: 'A4',
-      printBackground: true,
-      margin: {
-        top: '20mm',
-        bottom: '20mm',
-        left: '20mm',
-        right: '20mm'
-      }
+    const response = await fetch('https://chrome.browserless.io/pdf', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache'
+      },
+      body: JSON.stringify({
+        token: browserlessToken,
+        html: htmlContent,
+        options: {
+          format: 'A4',
+          margin: {
+            top: '20mm',
+            bottom: '20mm',
+            left: '20mm',
+            right: '20mm'
+          },
+          printBackground: true,
+          scale: 1
+        }
+      })
     });
 
-    return pdfBuffer;
-  } finally {
-    await browser.close();
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Errore Browserless:', errorText);
+      throw new Error(`Browserless error (${response.status}): ${errorText}`);
+    }
+
+    const pdfBuffer = await response.arrayBuffer();
+    console.log(`✅ PDF generato (${(pdfBuffer.byteLength / 1024).toFixed(2)} KB)`);
+    
+    return Buffer.from(pdfBuffer);
+    
+  } catch (error) {
+    console.error('❌ Errore generazione PDF:', error.message);
+    throw error;
   }
 }
 
@@ -91,9 +105,8 @@ function generaHTMLRiepilogo(dati) {
     day: 'numeric'
   });
 
-  // Validazione sicura dei documenti
   const documentiValidi = Array.isArray(dati.documenti) ? dati.documenti : [];
-  console.log(`Documenti trovati: ${documentiValidi.length}`);
+  console.log(`📄 Documenti trovati: ${documentiValidi.length}`);
 
   return `
     <!DOCTYPE html>
@@ -123,11 +136,6 @@ function generaHTMLRiepilogo(dati) {
           margin-bottom: 10px;
         }
         
-        .header p {
-          color: #7f8c8d;
-          font-size: 14px;
-        }
-        
         .section {
           margin: 30px 0;
           background: #f8f9fa;
@@ -140,8 +148,6 @@ function generaHTMLRiepilogo(dati) {
           color: #2c3e50;
           font-size: 20px;
           margin-bottom: 15px;
-          display: flex;
-          align-items: center;
         }
         
         .info-grid {
@@ -177,7 +183,6 @@ function generaHTMLRiepilogo(dati) {
           border-radius: 8px;
           padding: 20px;
           margin: 15px 0;
-          page-break-inside: avoid;
         }
         
         .ospite.responsabile {
@@ -215,12 +220,6 @@ function generaHTMLRiepilogo(dati) {
           border-top: 1px solid #dee2e6;
         }
         
-        .documento-title {
-          font-weight: bold;
-          color: #495057;
-          margin-bottom: 10px;
-        }
-        
         .documento-img {
           max-width: 100%;
           max-height: 300px;
@@ -228,15 +227,6 @@ function generaHTMLRiepilogo(dati) {
           border-radius: 8px;
           margin: 10px 0;
           display: block;
-        }
-        
-        .documento-info {
-          background: #f8f9fa;
-          padding: 10px;
-          border-radius: 4px;
-          margin: 10px 0;
-          font-size: 12px;
-          color: #6c757d;
         }
         
         .totale-section {
@@ -255,13 +245,6 @@ function generaHTMLRiepilogo(dati) {
           margin: 10px 0;
         }
         
-        .note {
-          font-size: 12px;
-          color: #6c757d;
-          font-style: italic;
-          margin-top: 10px;
-        }
-        
         .footer {
           margin-top: 40px;
           padding-top: 20px;
@@ -270,26 +253,16 @@ function generaHTMLRiepilogo(dati) {
           color: #6c757d;
           font-size: 12px;
         }
-        
-        @media print {
-          .documento-img {
-            max-height: 250px;
-          }
-          
-          .page-break {
-            page-break-before: always;
-          }
-        }
       </style>
     </head>
     <body>
       <div class="header">
         <h1>Riepilogo Check-in</h1>
-        <p>Generato automaticamente il ${new Date().toLocaleDateString('it-IT')} alle ${new Date().toLocaleTimeString('it-IT')}</p>
+        <p>Generato il ${new Date().toLocaleDateString('it-IT')} alle ${new Date().toLocaleTimeString('it-IT')}</p>
       </div>
 
       <div class="section">
-        <h2>Dettagli Soggiorno</h2>
+        <h2>📍 Dettagli Soggiorno</h2>
         <div class="info-grid">
           <div class="info-item">
             <div class="info-label">Data Check-in</div>
@@ -307,19 +280,12 @@ function generaHTMLRiepilogo(dati) {
             <div class="info-label">Numero Notti</div>
             <div class="info-value">${dati.numeroNotti || 0}</div>
           </div>
-          ${dati.tipoGruppo ? `
-          <div class="info-item">
-            <div class="info-label">Tipo Gruppo</div>
-            <div class="info-value">${dati.tipoGruppo}</div>
-          </div>
-          ` : ''}
         </div>
       </div>
 
       <div class="section">
-        <h2>Ospiti Registrati</h2>
-        ${(dati.ospiti || []).map((ospite, index) => {
-          // Trova documento corrispondente con validazione sicura
+        <h2>👥 Ospiti Registrati</h2>
+        ${(dati.ospiti || []).map((ospite) => {
           const documento = documentiValidi.find(d => 
             d && d.ospiteNumero && d.ospiteNumero === ospite.numero
           );
@@ -336,30 +302,20 @@ function generaHTMLRiepilogo(dati) {
               <div class="info-grid">
                 <div class="info-item">
                   <div class="info-label">Genere</div>
-                  <div class="info-value">${ospite.genere === 'M' ? 'Maschio' : ospite.genere === 'F' ? 'Femmina' : 'Non specificato'}</div>
+                  <div class="info-value">${ospite.genere === 'M' ? 'Maschio' : ospite.genere === 'F' ? 'Femmina' : 'N/A'}</div>
                 </div>
                 <div class="info-item">
-                  <div class="info-label">Data di Nascita</div>
-                  <div class="info-value">${ospite.nascita ? new Date(ospite.nascita).toLocaleDateString('it-IT') : 'Non specificata'}</div>
+                  <div class="info-label">Data Nascita</div>
+                  <div class="info-value">${ospite.nascita ? new Date(ospite.nascita).toLocaleDateString('it-IT') : 'N/A'}</div>
                 </div>
                 <div class="info-item">
                   <div class="info-label">Età</div>
-                  <div class="info-value">${ospite.eta || 0} anni ${(ospite.eta || 0) >= 4 ? '(soggetto a tassa)' : '(esente da tassa)'}</div>
+                  <div class="info-value">${ospite.eta || 0} anni ${(ospite.eta || 0) >= 4 ? '(tassabile)' : '(esente)'}</div>
                 </div>
                 <div class="info-item">
                   <div class="info-label">Cittadinanza</div>
-                  <div class="info-value">${ospite.cittadinanza || 'Non specificata'}</div>
+                  <div class="info-value">${ospite.cittadinanza || 'N/A'}</div>
                 </div>
-                <div class="info-item">
-                  <div class="info-label">Luogo di Nascita</div>
-                  <div class="info-value">${ospite.luogoNascita || 'Non specificato'}</div>
-                </div>
-                ${ospite.comune ? `
-                <div class="info-item">
-                  <div class="info-label">Comune</div>
-                  <div class="info-value">${ospite.comune} (${ospite.provincia || 'N/A'})</div>
-                </div>
-                ` : ''}
               </div>
               
               ${ospite.isResponsabile && ospite.tipoDocumento ? `
@@ -372,44 +328,31 @@ function generaHTMLRiepilogo(dati) {
                   <div class="info-label">Numero Documento</div>
                   <div class="info-value">${ospite.numeroDocumento || 'N/A'}</div>
                 </div>
-                <div class="info-item">
-                  <div class="info-label">Luogo Rilascio</div>
-                  <div class="info-value">${ospite.luogoRilascio || 'N/A'}</div>
-                </div>
               </div>
               ` : ''}
               
               ${documento ? `
               <div class="documento-section">
-                <div class="documento-title">Documento di Identità</div>
-                <div class="documento-info">
-                  <strong>File:</strong> ${documento.nomeFile || 'Documento caricato'}<br>
-                  <strong>Tipo:</strong> ${documento.tipo || 'N/A'}<br>
-                  <strong>Dimensione:</strong> ${documento.dimensione ? Math.round(documento.dimensione / 1024) + ' KB' : 'N/A'}
-                </div>
-                ${documento.base64 ? `
-                <img src="${documento.base64}" alt="Documento ${ospite.cognome} ${ospite.nome}" class="documento-img" />
-                ` : '<p style="color: #dc3545;">Documento non disponibile</p>'}
+                <strong>Documento caricato:</strong> ${documento.nomeFile || 'Documento'} (${Math.round(documento.dimensione / 1024)} KB)
+                ${documento.base64 ? `<img src="${documento.base64}" alt="Documento" class="documento-img" />` : ''}
               </div>
-              ` : '<div class="documento-section"><p style="color: #ffc107;">Nessun documento caricato</p></div>'}
+              ` : ''}
             </div>
           `;
         }).join('')}
       </div>
 
       <div class="totale-section">
-        <h2>Totale Tassa di Soggiorno</h2>
+        <h2>💰 Totale Tassa di Soggiorno</h2>
         <div class="totale-amount">€${(dati.totale || 0).toFixed(2)}</div>
-        <div class="note">
-          Tassa di €1,50 per notte per ospiti dai 4 anni in su<br>
-          Calcolata su ${(dati.ospiti || []).filter(o => (o.eta || 0) >= 4).length} ospiti soggetti × ${dati.numeroNotti || 0} notti
+        <div style="font-size: 13px; color: #666; margin-top: 10px;">
+          Tassa di €1,50 per notte per ospiti dai 4 anni in su
         </div>
       </div>
 
       <div class="footer">
         <p>Documento generato automaticamente dal sistema di check-in</p>
-        <p>Data/ora generazione: ${new Date().toLocaleString('it-IT')}</p>
-        ${dati.timestamp ? `<p>ID Pratica: ${dati.timestamp.slice(-10)}</p>` : ''}
+        <p>${new Date().toLocaleString('it-IT')}</p>
       </div>
     </body>
     </html>
@@ -417,32 +360,30 @@ function generaHTMLRiepilogo(dati) {
 }
 
 async function inviaEmailConPDF(emailDestinatario, dati, pdfBuffer) {
-  // Configurazione per Yahoo Mail
   const transporter = nodemailer.createTransport({
     service: 'yahoo',
     auth: {
-      user: process.env.EMAIL_USER, // tua.email@yahoo.com
-      pass: process.env.EMAIL_PASSWORD // password specifica per l'app
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASSWORD
     }
   });
 
   const oggetto = `Riepilogo Check-in - ${dati.appartamento || 'Appartamento'} - ${new Date(dati.dataCheckin).toLocaleDateString('it-IT')}`;
   
   const corpoEmail = `
-    Nuovo check-in ricevuto!
+Nuovo check-in ricevuto!
 
-    DETTAGLI SOGGIORNO:
-    - Data check-in: ${new Date(dati.dataCheckin).toLocaleDateString('it-IT')}
-    - Appartamento: ${dati.appartamento || 'Non specificato'}
-    - Ospiti: ${dati.numeroOspiti || 0}
-    - Notti: ${dati.numeroNotti || 0}
-    - Totale tassa soggiorno: €${(dati.totale || 0).toFixed(2)}
+DETTAGLI SOGGIORNO:
+- Data check-in: ${new Date(dati.dataCheckin).toLocaleDateString('it-IT')}
+- Appartamento: ${dati.appartamento || 'Non specificato'}
+- Ospiti: ${dati.numeroOspiti || 0}
+- Notti: ${dati.numeroNotti || 0}
+- Totale tassa soggiorno: €${(dati.totale || 0).toFixed(2)}
 
-    Il PDF allegato contiene tutti i dati inseriti e i documenti caricati dagli ospiti.
+Responsabile: ${dati.ospiti?.[0]?.cognome || 'N/A'} ${dati.ospiti?.[0]?.nome || 'N/A'}
 
-    Responsabile: ${dati.ospiti?.[0]?.cognome || 'N/A'} ${dati.ospiti?.[0]?.nome || 'N/A'}
-
-    Sistema Check-in Automatico
+---
+Sistema Check-in Automatico
   `;
 
   const mailOptions = {
