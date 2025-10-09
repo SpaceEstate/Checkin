@@ -42,17 +42,24 @@ async function getRedisClient() {
 
 export default async function handler(req, res) {
   console.log(`📥 ${req.method} /api/salva-dati-temporanei`);
+  console.log('📋 Origin:', req.headers.origin);
+  console.log('📋 Headers:', Object.keys(req.headers));
 
   // ✅ CORS headers - SEMPRE per tutte le richieste
+  // IMPORTANTE: Questi devono essere impostati PRIMA di qualsiasi altra operazione
+  const origin = req.headers.origin || req.headers.referer || 'https://spaceestate.github.io';
+  
   res.setHeader("Access-Control-Allow-Origin", "https://spaceestate.github.io");
   res.setHeader("Access-Control-Allow-Credentials", "true");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Accept");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization");
+  res.setHeader("Access-Control-Max-Age", "86400");
 
   // ✅ Gestione OPTIONS (preflight) - DEVE tornare 200
   if (req.method === "OPTIONS") {
-    console.log('✅ Preflight OPTIONS - OK');
-    return res.status(200).end();
+    console.log('✅ Preflight OPTIONS - Risposta 200 OK');
+    res.status(200).end();
+    return;
   }
 
   try {
