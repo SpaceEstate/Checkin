@@ -781,4 +781,344 @@ document.addEventListener('DOMContentLoaded', function() {
   window.addEventListener('beforeunload', function() {
     if (currentStream) currentStream.getTracks().forEach(track => track.stop());
   });
+  // === OTTIMIZZAZIONI MOBILE PER DATE INPUT ===
+
+// Rilevamento dispositivo
+const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+const isAndroid = /Android/i.test(navigator.userAgent);
+const isOldAndroid = isAndroid && /Android [0-5]/.test(navigator.userAgent);
+
+// Funzione per potenziare input date su mobile
+function potenziaTuosDateInput() {
+  if (!isMobile) return; // Su desktop lascia i date input standard
+  
+  const dateInputs = document.querySelectorAll('input[type="date"]');
+  
+  dateInputs.forEach(input => {
+    // Se il browser non supporta bene i date input nattivi, crea un wrapper
+    if (isOldAndroid || !supportaDateInput()) {
+      creaCustomDateInput(input);
+    } else {
+      // Anche su Android moderno, migliora l'UX con feedback
+      miglioraDateInputNativo(input);
+    }
+  });
+}
+
+function supportaDateInput() {
+  const input = document.createElement('input');
+  input.type = 'date';
+  input.value = '2024-01-01';
+  return input.type === 'date' && input.value === '2024-01-01';
+}
+
+function miglioraDateInputNativo(input) {
+  // Aggiungi evento per mostrare formato quando aperto
+  input.addEventListener('change', function() {
+    if (this.value) {
+      const date = new Date(this.value + 'T00:00:00');
+      const formatted = date.toLocaleDateString('it-IT', {
+        weekday: 'short',
+        year: 'numeric',
+        month: 'numeric',
+        day: 'numeric'
+      });
+      // Aggiorna il placeholder per mostrare la data selezionata
+      this.setAttribute('data-selected', formatted);
+    }
+  });
+
+  // Focus handling per tastiera virtuale
+  input.addEventListener('focus', function() {
+    // Scorri il form per mostrare il date picker
+    setTimeout(() => {
+      this.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 100);
+  });
+}
+
+function creaCustomDateInput(originalInput) {
+  // Se esiste già un wrapper, non rifare
+  if (originalInput.parentElement.classList.contains('date-input-wrapper')) {
+    return;
+  }
+
+  // Crea wrapper
+  const wrapper = document.createElement('div');
+  wrapper.className = 'date-input-wrapper mobile-date-input';
+  originalInput.parentElement.insertBefore(wrapper, originalInput);
+
+  // Crea input di testo per mobile (più comodo)
+  const textInput = document.createElement('input');
+  textInput.type = 'text';
+  textInput.placeholder = 'GG/MM/AAAA';
+  textInput.className = 'date-text-input';
+  textInput.maxLength = '10';
+  textInput.pattern = '[0-9/]*';
+  textInput.inputMode = 'numeric';
+
+  // Nascondi l'input date originale
+  originalInput.style.display = 'none';
+  originalInput.type = 'hidden';
+
+  // Aggiungi validazione e formattazione automatica
+  textInput.addEventListener('input', function(e) {
+    let value = this.value.replace(/\D/g, '');
+    
+    if (value.length > 0) {
+      if (value.length <= 2) {
+        this.value = value;
+      } else if (value.length <= 4) {
+        this.value = value.slice(0, 2) + '/' + value.slice(2);
+      } else {
+        this.value = value.slice(0, 2) + '/' + value.slice(2, 4) + '/' + value.slice(4, 8);
+      }
+    }
+
+    // Aggiorna il hidden input con formato ISO
+    if (value.length === 8) {
+      const giorno = value.slice(0, 2);
+      const mese = value.slice(2, 4);
+      const anno = value.slice(4, 8);
+      
+      if (validaData(giorno, mese, anno)) {
+        originalInput.value = `${anno}-${mese}-${giorno}`;
+        originalInput.dispatchEvent(new Event('change', { bubbles: true }));
+        textInput.classList.remove('error');
+      } else {
+        textInput.classList.add('error');
+      }
+    }
+  });
+
+  // Ripristina formato se incollato
+  textInput.addEventListener('paste', function(e) {
+    e.preventDefault();
+    let pasted = (e.clipboardData || window.clipboardData).getData('text');
+    pasted = pasted.replace(/\D/g, '');
+    
+    if (pasted.length >= 8) {
+      const anno = pasted.slice(-4);
+      const mese = pasted.slice(-6, -4);
+      const giorno = pasted.slice(-8, -6);
+      
+      if (validaData(giorno, mese, anno)) {
+        this.value = giorno + '/' + mese + '/' + anno;
+        originalInput.value = `${anno}-${mese}-${giorno}`;
+        originalInput.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    }
+  });
+
+  // Se l'utente cambia il dato originale (es. da codice), aggiorna il testo
+  originalInput.addEventListener('change', function() {
+    if (this.value) {
+      const parts = this.value.split('-');
+      textInput.value = `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+  });
+
+  // Crea bottone per aprire date picker nativo come fallback
+  const pickerBtn = document.createElement('button');
+  pickerBtn.type = 'button';
+  pickerBtn.innerHTML = '📅';
+  pickerBtn.className = 'date-picker-btn';
+  pickerBtn.style.cssText = `
+    background: linear-gradient(135deg, #b89968 0%, #a67c52 100%);
+    color: white;
+    border: none;
+    padding: 10px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1.2rem;
+    min-width: 48px;
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+  `;
+
+  pickerBtn.addEventListener('click', function(e) {
+    e.preventDefault();
+    originalInput.click();
+  });
+
+  // Mostra il date picker nativo su click del bottone
+  originalInput.addEventListener('change', function() {
+    if (this.value) {
+      const parts = this.value.split('-');
+      const textValue = `${parts[2]}/${parts[1]}/${parts[0]}`;
+      textInput.value = textValue;
+    }
+  });
+
+  wrapper.appendChild(textInput);
+  wrapper.appendChild(pickerBtn);
+}
+
+function validaData(giorno, mese, anno) {
+  const g = parseInt(giorno);
+  const m = parseInt(mese);
+  const a = parseInt(anno);
+
+  if (g < 1 || g > 31 || m < 1 || m > 12 || a < 1900 || a > new Date().getFullYear()) {
+    return false;
+  }
+
+  const date = new Date(a, m - 1, g);
+  return date.getDate() === g && date.getMonth() === m - 1 && date.getFullYear() === a;
+}
+
+// === OTTIMIZZAZIONI PER SELECT SU MOBILE ===
+function ottimizzaSelectMobile() {
+  const selects = document.querySelectorAll('.form-select');
+  
+  selects.forEach(select => {
+    // Aumenta font size per evitare zoom su iOS
+    select.style.fontSize = '16px';
+    
+    // Aggiungi label accessibili
+    const label = select.previousElementSibling;
+    if (label && label.classList.contains('form-label')) {
+      select.setAttribute('aria-labelledby', label.id || '');
+    }
+  });
+}
+
+// === OTTIMIZZAZIONI FORM GENERALE ===
+function ottimizzaFormMobile() {
+  if (!isMobile) return;
+
+  const inputs = document.querySelectorAll('.form-input, .form-select');
+  
+  inputs.forEach(input => {
+    // Font size 16px previene auto-zoom su iOS
+    if (!input.style.fontSize) {
+      input.style.fontSize = '16px';
+    }
+
+    // Aggiungi autocorrect e autocomplete dove appropriato
+    if (input.name && input.name.includes('cognome') || input.name.includes('nome')) {
+      input.setAttribute('autocomplete', 'on');
+      input.setAttribute('autocorrect', 'off');
+    }
+
+    if (input.name && input.name.includes('email')) {
+      input.type = 'email';
+      input.setAttribute('inputmode', 'email');
+    }
+
+    if (input.name && input.name.includes('numero') && input.type !== 'date') {
+      input.setAttribute('inputmode', 'numeric');
+    }
+  });
+
+  // Previeni zoom su form
+  const metaViewport = document.querySelector('meta[name="viewport"]');
+  if (metaViewport) {
+    metaViewport.setAttribute('content', 
+      'width=device-width, initial-scale=1.0, user-scalable=yes, maximum-scale=5');
+  }
+}
+
+// === GESTIONE KEYBOARD VIRTUALE ===
+function gestisciKeyboardVirtuale() {
+  if (!isMobile) return;
+
+  document.addEventListener('focusin', function(e) {
+    if (e.target.classList.contains('form-input') || 
+        e.target.classList.contains('form-select') ||
+        e.target.classList.contains('date-text-input')) {
+      // Scorri l'elemento al centro della vista
+      setTimeout(() => {
+        e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 300);
+    }
+  });
+
+  // Riduci padding quando keyboard è visibile
+  let lastInnerHeight = window.innerHeight;
+  window.addEventListener('resize', function() {
+    const currentInnerHeight = window.innerHeight;
+    
+    if (currentInnerHeight < lastInnerHeight - 100) {
+      // Keyboard probabile che sia aperto
+      document.body.style.paddingBottom = '10px';
+    } else {
+      // Keyboard probabile che sia chiuso
+      document.body.style.paddingBottom = '0';
+    }
+    
+    lastInnerHeight = currentInnerHeight;
+  });
+}
+
+// === INIZIALIZZAZIONE ===
+document.addEventListener('DOMContentLoaded', function() {
+  // Log per debug
+  console.log(`📱 Dispositivo: ${isMobile ? 'Mobile' : 'Desktop'}, Android: ${isAndroid}, Vecchio Android: ${isOldAndroid}`);
+
+  // Applica tutte le ottimizzazioni
+  if (isMobile) {
+    potenziaTuosDateInput();
+    ottimizzaSelectMobile();
+    ottimizzaFormMobile();
+    gestisciKeyboardVirtuale();
+    
+    // Aggiungi supporto per il ricalcolo dei date input custom
+    setTimeout(() => {
+      const originalForm = document.getElementById('checkin-form');
+      if (originalForm) {
+        const observer = new MutationObserver(() => {
+          potenziaTuosDateInput();
+        });
+        observer.observe(originalForm, { childList: true, subtree: true });
+      }
+    }, 100);
+  }
+});
+
+// === RICALCOLO DOPO GENERAZIONE STEP OSPITI ===
+// Aggiungi questa riga dopo la funzione generaStepOspiti() - aggiorna l'observer
+const originalGeneraStepOspiti = window.generaStepOspiti;
+window.generaStepOspiti = function() {
+  originalGeneraStepOspiti.apply(this, arguments);
+  
+  // Dopo aver creato i nuovi step, ottimizza i date input
+  if (isMobile) {
+    setTimeout(() => {
+      potenziaTuosDateInput();
+    }, 50);
+  }
+};
+
+// === STILI AGGIUNTIVI PER INPUT ERRORE ===
+const dateErrorStyle = document.createElement('style');
+dateErrorStyle.textContent = `
+  .date-text-input.error {
+    border-color: #e74c3c !important;
+    background-color: #fadbd8 !important;
+    color: #c0392b;
+  }
+
+  .date-picker-btn {
+    box-shadow: 0 2px 8px rgba(184, 153, 104, 0.3) !important;
+  }
+
+  .date-picker-btn:active {
+    transform: scale(0.95) !important;
+  }
+
+  @media (hover: none) and (pointer: coarse) {
+    .date-picker-btn:hover {
+      transform: none !important;
+    }
+
+    .date-picker-btn:active {
+      transform: scale(0.95) !important;
+    }
+  }
+`;
+document.head.appendChild(dateErrorStyle);
 });
