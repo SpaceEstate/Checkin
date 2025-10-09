@@ -459,6 +459,39 @@ function preparaRiepilogo() {
   summaryContent.innerHTML = `
     <div class="summary-section">
       <h3>📍 Dettagli soggiorno</h3>
+      <div class="summary-item">
+        <span>Data Check-in:</span>
+        <span><strong>${formatDataItaliana(dataCheckin)}</strong></span>
+      </div>
+      <div class="summary-item">
+        <span>Appartamento:</span>
+        <span><strong>${document.getElementById('appartamento')?.value || 'N/A'}</strong></span>
+      </div>
+      <div class="summary-item">
+        <span>Numero ospiti:</span>
+        <span><strong>${numeroOspiti}</strong></span>
+      </div>
+      <div class="summary-item">
+        <span>Numero notti:</span>
+        <span><strong>${numeroNotti}</strong></span>
+      </div>
+    </div>
+    <div class="summary-section">
+      <h3>👥 Ospiti</h3>
+      ${ospitiHTML}
+    </div>
+    <div class="summary-section">
+      <h3>💰 Totale tassa di soggiorno</h3>
+      <div class="total-amount">€${totale.toFixed(2)}</div>
+      <small class="tax-note">Tassa di €1,50 per notte per ospiti dai 4 anni in su</small>
+    </div>
+  `;
+  aggiornaBottonePagamento(totale);
+}
+  
+  summaryContent.innerHTML = `
+    <div class="summary-section">
+      <h3>📍 Dettagli soggiorno</h3>
       <div class="summary-item"><span>Data Check-in:</span><span><strong>${formatDataItaliana(dataCheckin)}</strong></span></div>
       <div class="summary-item"><span>Appartamento:</span><span><strong>${document.getElementById('appartamento')?.value || 'N/A'}</strong></span></div>
       <div class="summary-item"><span>Numero ospiti:</span><span><strong>${numeroOspiti}</strong></span></div>
