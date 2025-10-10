@@ -798,15 +798,14 @@ function creaCustomDateInput(originalInput) {
     return;
   }
 
-  const wrapper = document.createElement('div');
-  wrapper.className = 'date-input-wrapper mobile-date-input';
-  wrapper.style.cssText = 'display: flex; gap: 8px; align-items: center; width: 100%;';
-  originalInput.parentElement.insertBefore(wrapper, originalInput);
- 
-  const textInput = document.createElement('input');
-  textInput.type = 'text';
-  textInput.placeholder = 'GG/MM/AAAA';
-  textInput.className = 'date-text-input';
+const wrapper = document.createElement('div');
+wrapper.className = 'date-input-wrapper mobile-date-input';
+originalInput.parentElement.insertBefore(wrapper, originalInput);
+
+const textInput = document.createElement('input');
+textInput.type = 'text';
+textInput.placeholder = 'GG/MM/AAAA';
+textInput.className = 'date-text-input form-input';
   textInput.maxLength = '10';
   textInput.pattern = '[0-9/]*';
   textInput.inputMode = 'numeric';
@@ -867,25 +866,10 @@ function creaCustomDateInput(originalInput) {
     }
   });
 
-  const pickerBtn = document.createElement('button');
-  pickerBtn.type = 'button';
-  pickerBtn.innerHTML = '📅';
-  pickerBtn.className = 'date-picker-btn';
-  pickerBtn.style.cssText = `
-    background: linear-gradient(135deg, #b89968 0%, #a67c52 100%);
-    color: white;
-    border: none;
-    padding: 10px 14px;
-    border-radius: 8px;
-    cursor: pointer;
-    font-size: 1.2rem;
-    min-width: 48px;
-    min-height: 48px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.3s ease;
-  `;
+ const pickerBtn = document.createElement('button');
+pickerBtn.type = 'button';
+pickerBtn.innerHTML = '📅';
+pickerBtn.className = 'date-picker-btn btn';
 
   pickerBtn.addEventListener('click', function(e) {
     e.preventDefault();
