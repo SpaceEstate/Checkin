@@ -866,19 +866,30 @@ function creaCustomDateInput(originalInput) {
 
   pickerBtn.addEventListener('click', function(e) {
     e.preventDefault();
-    originalInput.style.display = 'block';
-    originalInput.style.position = 'absolute';
-    originalInput.style.opacity = '0';
-    originalInput.style.pointerEvents = 'auto';
-    originalInput.focus();
-    originalInput.click();
+    e.stopPropagation();
     
+    // Mostra temporaneamente l'input originale per il click
+    originalInput.type = 'date';
+    originalInput.style.cssText = `
+      position: absolute;
+      left: -9999px;
+      width: 1px;
+      height: 1px;
+      opacity: 0.01;
+      pointer-events: auto;
+    `;
+    
+    // Focus e click sull'input originale
     setTimeout(() => {
-      originalInput.style.display = 'none';
-      originalInput.style.position = '';
-      originalInput.style.opacity = '';
-      originalInput.style.pointerEvents = '';
-    }, 100);
+      originalInput.focus();
+      originalInput.click();
+      
+      // Ripristina dopo che il picker si è aperto
+      setTimeout(() => {
+        originalInput.style.cssText = '';
+        originalInput.type = 'hidden';
+      }, 500);
+    }, 50);
   });
 
   originalInput.addEventListener('change', function() {
