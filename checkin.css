@@ -1098,9 +1098,12 @@ body {
 }
 
 /* === CONTENITORE CUSTOM DATE INPUT PER MOBILE === */
+/* === CONTENITORE CUSTOM DATE INPUT PER MOBILE === */
 .date-input-wrapper {
   position: relative;
   display: block;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 /* Classe per indicare quando è mobile */
@@ -1108,40 +1111,131 @@ body {
   display: flex;
   gap: 8px;
   align-items: center;
+  width: 100%;
+  box-sizing: border-box;
 }
 
-.date-input-wrapper.mobile-date-input input {
+.date-input-wrapper.mobile-date-input .date-text-input {
   flex: 1;
   text-align: center;
-  padding: 12px;
-  font-size: 16px;
+  padding: 14px 16px;
+  font-size: 1rem;
   border: 2px solid #e8dcc0;
-  border-radius: 8px;
+  border-radius: 12px;
   background: white;
   color: #8b7d6b;
+  margin: 0;
+  min-width: 0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  transition: all 0.3s ease;
+  box-sizing: border-box;
 }
 
-.date-input-wrapper.mobile-date-input input::placeholder {
+.date-input-wrapper.mobile-date-input .date-text-input::placeholder {
   color: #d4c7b5;
 }
 
-.date-input-wrapper.mobile-date-input input:focus {
+.date-input-wrapper.mobile-date-input .date-text-input:focus {
   outline: none;
   border-color: #b89968;
   box-shadow: 0 0 0 3px rgba(184, 153, 104, 0.15);
+  transform: translateY(-2px);
 }
 
-/* === SPINNER PERSONALIZZATO PER NUMERI === */
-input[type="number"]::-webkit-outer-spin-button,
-input[type="number"]::-webkit-inner-spin-button {
-  -webkit-appearance: none;
+.date-input-wrapper.mobile-date-input .date-text-input:hover {
+  border-color: #c4a484;
+}
+
+.date-input-wrapper.mobile-date-input .date-picker-btn {
+  flex-shrink: 0;
   margin: 0;
+  padding: 14px 16px;
+  background: linear-gradient(135deg, #b89968 0%, #a67c52 100%);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 1.2rem;
+  min-width: 52px;
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(184, 153, 104, 0.3);
 }
 
-input[type="number"] {
-  -moz-appearance: textfield;
+.date-input-wrapper.mobile-date-input .date-picker-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(184, 153, 104, 0.4);
 }
 
+.date-input-wrapper.mobile-date-input .date-picker-btn:active {
+  transform: translateY(0);
+}
+
+/* === ERRORE STATE === */
+.date-input-wrapper.mobile-date-input .date-text-input.error {
+  border-color: #e74c3c !important;
+  background-color: #fadbd8 !important;
+  color: #c0392b;
+}
+
+/* === RESPONSIVE MOBILE === */
+@media (max-width: 768px) {
+  .date-input-wrapper.mobile-date-input {
+    gap: 8px;
+  }
+
+  .date-input-wrapper.mobile-date-input .date-text-input {
+    padding: 12px 14px;
+    font-size: 16px;
+    min-height: 48px;
+  }
+
+  .date-input-wrapper.mobile-date-input .date-picker-btn {
+    min-width: 48px;
+    min-height: 48px;
+    padding: 12px 14px;
+    font-size: 1.1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .date-input-wrapper.mobile-date-input {
+    gap: 6px;
+  }
+
+  .date-input-wrapper.mobile-date-input .date-text-input {
+    padding: 12px 12px;
+    font-size: 16px;
+    min-height: 48px;
+  }
+
+  .date-input-wrapper.mobile-date-input .date-picker-btn {
+    min-width: 48px;
+    min-height: 48px;
+    padding: 12px;
+    font-size: 1rem;
+  }
+}
+
+/* === TOUCH DEVICES === */
+@media (hover: none) and (pointer: coarse) {
+  .date-input-wrapper.mobile-date-input .date-text-input,
+  .date-input-wrapper.mobile-date-input .date-picker-btn {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .date-input-wrapper.mobile-date-input .date-picker-btn:hover {
+    transform: none;
+  }
+
+  .date-input-wrapper.mobile-date-input .date-picker-btn:active {
+    transform: scale(0.98);
+  }
+}
 /* === MIGLIORAMENTI SELECT PER MOBILE === */
 .form-select {
   -webkit-appearance: none;
