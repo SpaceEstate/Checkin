@@ -800,8 +800,9 @@ function creaCustomDateInput(originalInput) {
 
   const wrapper = document.createElement('div');
   wrapper.className = 'date-input-wrapper mobile-date-input';
+  wrapper.style.cssText = 'display: flex; gap: 8px; align-items: center; width: 100%;';
   originalInput.parentElement.insertBefore(wrapper, originalInput);
-
+ 
   const textInput = document.createElement('input');
   textInput.type = 'text';
   textInput.placeholder = 'GG/MM/AAAA';
