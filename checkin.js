@@ -798,14 +798,14 @@ function creaCustomDateInput(originalInput) {
     return;
   }
 
-const wrapper = document.createElement('div');
-wrapper.className = 'date-input-wrapper mobile-date-input';
-originalInput.parentElement.insertBefore(wrapper, originalInput);
+  const wrapper = document.createElement('div');
+  wrapper.className = 'date-input-wrapper mobile-date-input';
+  originalInput.parentElement.insertBefore(wrapper, originalInput);
 
-const textInput = document.createElement('input');
-textInput.type = 'text';
-textInput.placeholder = 'GG/MM/AAAA';
-textInput.className = 'date-text-input form-input';
+  const textInput = document.createElement('input');
+  textInput.type = 'text';
+  textInput.placeholder = 'GG/MM/AAAA';
+  textInput.className = 'date-text-input form-input';
   textInput.maxLength = '10';
   textInput.pattern = '[0-9/]*';
   textInput.inputMode = 'numeric';
@@ -859,21 +859,26 @@ textInput.className = 'date-text-input form-input';
     }
   });
 
-  originalInput.addEventListener('change', function() {
-    if (this.value) {
-      const parts = this.value.split('-');
-      textInput.value = `${parts[2]}/${parts[1]}/${parts[0]}`;
-    }
-  });
-
- const pickerBtn = document.createElement('button');
-pickerBtn.type = 'button';
-pickerBtn.innerHTML = '📅';
-pickerBtn.className = 'date-picker-btn btn';
+  const pickerBtn = document.createElement('button');
+  pickerBtn.type = 'button';
+  pickerBtn.innerHTML = '📅';
+  pickerBtn.className = 'date-picker-btn';
 
   pickerBtn.addEventListener('click', function(e) {
     e.preventDefault();
+    originalInput.style.display = 'block';
+    originalInput.style.position = 'absolute';
+    originalInput.style.opacity = '0';
+    originalInput.style.pointerEvents = 'auto';
+    originalInput.focus();
     originalInput.click();
+    
+    setTimeout(() => {
+      originalInput.style.display = 'none';
+      originalInput.style.position = '';
+      originalInput.style.opacity = '';
+      originalInput.style.pointerEvents = '';
+    }, 100);
   });
 
   originalInput.addEventListener('change', function() {
@@ -886,6 +891,7 @@ pickerBtn.className = 'date-picker-btn btn';
 
   wrapper.appendChild(textInput);
   wrapper.appendChild(pickerBtn);
+  wrapper.appendChild(originalInput);
 }
 
 function potenziaTuosDateInput() {
