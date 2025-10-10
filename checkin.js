@@ -7,14 +7,14 @@ let stepGenerated = false;
  
 const API_BASE_URL = 'https://checkin-six-coral.vercel.app/api';
 
-// Stati, documenti, province (come prima - omessi per brevità)
+// === ARRAY DATI ===
 const stati = ["Afghanistan", "Albania", "Algeria", "Andorra", "Angola", "Antigua e Barbuda", "Arabia Saudita", "Argentina", "Armenia", "Australia", "Austria", "Azerbaigian", "Bahamas", "Bahrain", "Bangladesh", "Barbados", "Belgio", "Belize", "Benin", "Bhutan", "Bielorussia", "Birmania", "Bolivia", "Bosnia ed Erzegovina", "Botswana", "Brasile", "Brunei", "Bulgaria", "Burkina Faso", "Burundi", "Cambogia", "Camerun", "Canada", "Capo Verde", "Ciad", "Cile", "Cina", "Cipro", "Comore", "Corea del Nord", "Corea del Sud", "Costa d'Avorio", "Costa Rica", "Croazia", "Cuba", "Danimarca", "Dominica", "Ecuador", "Egitto", "El Salvador", "Emirati Arabi Uniti", "Eritrea", "Estonia", "Etiopia", "Figi", "Filippine", "Finlandia", "Francia", "Gabon", "Gambia", "Georgia", "Germania", "Ghana", "Giamaica", "Giappone", "Gibuti", "Giordania", "Grecia", "Grenada", "Guatemala", "Guinea", "Guinea-Bissau", "Guinea Equatoriale", "Guyana", "Haiti", "Honduras", "India", "Indonesia", "Iran", "Iraq", "Irlanda", "Islanda", "Israele", "Italia", "Kazakistan", "Kenya", "Kirghizistan", "Kiribati", "Kuwait", "Laos", "Lesotho", "Lettonia", "Libano", "Liberia", "Libia", "Liechtenstein", "Lituania", "Lussemburgo", "Macedonia del Nord", "Madagascar", "Malawi", "Malaysia", "Maldive", "Mali", "Malta", "Marocco", "Isole Marshall", "Mauritania", "Mauritius", "Messico", "Micronesia", "Moldavia", "Monaco", "Mongolia", "Montenegro", "Mozambico", "Namibia", "Nauru", "Nepal", "Nicaragua", "Niger", "Nigeria", "Norvegia", "Nuova Zelanda", "Oman", "Paesi Bassi", "Pakistan", "Palau", "Panama", "Papua Nuova Guinea", "Paraguay", "Peru", "Polonia", "Portogallo", "Qatar", "Regno Unito", "Repubblica Ceca", "Repubblica Centrafricana", "Repubblica del Congo", "Repubblica Democratica del Congo", "Repubblica Dominicana", "Romania", "Ruanda", "Russia", "Saint Kitts e Nevis", "Saint Lucia", "Saint Vincent e Grenadine", "Samoa", "San Marino", "São Tomé e Príncipe", "Senegal", "Serbia", "Seychelles", "Sierra Leone", "Singapore", "Siria", "Slovacchia", "Slovenia", "Somalia", "Spagna", "Sri Lanka", "Stati Uniti", "Sudafrica", "Sudan", "Sudan del Sud", "Suriname", "Svezia", "Svizzera", "Swaziland", "Tagikistan", "Tanzania", "Thailandia", "Timor Est", "Togo", "Tonga", "Trinidad e Tobago", "Tunisia", "Turchia", "Turkmenistan", "Tuvalu", "Ucraina", "Uganda", "Ungheria", "Uruguay", "Uzbekistan", "Vanuatu", "Vaticano", "Venezuela", "Vietnam", "Yemen", "Zambia", "Zimbabwe"];
 
 const tipiDocumento = ["PASSAPORTO ORDINARIO", "CARTA DI IDENTITA'", "CARTA IDENTITA' ELETTRONICA", "PATENTE DI GUIDA", "PASSAPORTO DIPLOMATICO", "PASSAPORTO DI SERVIZIO"];
 
 const province = ["AG", "AL", "AN", "AO", "AR", "AP", "AT", "AV", "BA", "BT", "BL", "BN", "BG", "BI", "BO", "BZ", "BS", "BR", "CA", "CL", "CB", "CI", "CE", "CT", "CZ", "CH", "CO", "CS", "CR", "KR", "CN", "EN", "FM", "FE", "FI", "FG", "FC", "FR", "GE", "GO", "GR", "IM", "IS", "SP", "AQ", "LT", "LE", "LC", "LI", "LO", "LU", "MC", "MN", "MS", "MT", "ME", "MI", "MO", "MB", "NA", "NO", "NU", "OT", "OR", "PD", "PA", "PR", "PV", "PG", "PU", "PE", "PC", "PI", "PT", "PN", "PZ", "PO", "RG", "RA", "RC", "RE", "RI", "RN", "RM", "RO", "SA", "VS", "SS", "SV", "SI", "SR", "SO", "TA", "TE", "TR", "TO", "OG", "TP", "TN", "TV", "TS", "UD", "VA", "VE", "VB", "VC", "VR", "VV", "VI", "VT"];
 
-// Funzioni di utilità (come prima)
+// === FUNZIONI UTILITÀ ===
 async function fileToBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -116,26 +116,7 @@ function showNotification(message, type = 'info') {
   setTimeout(() => { if (notification.parentNode) notification.remove(); }, 4000);
 }
 
-// Funzioni di gestione step (come prima - omesse per brevità)
-window.toggleTipoGruppo = function() {
-  const numeroOspitiInput = document.getElementById("numero-ospiti");
-  const gruppoWrapper = document.getElementById("gruppo-wrapper");
-  if (!numeroOspitiInput || !gruppoWrapper) return;
-  const numOspiti = parseInt(numeroOspitiInput.value) || 0;
-  if (numOspiti > 1) {
-    gruppoWrapper.classList.add("show");
-    const tipoGruppoSelect = document.getElementById("tipo-gruppo");
-    if (tipoGruppoSelect) tipoGruppoSelect.required = true;
-  } else {
-    gruppoWrapper.classList.remove("show");
-    const tipoGruppoSelect = document.getElementById("tipo-gruppo");
-    if (tipoGruppoSelect) {
-      tipoGruppoSelect.required = false;
-      tipoGruppoSelect.value = "";
-    }
-  }
-}
-
+// === GESTIONE TOGGLE ===
 window.toggleComuneProvincia = function(ospiteNum) {
   const luogoNascitaSelect = document.querySelector(`select[name="ospite${ospiteNum}_luogo_nascita"]`);
   const comuneProvinciaWrapper = document.getElementById(`comune-provincia-wrapper-${ospiteNum}`);
@@ -154,6 +135,7 @@ window.toggleComuneProvincia = function(ospiteNum) {
   }
 }
 
+// === NAVIGAZIONE STEP ===
 window.prossimoStep = function() {
   if (currentStep === 1) {
     if (!validaStep1()) return;
@@ -198,6 +180,7 @@ function mostraStepCorrente() {
   }
 }
 
+// === VALIDAZIONE ===
 function validaStep1() {
   const dataCheckinInput = document.getElementById("data-checkin");
   const appartamentoSelect = document.getElementById("appartamento");
@@ -312,6 +295,7 @@ function validaStepOspite(numOspite) {
   return true;
 }
 
+// === GENERAZIONE STEP OSPITI ===
 function generaStepOspiti() {
   const form = document.getElementById('checkin-form');
   const stepFinal = document.getElementById('step-final');
@@ -437,6 +421,7 @@ function generaStepOspiti() {
   }
 }
 
+// === RIEPILOGO ===
 function preparaRiepilogo() {
   const totale = calcolaTotale();
   const summaryContent = document.getElementById('summary-content');
@@ -455,39 +440,6 @@ function preparaRiepilogo() {
       </div>
     `;
   }
-  
-  summaryContent.innerHTML = `
-    <div class="summary-section">
-      <h3>📍 Dettagli soggiorno</h3>
-      <div class="summary-item">
-        <span>Data Check-in:</span>
-        <span><strong>${formatDataItaliana(dataCheckin)}</strong></span>
-      </div>
-      <div class="summary-item">
-        <span>Appartamento:</span>
-        <span><strong>${document.getElementById('appartamento')?.value || 'N/A'}</strong></span>
-      </div>
-      <div class="summary-item">
-        <span>Numero ospiti:</span>
-        <span><strong>${numeroOspiti}</strong></span>
-      </div>
-      <div class="summary-item">
-        <span>Numero notti:</span>
-        <span><strong>${numeroNotti}</strong></span>
-      </div>
-    </div>
-    <div class="summary-section">
-      <h3>👥 Ospiti</h3>
-      ${ospitiHTML}
-    </div>
-    <div class="summary-section">
-      <h3>💰 Totale tassa di soggiorno</h3>
-      <div class="total-amount">€${totale.toFixed(2)}</div>
-      <small class="tax-note">Tassa di €1,50 per notte per ospiti dai 4 anni in su</small>
-    </div>
-  `;
-  aggiornaBottonePagamento(totale);
-}
   
   summaryContent.innerHTML = `
     <div class="summary-section">
@@ -522,7 +474,7 @@ function aggiornaBottonePagamento(totale) {
   `;
 }
 
-// Gestione fotocamera
+// === GESTIONE FOTOCAMERA ===
 let currentStream = null;
 
 window.handleFileUpload = function(input, ospiteNum) {
@@ -614,7 +566,7 @@ window.closeCamera = function(ospiteNum) {
   if (preview) preview.style.display = 'none';
 }
 
-// === NUOVA FUNZIONE: PAGAMENTO CON SALVATAGGIO DATI ===
+// === PAGAMENTO ===
 window.procediAlPagamento = async function() {
   if (!validaPrenotazioneCompleta()) return;
   
@@ -625,17 +577,14 @@ window.procediAlPagamento = async function() {
   }
   
   try {
-    // 1. RACCOGLI TUTTI I DATI (inclusi documenti)
     showNotification('📦 Raccolta documenti in corso...', 'info');
     const datiCompleti = await raccogliDatiPrenotazione();
     
     console.log(`✅ Dati raccolti: ${datiCompleti.ospiti.length} ospiti, ${datiCompleti.documenti.length} documenti`);
     
-    // 2. GENERA SESSION ID TEMPORANEO
     const tempSessionId = 'temp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
     console.log('🔑 Session ID temporaneo:', tempSessionId);
     
-    // 3. SALVA DATI SUL SERVER (inclusi documenti base64)
     if (payButton) payButton.innerHTML = '⏳ Salvataggio dati...';
     
     const salvataggioResponse = await fetch(`${API_BASE_URL}/salva-dati-temporanei`, {
@@ -653,7 +602,6 @@ window.procediAlPagamento = async function() {
     
     console.log('💾 Dati salvati temporaneamente sul server');
     
-    // 4. CREA PAGAMENTO STRIPE (senza documenti nei metadata)
     if (payButton) payButton.innerHTML = '⏳ Creazione pagamento...';
     
     await creaLinkPagamentoConSessionId(datiCompleti, tempSessionId);
@@ -745,10 +693,9 @@ async function creaLinkPagamentoConSessionId(datiPrenotazione, tempSessionId) {
     const API_ENDPOINT = `${API_BASE_URL}/crea-pagamento-stripe`;
     console.log("🌐 Chiamata API ->", API_ENDPOINT);
 
-    // Aggiungi il temp_session_id ai metadata per il webhook
     const datiConMetadata = {
       ...datiPrenotazione,
-      tempSessionId: tempSessionId, // IMPORTANTE: il webhook userà questo per recuperare i documenti
+      tempSessionId: tempSessionId,
       successUrl: `https://spaceestate.github.io/Checkin/successo-pagamento.html?session_id={CHECKOUT_SESSION_ID}&temp_session=${tempSessionId}`,
       cancelUrl: `${window.location.href}?canceled=true`
     };
@@ -800,43 +747,10 @@ function gestisciRitornoStripe() {
   }
 }
 
-document.addEventListener('DOMContentLoaded', function() {
-  console.log('🚀 Check-in form inizializzato');
-  const dataCheckinInput = document.getElementById('data-checkin');
-  if (dataCheckinInput) {
-    const oggi = new Date().toISOString().split('T')[0];
-    dataCheckinInput.min = oggi;
-  }
-  document.querySelectorAll('.step').forEach(step => step.classList.remove('active'));
-  const firstStep = document.getElementById('step-1');
-  if (firstStep) firstStep.classList.add('active');
-  gestisciRitornoStripe();
-  window.addEventListener('beforeunload', function() {
-    if (currentStream) currentStream.getTracks().forEach(track => track.stop());
-  });
-  // === OTTIMIZZAZIONI MOBILE PER DATE INPUT ===
-
-// Rilevamento dispositivo
+// === OTTIMIZZAZIONI MOBILE ===
 const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 const isAndroid = /Android/i.test(navigator.userAgent);
 const isOldAndroid = isAndroid && /Android [0-5]/.test(navigator.userAgent);
-
-// Funzione per potenziare input date su mobile
-function potenziaTuosDateInput() {
-  if (!isMobile) return; // Su desktop lascia i date input standard
-  
-  const dateInputs = document.querySelectorAll('input[type="date"]');
-  
-  dateInputs.forEach(input => {
-    // Se il browser non supporta bene i date input nattivi, crea un wrapper
-    if (isOldAndroid || !supportaDateInput()) {
-      creaCustomDateInput(input);
-    } else {
-      // Anche su Android moderno, migliora l'UX con feedback
-      miglioraDateInputNativo(input);
-    }
-  });
-}
 
 function supportaDateInput() {
   const input = document.createElement('input');
@@ -846,7 +760,6 @@ function supportaDateInput() {
 }
 
 function miglioraDateInputNativo(input) {
-  // Aggiungi evento per mostrare formato quando aperto
   input.addEventListener('change', function() {
     if (this.value) {
       const date = new Date(this.value + 'T00:00:00');
@@ -856,32 +769,39 @@ function miglioraDateInputNativo(input) {
         month: 'numeric',
         day: 'numeric'
       });
-      // Aggiorna il placeholder per mostrare la data selezionata
       this.setAttribute('data-selected', formatted);
     }
   });
 
-  // Focus handling per tastiera virtuale
   input.addEventListener('focus', function() {
-    // Scorri il form per mostrare il date picker
     setTimeout(() => {
       this.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }, 100);
   });
 }
 
+function validaData(giorno, mese, anno) {
+  const g = parseInt(giorno);
+  const m = parseInt(mese);
+  const a = parseInt(anno);
+
+  if (g < 1 || g > 31 || m < 1 || m > 12 || a < 1900 || a > new Date().getFullYear()) {
+    return false;
+  }
+
+  const date = new Date(a, m - 1, g);
+  return date.getDate() === g && date.getMonth() === m - 1 && date.getFullYear() === a;
+}
+
 function creaCustomDateInput(originalInput) {
-  // Se esiste già un wrapper, non rifare
   if (originalInput.parentElement.classList.contains('date-input-wrapper')) {
     return;
   }
 
-  // Crea wrapper
   const wrapper = document.createElement('div');
   wrapper.className = 'date-input-wrapper mobile-date-input';
   originalInput.parentElement.insertBefore(wrapper, originalInput);
 
-  // Crea input di testo per mobile (più comodo)
   const textInput = document.createElement('input');
   textInput.type = 'text';
   textInput.placeholder = 'GG/MM/AAAA';
@@ -890,11 +810,9 @@ function creaCustomDateInput(originalInput) {
   textInput.pattern = '[0-9/]*';
   textInput.inputMode = 'numeric';
 
-  // Nascondi l'input date originale
   originalInput.style.display = 'none';
   originalInput.type = 'hidden';
 
-  // Aggiungi validazione e formattazione automatica
   textInput.addEventListener('input', function(e) {
     let value = this.value.replace(/\D/g, '');
     
@@ -908,7 +826,6 @@ function creaCustomDateInput(originalInput) {
       }
     }
 
-    // Aggiorna il hidden input con formato ISO
     if (value.length === 8) {
       const giorno = value.slice(0, 2);
       const mese = value.slice(2, 4);
@@ -924,7 +841,6 @@ function creaCustomDateInput(originalInput) {
     }
   });
 
-  // Ripristina formato se incollato
   textInput.addEventListener('paste', function(e) {
     e.preventDefault();
     let pasted = (e.clipboardData || window.clipboardData).getData('text');
@@ -943,7 +859,6 @@ function creaCustomDateInput(originalInput) {
     }
   });
 
-  // Se l'utente cambia il dato originale (es. da codice), aggiorna il testo
   originalInput.addEventListener('change', function() {
     if (this.value) {
       const parts = this.value.split('-');
@@ -951,7 +866,6 @@ function creaCustomDateInput(originalInput) {
     }
   });
 
-  // Crea bottone per aprire date picker nativo come fallback
   const pickerBtn = document.createElement('button');
   pickerBtn.type = 'button';
   pickerBtn.innerHTML = '📅';
@@ -977,7 +891,6 @@ function creaCustomDateInput(originalInput) {
     originalInput.click();
   });
 
-  // Mostra il date picker nativo su click del bottone
   originalInput.addEventListener('change', function() {
     if (this.value) {
       const parts = this.value.split('-');
@@ -990,28 +903,26 @@ function creaCustomDateInput(originalInput) {
   wrapper.appendChild(pickerBtn);
 }
 
-function validaData(giorno, mese, anno) {
-  const g = parseInt(giorno);
-  const m = parseInt(mese);
-  const a = parseInt(anno);
-
-  if (g < 1 || g > 31 || m < 1 || m > 12 || a < 1900 || a > new Date().getFullYear()) {
-    return false;
-  }
-
-  const date = new Date(a, m - 1, g);
-  return date.getDate() === g && date.getMonth() === m - 1 && date.getFullYear() === a;
+function potenziaTuosDateInput() {
+  if (!isMobile) return;
+  
+  const dateInputs = document.querySelectorAll('input[type="date"]');
+  
+  dateInputs.forEach(input => {
+    if (isOldAndroid || !supportaDateInput()) {
+      creaCustomDateInput(input);
+    } else {
+      miglioraDateInputNativo(input);
+    }
+  });
 }
 
-// === OTTIMIZZAZIONI PER SELECT SU MOBILE ===
 function ottimizzaSelectMobile() {
   const selects = document.querySelectorAll('.form-select');
   
   selects.forEach(select => {
-    // Aumenta font size per evitare zoom su iOS
     select.style.fontSize = '16px';
     
-    // Aggiungi label accessibili
     const label = select.previousElementSibling;
     if (label && label.classList.contains('form-label')) {
       select.setAttribute('aria-labelledby', label.id || '');
@@ -1019,20 +930,17 @@ function ottimizzaSelectMobile() {
   });
 }
 
-// === OTTIMIZZAZIONI FORM GENERALE ===
 function ottimizzaFormMobile() {
   if (!isMobile) return;
 
   const inputs = document.querySelectorAll('.form-input, .form-select');
   
   inputs.forEach(input => {
-    // Font size 16px previene auto-zoom su iOS
     if (!input.style.fontSize) {
       input.style.fontSize = '16px';
     }
 
-    // Aggiungi autocorrect e autocomplete dove appropriato
-    if (input.name && input.name.includes('cognome') || input.name.includes('nome')) {
+    if (input.name && (input.name.includes('cognome') || input.name.includes('nome'))) {
       input.setAttribute('autocomplete', 'on');
       input.setAttribute('autocorrect', 'off');
     }
@@ -1047,7 +955,6 @@ function ottimizzaFormMobile() {
     }
   });
 
-  // Previeni zoom su form
   const metaViewport = document.querySelector('meta[name="viewport"]');
   if (metaViewport) {
     metaViewport.setAttribute('content', 
@@ -1055,7 +962,6 @@ function ottimizzaFormMobile() {
   }
 }
 
-// === GESTIONE KEYBOARD VIRTUALE ===
 function gestisciKeyboardVirtuale() {
   if (!isMobile) return;
 
@@ -1063,23 +969,19 @@ function gestisciKeyboardVirtuale() {
     if (e.target.classList.contains('form-input') || 
         e.target.classList.contains('form-select') ||
         e.target.classList.contains('date-text-input')) {
-      // Scorri l'elemento al centro della vista
       setTimeout(() => {
         e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }, 300);
     }
   });
 
-  // Riduci padding quando keyboard è visibile
   let lastInnerHeight = window.innerHeight;
   window.addEventListener('resize', function() {
     const currentInnerHeight = window.innerHeight;
     
     if (currentInnerHeight < lastInnerHeight - 100) {
-      // Keyboard probabile che sia aperto
       document.body.style.paddingBottom = '10px';
     } else {
-      // Keyboard probabile che sia chiuso
       document.body.style.paddingBottom = '0';
     }
     
@@ -1089,17 +991,52 @@ function gestisciKeyboardVirtuale() {
 
 // === INIZIALIZZAZIONE ===
 document.addEventListener('DOMContentLoaded', function() {
-  // Log per debug
+  console.log('🚀 Check-in form inizializzato');
   console.log(`📱 Dispositivo: ${isMobile ? 'Mobile' : 'Desktop'}, Android: ${isAndroid}, Vecchio Android: ${isOldAndroid}`);
-
-  // Applica tutte le ottimizzazioni
+  
+  const dataCheckinInput = document.getElementById('data-checkin');
+  if (dataCheckinInput) {
+    const oggi = new Date().toISOString().split('T')[0];
+    dataCheckinInput.min = oggi;
+  }
+  
+  document.querySelectorAll('.step').forEach(step => step.classList.remove('active'));
+  const firstStep = document.getElementById('step-1');
+  if (firstStep) firstStep.classList.add('active');
+  
+  gestisciRitornoStripe();
+  
+  // Event listener per numero ospiti
+  const numeroOspitiSelect = document.getElementById('numero-ospiti');
+  if (numeroOspitiSelect) {
+    numeroOspitiSelect.addEventListener('change', function() {
+      const gruppoWrapper = document.getElementById("gruppo-wrapper");
+      if (!gruppoWrapper) return;
+      
+      const numOspiti = parseInt(this.value) || 0;
+      
+      if (numOspiti > 1) {
+        gruppoWrapper.classList.add("show");
+        const tipoGruppoSelect = document.getElementById("tipo-gruppo");
+        if (tipoGruppoSelect) tipoGruppoSelect.required = true;
+      } else {
+        gruppoWrapper.classList.remove("show");
+        const tipoGruppoSelect = document.getElementById("tipo-gruppo");
+        if (tipoGruppoSelect) {
+          tipoGruppoSelect.required = false;
+          tipoGruppoSelect.value = "";
+        }
+      }
+    });
+  }
+  
+  // Ottimizzazioni mobile
   if (isMobile) {
     potenziaTuosDateInput();
     ottimizzaSelectMobile();
     ottimizzaFormMobile();
     gestisciKeyboardVirtuale();
     
-    // Aggiungi supporto per il ricalcolo dei date input custom
     setTimeout(() => {
       const originalForm = document.getElementById('checkin-form');
       if (originalForm) {
@@ -1110,23 +1047,13 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     }, 100);
   }
+  
+  window.addEventListener('beforeunload', function() {
+    if (currentStream) currentStream.getTracks().forEach(track => track.stop());
+  });
 });
 
-// === RICALCOLO DOPO GENERAZIONE STEP OSPITI ===
-// Aggiungi questa riga dopo la funzione generaStepOspiti() - aggiorna l'observer
-const originalGeneraStepOspiti = window.generaStepOspiti;
-window.generaStepOspiti = function() {
-  originalGeneraStepOspiti.apply(this, arguments);
-  
-  // Dopo aver creato i nuovi step, ottimizza i date input
-  if (isMobile) {
-    setTimeout(() => {
-      potenziaTuosDateInput();
-    }, 50);
-  }
-};
-
-// === STILI AGGIUNTIVI PER INPUT ERRORE ===
+// Stili aggiuntivi per input errore
 const dateErrorStyle = document.createElement('style');
 dateErrorStyle.textContent = `
   .date-text-input.error {
@@ -1154,4 +1081,3 @@ dateErrorStyle.textContent = `
   }
 `;
 document.head.appendChild(dateErrorStyle);
-});
