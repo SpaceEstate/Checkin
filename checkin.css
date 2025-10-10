@@ -1294,7 +1294,6 @@ input[type="number"] {
     letter-spacing: 0.3px;
   }
 }
-}
 
 /* === OTTIMIZZAZIONE ULTRA-MOBILE (< 480px) === */
 @media (max-width: 480px) {
