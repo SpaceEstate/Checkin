@@ -1,5 +1,5 @@
 // api/genera-pdf-email.js
-// VERSIONE COMPLETA E CORRETTA con tutti i campi
+// VERSIONE AGGIORNATA: documenti come allegati separati, non nel PDF
 import nodemailer from 'nodemailer';
 
 export default async function handler(req, res) {
@@ -18,7 +18,7 @@ export default async function handler(req, res) {
       });
     }
 
-    // 1. Genera HTML per il PDF
+    // 1. Genera HTML per il PDF (SENZA documenti)
     const htmlContent = generaHTMLRiepilogo(datiPrenotazione);
     
     let pdfBuffer = null;
@@ -35,14 +35,18 @@ export default async function handler(req, res) {
       console.log('📧 Procedo con invio email senza PDF');
     }
     
-    // 3. Invia email (con o senza PDF)
+    // 3. Prepara allegati documenti
+    const allegatiDocumenti = preparaAllegatiDocumenti(datiPrenotazione.documenti);
+    console.log(`📎 Allegati documenti preparati: ${allegatiDocumenti.length}`);
+    
+    // 4. Invia email (con o senza PDF + documenti come allegati)
     console.log('📧 Invio email in corso...');
     if (pdfGenerato && pdfBuffer) {
-      await inviaEmailConPDF(emailDestinatario, datiPrenotazione, pdfBuffer);
-      console.log('✅ Email inviata CON PDF allegato');
+      await inviaEmailConPDF(emailDestinatario, datiPrenotazione, pdfBuffer, allegatiDocumenti);
+      console.log('✅ Email inviata CON PDF e documenti allegati');
     } else {
-      await inviaEmailSenzaPDF(emailDestinatario, datiPrenotazione);
-      console.log('✅ Email inviata SENZA PDF (solo testo)');
+      await inviaEmailSenzaPDF(emailDestinatario, datiPrenotazione, allegatiDocumenti);
+      console.log('✅ Email inviata SENZA PDF (solo testo + documenti)');
     }
     
     return res.status(200).json({ 
@@ -50,7 +54,8 @@ export default async function handler(req, res) {
       message: pdfGenerato 
         ? 'PDF generato e email inviata con successo' 
         : 'Email inviata con successo (PDF non disponibile)',
-      pdfGenerato: pdfGenerato
+      pdfGenerato: pdfGenerato,
+      numeroDocumenti: allegatiDocumenti.length
     });
 
   } catch (error) {
@@ -59,6 +64,50 @@ export default async function handler(req, res) {
       error: 'Errore interno: ' + error.message 
     });
   }
+}
+
+// NUOVA FUNZIONE: Prepara allegati documenti
+function preparaAllegatiDocumenti(documenti) {
+  if (!Array.isArray(documenti) || documenti.length === 0) {
+    return [];
+  }
+
+  const allegati = [];
+  
+  documenti.forEach((doc, index) => {
+    if (!doc.base64 || !doc.nomeFile) {
+      console.warn(`⚠️ Documento ${index + 1} incompleto, saltato`);
+      return;
+    }
+
+    try {
+      // Rimuovi il prefixo data:image/...;base64, se presente
+      let base64Data = doc.base64;
+      if (base64Data.includes(',')) {
+        base64Data = base64Data.split(',')[1];
+      }
+
+      // Converti base64 in Buffer
+      const buffer = Buffer.from(base64Data, 'base64');
+
+      // Determina il nome file con prefisso ospite
+      const ospitePrefix = doc.ospiteNumero ? `Ospite_${doc.ospiteNumero}_` : '';
+      const nomeFile = `${ospitePrefix}${doc.nomeFile}`;
+
+      allegati.push({
+        filename: nomeFile,
+        content: buffer,
+        contentType: doc.tipo || 'application/octet-stream'
+      });
+
+      console.log(`📎 Allegato preparato: ${nomeFile} (${(buffer.length / 1024).toFixed(2)} KB)`);
+
+    } catch (error) {
+      console.error(`❌ Errore preparazione documento ${index + 1}:`, error.message);
+    }
+  });
+
+  return allegati;
 }
 
 // FUNZIONE: Genera PDF usando Browserless API
@@ -126,7 +175,7 @@ async function generaPDFConBrowserless(htmlContent) {
   }
 }
 
-// FUNZIONE: Genera HTML con TUTTI I CAMPI (luogo nascita + luogo rilascio)
+// FUNZIONE AGGIORNATA: Genera HTML SENZA documenti embedded con layout ottimizzato per la stampa
 function generaHTMLRiepilogo(dati) {
   const dataFormattata = new Date(dati.dataCheckin).toLocaleDateString('it-IT', {
     weekday: 'long',
@@ -136,7 +185,82 @@ function generaHTMLRiepilogo(dati) {
   });
 
   const documentiValidi = Array.isArray(dati.documenti) ? dati.documenti : [];
-  console.log(`📄 Documenti trovati: ${documentiValidi.length}`);
+  console.log(`📄 Documenti trovati: ${documentiValidi.length} (verranno allegati separatamente)`);
+
+  // Genera HTML ospiti con page-break intelligenti
+  const ospitiHTML = (dati.ospiti || []).map((ospite, index) => {
+    const documento = documentiValidi.find(d => 
+      d && d.ospiteNumero && d.ospiteNumero === ospite.numero
+    );
+    
+    // Page break ogni 2 ospiti (tranne il primo che sta con i dettagli)
+    const needsPageBreak = index > 0 && index % 2 === 0;
+    
+    return `
+      <div class="ospite ${ospite.isResponsabile ? 'responsabile' : ''}" ${needsPageBreak ? 'style="page-break-before: always;"' : ''}>
+        <div class="ospite-header">
+          <div class="ospite-nome">
+            ${ospite.cognome || 'N/A'} ${ospite.nome || 'N/A'}
+          </div>
+          ${ospite.isResponsabile ? '<div class="ospite-badge">RESPONSABILE</div>' : `<div class="ospite-number">Ospite ${ospite.numero}</div>`}
+        </div>
+        
+        <div class="info-grid">
+          <div class="info-item">
+            <div class="info-label">Genere</div>
+            <div class="info-value">${ospite.genere === 'M' ? 'Maschio' : ospite.genere === 'F' ? 'Femmina' : 'N/A'}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Data Nascita</div>
+            <div class="info-value">${ospite.nascita ? new Date(ospite.nascita).toLocaleDateString('it-IT') : 'N/A'}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Età</div>
+            <div class="info-value">${ospite.eta || 0} anni ${(ospite.eta || 0) >= 4 ? '(tassabile)' : '(esente)'}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Cittadinanza</div>
+            <div class="info-value">${ospite.cittadinanza || 'N/A'}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Luogo Nascita</div>
+            <div class="info-value">${ospite.luogoNascita || 'N/A'}</div>
+          </div>
+          ${ospite.comune && ospite.provincia ? `
+          <div class="info-item">
+            <div class="info-label">Comune/Provincia</div>
+            <div class="info-value">${ospite.comune} (${ospite.provincia})</div>
+          </div>
+          ` : ''}
+        </div>
+        
+        ${ospite.isResponsabile && ospite.tipoDocumento ? `
+        <div class="info-grid" style="margin-top: 10px;">
+          <div class="info-item">
+            <div class="info-label">Tipo Documento</div>
+            <div class="info-value">${ospite.tipoDocumento}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Numero Documento</div>
+            <div class="info-value">${ospite.numeroDocumento || 'N/A'}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Luogo Rilascio</div>
+            <div class="info-value">${ospite.luogoRilascio || 'N/A'}</div>
+          </div>
+        </div>
+        ` : ''}
+        
+        ${documento ? `
+        <div class="documento-note">
+          <strong>📎 Documento allegato:</strong> ${documento.nomeFile || 'Documento'} 
+          (${Math.round(documento.dimensione / 1024)} KB) - 
+          <em>Vedi allegati email separati</em>
+        </div>
+        ` : ''}
+      </div>
+    `;
+  }).join('');
 
   return `
     <!DOCTYPE html>
@@ -144,52 +268,64 @@ function generaHTMLRiepilogo(dati) {
     <head>
       <meta charset="UTF-8">
       <style>
+        @page {
+          size: A4;
+          margin: 15mm;
+        }
+        
         body {
           font-family: 'Arial', sans-serif;
-          line-height: 1.6;
+          line-height: 1.4;
           color: #333;
-          max-width: 800px;
-          margin: 0 auto;
-          padding: 20px;
+          margin: 0;
+          padding: 0;
         }
         
         .header {
           text-align: center;
-          margin-bottom: 40px;
+          margin-bottom: 20px;
           border-bottom: 3px solid #3498db;
-          padding-bottom: 20px;
+          padding-bottom: 15px;
+          page-break-after: avoid;
         }
         
         .header h1 {
           color: #2c3e50;
-          font-size: 28px;
-          margin-bottom: 10px;
+          font-size: 24px;
+          margin: 0 0 8px 0;
+        }
+        
+        .header p {
+          margin: 0;
+          font-size: 12px;
+          color: #666;
         }
         
         .section {
-          margin: 30px 0;
+          margin: 15px 0;
           background: #f8f9fa;
-          padding: 20px;
-          border-radius: 8px;
+          padding: 15px;
+          border-radius: 6px;
           border-left: 4px solid #3498db;
+          page-break-inside: avoid;
         }
         
         .section h2 {
           color: #2c3e50;
-          font-size: 20px;
-          margin-bottom: 15px;
+          font-size: 16px;
+          margin: 0 0 12px 0;
         }
         
         .info-grid {
           display: grid;
           grid-template-columns: 1fr 1fr;
-          gap: 15px;
-          margin: 15px 0;
+          gap: 10px;
+          margin: 10px 0;
         }
         
         .info-item {
           background: white;
-          padding: 10px;
+          padding: 8px 10px;
           border-radius: 4px;
           border: 1px solid #e9ecef;
         }
@@ -197,22 +333,23 @@ function generaHTMLRiepilogo(dati) {
         .info-label {
           font-weight: bold;
           color: #495057;
-          font-size: 12px;
+          font-size: 10px;
           text-transform: uppercase;
-          margin-bottom: 5px;
+          margin-bottom: 3px;
         }
         
         .info-value {
           color: #2c3e50;
-          font-size: 14px;
+          font-size: 13px;
         }
         
         .ospite {
           background: white;
           border: 2px solid #e9ecef;
-          border-radius: 8px;
-          padding: 20px;
-          margin: 15px 0;
+          border-radius: 6px;
+          padding: 15px;
+          margin: 12px 0;
+          page-break-inside: avoid;
         }
         
         .ospite.responsabile {
@@ -224,13 +361,13 @@ function generaHTMLRiepilogo(dati) {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          margin-bottom: 15px;
-          padding-bottom: 10px;
+          margin-bottom: 12px;
+          padding-bottom: 8px;
           border-bottom: 1px solid #dee2e6;
         }
         
         .ospite-nome {
-          font-size: 18px;
+          font-size: 16px;
           font-weight: bold;
           color: #2c3e50;
         }
@@ -238,50 +375,106 @@ function generaHTMLRiepilogo(dati) {
         .ospite-badge {
           background: #28a745;
           color: white;
-          padding: 4px 12px;
-          border-radius: 20px;
-          font-size: 12px;
+          padding: 3px 10px;
+          border-radius: 15px;
+          font-size: 11px;
           font-weight: bold;
         }
         
-        .documento-section {
-          margin-top: 20px;
-          padding-top: 15px;
-          border-top: 1px solid #dee2e6;
+        .ospite-number {
+          background: #3498db;
+          color: white;
+          padding: 3px 10px;
+          border-radius: 15px;
+          font-size: 11px;
+          font-weight: bold;
         }
         
-        .documento-img {
-          max-width: 100%;
-          max-height: 300px;
-          border: 2px solid #dee2e6;
-          border-radius: 8px;
-          margin: 10px 0;
-          display: block;
+        .documento-note {
+          margin-top: 10px;
+          padding: 10px;
+          background: #fff3cd;
+          border-left: 4px solid #ffc107;
+          border-radius: 4px;
+          font-size: 12px;
+        }
+        
+        .documento-note strong {
+          color: #856404;
         }
         
         .totale-section {
           background: #e8f5e8;
           border: 2px solid #28a745;
-          padding: 20px;
-          border-radius: 8px;
+          padding: 15px;
+          border-radius: 6px;
           text-align: center;
-          margin: 30px 0;
+          margin: 15px 0;
+          page-break-inside: avoid;
+          page-break-before: auto;
+        }
+        
+        .totale-section h2 {
+          margin: 0 0 8px 0;
+          font-size: 16px;
         }
         
         .totale-amount {
-          font-size: 32px;
+          font-size: 28px;
           font-weight: bold;
           color: #28a745;
-          margin: 10px 0;
+          margin: 8px 0;
+        }
+        
+        .allegati-section {
+          margin: 15px 0;
+          padding: 15px;
+          background: #f8f9fa;
+          border-radius: 6px;
+          border-left: 4px solid #3498db;
+          page-break-inside: avoid;
+        }
+        
+        .allegati-section h2 {
+          color: #2c3e50;
+          font-size: 16px;
+          margin: 0 0 10px 0;
+        }
+        
+        .allegati-section ul {
+          margin: 8px 0;
+          padding-left: 20px;
+        }
+        
+        .allegati-section li {
+          margin: 4px 0;
+          font-size: 12px;
         }
         
         .footer {
-          margin-top: 40px;
-          padding-top: 20px;
+          margin-top: 20px;
+          padding-top: 15px;
           border-top: 1px solid #dee2e6;
           text-align: center;
           color: #6c757d;
-          font-size: 12px;
+          font-size: 10px;
+          page-break-inside: avoid;
+        }
+        
+        /* Regole per la stampa */
+        @media print {
+          body {
+            print-color-adjust: exact;
+            -webkit-print-color-adjust: exact;
+          }
+          
+          .ospite {
+            page-break-inside: avoid;
+          }
+          
+          .section {
+            page-break-inside: avoid;
+          }
         }
       </style>
     </head>
@@ -313,86 +506,36 @@ function generaHTMLRiepilogo(dati) {
         </div>
       </div>
 
-      <div class="section">
-        <h2>👥 Ospiti Registrati</h2>
-        ${(dati.ospiti || []).map((ospite) => {
-          const documento = documentiValidi.find(d => 
-            d && d.ospiteNumero && d.ospiteNumero === ospite.numero
-          );
-          
-          return `
-            <div class="ospite ${ospite.isResponsabile ? 'responsabile' : ''}">
-              <div class="ospite-header">
-                <div class="ospite-nome">
-                  ${ospite.cognome || 'N/A'} ${ospite.nome || 'N/A'}
-                </div>
-                ${ospite.isResponsabile ? '<div class="ospite-badge">RESPONSABILE</div>' : ''}
-              </div>
-              
-              <div class="info-grid">
-                <div class="info-item">
-                  <div class="info-label">Genere</div>
-                  <div class="info-value">${ospite.genere === 'M' ? 'Maschio' : ospite.genere === 'F' ? 'Femmina' : 'N/A'}</div>
-                </div>
-                <div class="info-item">
-                  <div class="info-label">Data Nascita</div>
-                  <div class="info-value">${ospite.nascita ? new Date(ospite.nascita).toLocaleDateString('it-IT') : 'N/A'}</div>
-                </div>
-                <div class="info-item">
-                  <div class="info-label">Età</div>
-                  <div class="info-value">${ospite.eta || 0} anni ${(ospite.eta || 0) >= 4 ? '(tassabile)' : '(esente)'}</div>
-                </div>
-                <div class="info-item">
-                  <div class="info-label">Cittadinanza</div>
-                  <div class="info-value">${ospite.cittadinanza || 'N/A'}</div>
-                </div>
-                <div class="info-item">
-                  <div class="info-label">Luogo Nascita</div>
-                  <div class="info-value">${ospite.luogoNascita || 'N/A'}</div>
-                </div>
-                ${ospite.comune && ospite.provincia ? `
-                <div class="info-item">
-                  <div class="info-label">Comune/Provincia</div>
-                  <div class="info-value">${ospite.comune} (${ospite.provincia})</div>
-                </div>
-                ` : ''}
-              </div>
-              
-              ${ospite.isResponsabile && ospite.tipoDocumento ? `
-              <div class="info-grid" style="margin-top: 15px;">
-                <div class="info-item">
-                  <div class="info-label">Tipo Documento</div>
-                  <div class="info-value">${ospite.tipoDocumento}</div>
-                </div>
-                <div class="info-item">
-                  <div class="info-label">Numero Documento</div>
-                  <div class="info-value">${ospite.numeroDocumento || 'N/A'}</div>
-                </div>
-                <div class="info-item">
-                  <div class="info-label">Luogo Rilascio</div>
-                  <div class="info-value">${ospite.luogoRilascio || 'N/A'}</div>
-                </div>
-              </div>
-              ` : ''}
-              
-              ${documento ? `
-              <div class="documento-section">
-                <strong>Documento caricato:</strong> ${documento.nomeFile || 'Documento'} (${Math.round(documento.dimensione / 1024)} KB)
-                ${documento.base64 ? `<img src="${documento.base64}" alt="Documento" class="documento-img" />` : ''}
-              </div>
-              ` : ''}
-            </div>
-          `;
-        }).join('')}
-      </div>
-
       <div class="totale-section">
         <h2>💰 Totale Tassa di Soggiorno</h2>
         <div class="totale-amount">€${(dati.totale || 0).toFixed(2)}</div>
-        <div style="font-size: 13px; color: #666; margin-top: 10px;">
+        <div style="font-size: 11px; color: #666; margin-top: 8px;">
           Tassa di €1,50 per notte per ospiti dai 4 anni in su
         </div>
       </div>
+
+      <div class="section" style="margin-top: 20px;">
+        <h2>👥 Ospiti Registrati</h2>
+      </div>
+
+      ${ospitiHTML}
+
+      ${documentiValidi.length > 0 ? `
+      <div class="allegati-section" style="page-break-before: auto;">
+        <h2>📎 Documenti Allegati</h2>
+        <p style="margin: 8px 0; color: #666; font-size: 12px;">
+          I documenti di identità sono allegati separatamente a questa email:
+        </p>
+        <ul>
+          ${documentiValidi.map(doc => `
+            <li>
+              <strong>Ospite ${doc.ospiteNumero}:</strong> ${doc.nomeFile} 
+              (${Math.round(doc.dimensione / 1024)} KB)
+            </li>
+          `).join('')}
+        </ul>
+      </div>
+      ` : ''}
 
       <div class="footer">
         <p>Documento generato automaticamente dal sistema di check-in</p>
@@ -403,8 +546,8 @@ function generaHTMLRiepilogo(dati) {
   `;
 }
 
-// FUNZIONE: Invia email CON PDF
-async function inviaEmailConPDF(emailDestinatario, dati, pdfBuffer) {
+// FUNZIONE AGGIORNATA: Invia email CON PDF + documenti come allegati separati
+async function inviaEmailConPDF(emailDestinatario, dati, pdfBuffer, allegatiDocumenti) {
   const transporter = nodemailer.createTransport({
     service: 'yahoo',
     auth: {
@@ -427,31 +570,37 @@ DETTAGLI SOGGIORNO:
 
 Responsabile: ${dati.ospiti?.[0]?.cognome || 'N/A'} ${dati.ospiti?.[0]?.nome || 'N/A'}
 
-📎 Vedi PDF allegato per il riepilogo completo con i documenti degli ospiti.
+📎 ALLEGATI:
+- Riepilogo completo (PDF)
+${allegatiDocumenti.length > 0 ? `- ${allegatiDocumenti.length} documento/i di identità` : ''}
 
 ---
 Sistema Check-in Automatico
   `;
+
+  // Prepara array allegati: PDF + documenti
+  const allegati = [
+    {
+      filename: `checkin-${Date.now()}.pdf`,
+      content: pdfBuffer,
+      contentType: 'application/pdf'
+    },
+    ...allegatiDocumenti
+  ];
 
   const mailOptions = {
     from: process.env.EMAIL_USER,
     to: emailDestinatario,
     subject: oggetto,
     text: corpoEmail,
-    attachments: [
-      {
-        filename: `checkin-${Date.now()}.pdf`,
-        content: pdfBuffer,
-        contentType: 'application/pdf'
-      }
-    ]
+    attachments: allegati
   };
 
   await transporter.sendMail(mailOptions);
 }
 
-// FUNZIONE: Invia email SENZA PDF (fallback) - CON TUTTI I CAMPI
-async function inviaEmailSenzaPDF(emailDestinatario, dati) {
+// FUNZIONE AGGIORNATA: Invia email SENZA PDF ma CON documenti allegati
+async function inviaEmailSenzaPDF(emailDestinatario, dati, allegatiDocumenti) {
   const transporter = nodemailer.createTransport({
     service: 'yahoo',
     auth: {
@@ -462,7 +611,7 @@ async function inviaEmailSenzaPDF(emailDestinatario, dati) {
 
   const oggetto = `Check-in Ricevuto - ${dati.appartamento || 'Appartamento'} - ${new Date(dati.dataCheckin).toLocaleDateString('it-IT')}`;
   
-  // Genera lista ospiti dettagliata CON luogo nascita e rilascio
+  // Genera lista ospiti dettagliata
   let listaOspiti = '';
   (dati.ospiti || []).forEach((ospite, index) => {
     listaOspiti += `
@@ -505,6 +654,13 @@ Luogo nascita: ${dati.ospiti?.[0]?.luogoNascita || 'N/A'}
 ${dati.ospiti?.[0]?.tipoDocumento ? `Documento: ${dati.ospiti[0].tipoDocumento} - ${dati.ospiti[0].numeroDocumento}
 Luogo rilascio: ${dati.ospiti[0].luogoRilascio || 'N/A'}` : ''}
 
+${allegatiDocumenti.length > 0 ? `
+═══════════════════════════════════════
+DOCUMENTI ALLEGATI: ${allegatiDocumenti.length}
+═══════════════════════════════════════
+${allegatiDocumenti.map(doc => `- ${doc.filename}`).join('\n')}
+` : ''}
+
 ---
 Sistema Check-in Automatico
 Generato il ${new Date().toLocaleString('it-IT')}
@@ -514,7 +670,8 @@ Generato il ${new Date().toLocaleString('it-IT')}
     from: process.env.EMAIL_USER,
     to: emailDestinatario,
     subject: oggetto,
-    text: corpoEmail
+    text: corpoEmail,
+    attachments: allegatiDocumenti
   };
 
   await transporter.sendMail(mailOptions);
