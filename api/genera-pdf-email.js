@@ -194,7 +194,7 @@ function generaHTMLRiepilogo(dati) {
     );
     
     // Page break ogni 2 ospiti (tranne il primo che sta con i dettagli)
-    const needsPageBreak = index > 0 && index % 2 === 0;
+    const needsPageBreak = index > 0 && index % 2 === 1;
     
     return `
       <div class="ospite ${ospite.isResponsabile ? 'responsabile' : ''}" ${needsPageBreak ? 'style="page-break-before: always;"' : ''}>
