@@ -1,5 +1,5 @@
 // api/genera-pdf-email.js
-// CORREZIONE: Gestione corretta del tipo di dato per totale
+// CORREZIONE: nodemailer.createTransport (non createTransporter)
 import nodemailer from 'nodemailer';
 
 export default async function handler(req, res) {
@@ -355,9 +355,9 @@ function generaHTMLRiepilogo(dati) {
   `;
 }
 
-// FUNZIONE: Invia email CON PDF + documenti
+// ✅ CORREZIONE: createTransport invece di createTransporter
 async function inviaEmailConPDF(emailDestinatario, dati, pdfBuffer, allegatiDocumenti) {
-  const transporter = nodemailer.createTransporter({
+  const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
       user: process.env.EMAIL_USER,
@@ -365,7 +365,6 @@ async function inviaEmailConPDF(emailDestinatario, dati, pdfBuffer, allegatiDocu
     }
   });
 
-  // ✅ CORREZIONE: Converti totale in numero
   const totale = typeof dati.totale === 'string' ? parseFloat(dati.totale) : (dati.totale || 0);
 
   const oggetto = `Riepilogo Check-in - ${dati.appartamento || 'Appartamento'} - ${new Date(dati.dataCheckin).toLocaleDateString('it-IT')}`;
@@ -390,7 +389,6 @@ ${allegatiDocumenti.length > 0 ? `- ${allegatiDocumenti.length} documento/i di i
 Sistema Check-in Automatico
   `;
 
-  // Prepara array allegati: PDF + documenti
   const allegati = [
     {
       filename: `checkin-${Date.now()}.pdf`,
@@ -411,9 +409,9 @@ Sistema Check-in Automatico
   await transporter.sendMail(mailOptions);
 }
 
-// FUNZIONE: Invia email SENZA PDF ma CON documenti
+// ✅ CORREZIONE: createTransport invece di createTransporter
 async function inviaEmailSenzaPDF(emailDestinatario, dati, allegatiDocumenti) {
-  const transporter = nodemailer.createTransporter({
+  const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
       user: process.env.EMAIL_USER,
@@ -421,7 +419,6 @@ async function inviaEmailSenzaPDF(emailDestinatario, dati, allegatiDocumenti) {
     }
   });
 
-  // ✅ CORREZIONE: Converti totale in numero
   const totale = typeof dati.totale === 'string' ? parseFloat(dati.totale) : (dati.totale || 0);
 
   const oggetto = `Check-in Ricevuto - ${dati.appartamento || 'Appartamento'} - ${new Date(dati.dataCheckin).toLocaleDateString('it-IT')}`;
