@@ -1,5 +1,5 @@
 // api/invia-email-ospite.js
-// CORREZIONE: Gestione corretta del tipo di dato per totale
+// ✅ CORREZIONE: createTransport invece di createTransporter
 import nodemailer from 'nodemailer';
 
 export default async function handler(req, res) {
@@ -32,8 +32,8 @@ export default async function handler(req, res) {
     
     console.log('🔑 Codice cassetta:', codiceCassetta);
 
-    // Configura trasportatore email
-    const transporter = nodemailer.createTransporter({
+    // ✅ CORREZIONE: createTransport invece di createTransporter
+    const transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: {
         user: process.env.EMAIL_USER,
