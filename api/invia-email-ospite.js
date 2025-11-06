@@ -1,5 +1,5 @@
 // api/invia-email-ospite.js
-// Invia email di benvenuto con codice accesso all'ospite
+// CORREZIONE: Gestione corretta del tipo di dato per totale
 import nodemailer from 'nodemailer';
 
 export default async function handler(req, res) {
@@ -12,15 +12,20 @@ export default async function handler(req, res) {
   try {
     const { emailOspite, datiPrenotazione } = req.body;
 
-    // Validazione
     if (!emailOspite || !datiPrenotazione) {
       return res.status(400).json({ 
         error: 'emailOspite e datiPrenotazione sono obbligatori' 
       });
     }
 
+    // ✅ CORREZIONE: Converti totale in numero se è stringa
+    if (typeof datiPrenotazione.totale === 'string') {
+      datiPrenotazione.totale = parseFloat(datiPrenotazione.totale);
+    }
+
     console.log('📧 Email ospite:', emailOspite);
     console.log('📋 Appartamento:', datiPrenotazione.appartamento);
+    console.log('💰 Totale (tipo):', typeof datiPrenotazione.totale, datiPrenotazione.totale);
 
     // Determina il codice della cassetta basandosi sull'appartamento
     const codiceCassetta = determinaCodiceCassetta(datiPrenotazione.appartamento);
@@ -28,7 +33,7 @@ export default async function handler(req, res) {
     console.log('🔑 Codice cassetta:', codiceCassetta);
 
     // Configura trasportatore email
-    const transporter = nodemailer.createTransport({
+    const transporter = nodemailer.createTransporter({
       service: 'gmail',
       auth: {
         user: process.env.EMAIL_USER,
@@ -65,6 +70,7 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error('❌ Errore invio email ospite:', error);
+    console.error('Stack:', error.stack);
     return res.status(500).json({ 
       error: 'Errore interno: ' + error.message 
     });
@@ -94,6 +100,9 @@ function generaHTMLEmailOspite(dati, codiceCassetta) {
     month: 'long',
     day: 'numeric'
   });
+
+  // ✅ CORREZIONE: Converti totale in numero
+  const totale = typeof dati.totale === 'string' ? parseFloat(dati.totale) : (dati.totale || 0);
 
   return `
     <!DOCTYPE html>
@@ -318,7 +327,7 @@ function generaHTMLEmailOspite(dati, codiceCassetta) {
             </div>
             <div class="info-item">
               <span class="info-label">Tassa Soggiorno Pagata:</span>
-              <span class="info-value">€${(dati.totale || 0).toFixed(2)}</span>
+              <span class="info-value">€${totale.toFixed(2)}</span>
             </div>
           </div>
           
@@ -364,6 +373,9 @@ function generaTextEmailOspite(dati, codiceCassetta) {
     day: 'numeric'
   });
 
+  // ✅ CORREZIONE: Converti totale in numero
+  const totale = typeof dati.totale === 'string' ? parseFloat(dati.totale) : (dati.totale || 0);
+
   return `
 🏠 BENVENUTO A SPACE ESTATE!
 
@@ -387,7 +399,7 @@ Data Check-in: ${dataFormattata}
 Appartamento: ${dati.appartamento || 'N/A'}
 Numero Ospiti: ${dati.numeroOspiti || 0}
 Numero Notti: ${dati.numeroNotti || 0}
-Tassa Soggiorno Pagata: €${(dati.totale || 0).toFixed(2)}
+Tassa Soggiorno Pagata: €${totale.toFixed(2)}
 
 ═══════════════════════════════════════
 📍 COME ACCEDERE ALLA STRUTTURA
