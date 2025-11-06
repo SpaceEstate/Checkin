@@ -1,5 +1,6 @@
 // api/stripeWebhook.js
 // Webhook per gestire eventi Stripe (pagamento completato)
+// VERSIONE CORRETTA CON VARIABILI D'AMBIENTE GIUSTE
 import Stripe from 'stripe';
 import { GoogleSpreadsheet } from 'google-spreadsheet';
 import { JWT } from 'google-auth-library';
@@ -93,20 +94,22 @@ async function buffer(req) {
   return Buffer.concat(chunks);
 }
 
-// FUNZIONE: Scrivi dati su Google Sheets
+// FUNZIONE: Scrivi dati su Google Sheets - CORREZIONE VARIABILI
 async function scriviDatiSuGoogleSheets(session) {
   console.log('📊 === INIZIO SCRITTURA GOOGLE SHEETS ===');
   
   const metadata = session.metadata;
   
   try {
+    // ✅ CORREZIONE: Usa GOOGLE_CLIENT_EMAIL invece di GOOGLE_SERVICE_ACCOUNT_EMAIL
     const serviceAccountAuth = new JWT({
-      email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+      email: process.env.GOOGLE_CLIENT_EMAIL,
       key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
       scopes: ['https://www.googleapis.com/auth/spreadsheets'],
     });
 
-    const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID, serviceAccountAuth);
+    // ✅ CORREZIONE: Usa SHEET_ID invece di GOOGLE_SHEET_ID
+    const doc = new GoogleSpreadsheet(process.env.SHEET_ID, serviceAccountAuth);
     await doc.loadInfo();
     
     const sheet = doc.sheetsByIndex[0];
