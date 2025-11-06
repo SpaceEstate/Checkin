@@ -1,6 +1,5 @@
 // api/stripeWebhook.js
-// Webhook per gestire eventi Stripe (pagamento completato)
-// VERSIONE CORRETTA CON VARIABILI D'AMBIENTE GIUSTE
+// CORREZIONE: Conversione corretta dei tipi numerici
 import Stripe from 'stripe';
 import { GoogleSpreadsheet } from 'google-spreadsheet';
 import { JWT } from 'google-auth-library';
@@ -52,24 +51,15 @@ export default async function handler(req, res) {
         console.log('✅ PDF e email proprietario processati');
       } catch (pdfError) {
         console.error('⚠️ Errore PDF/Email proprietario:', pdfError.message);
-        
-        // FALLBACK: Invia email semplice senza PDF
-        try {
-          await inviaEmailSemplice(session);
-          console.log('✅ Email semplice proprietario inviata come fallback');
-        } catch (fallbackError) {
-          console.error('❌ Anche fallback email proprietario fallito:', fallbackError.message);
-        }
       }
       
-      // 3. NUOVO: Invia email ospite con codice accesso
+      // 3. Invia email ospite con codice accesso
       if (emailCliente) {
         try {
           await inviaEmailOspite(session, emailCliente);
           console.log('✅ Email ospite inviata con successo');
         } catch (emailError) {
           console.error('⚠️ Errore invio email ospite:', emailError.message);
-          // Non bloccare il flusso se l'email ospite fallisce
         }
       } else {
         console.warn('⚠️ Email cliente non disponibile, email ospite non inviata');
@@ -94,21 +84,19 @@ async function buffer(req) {
   return Buffer.concat(chunks);
 }
 
-// FUNZIONE: Scrivi dati su Google Sheets - CORREZIONE VARIABILI
+// FUNZIONE: Scrivi dati su Google Sheets
 async function scriviDatiSuGoogleSheets(session) {
   console.log('📊 === INIZIO SCRITTURA GOOGLE SHEETS ===');
   
   const metadata = session.metadata;
   
   try {
-    // ✅ CORREZIONE: Usa GOOGLE_CLIENT_EMAIL invece di GOOGLE_SERVICE_ACCOUNT_EMAIL
     const serviceAccountAuth = new JWT({
       email: process.env.GOOGLE_CLIENT_EMAIL,
       key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
       scopes: ['https://www.googleapis.com/auth/spreadsheets'],
     });
 
-    // ✅ CORREZIONE: Usa SHEET_ID invece di GOOGLE_SHEET_ID
     const doc = new GoogleSpreadsheet(process.env.SHEET_ID, serviceAccountAuth);
     await doc.loadInfo();
     
@@ -184,26 +172,27 @@ async function scriviDatiSuGoogleSheets(session) {
 
 // FUNZIONE: Ricostruisci dati prenotazione da metadata
 function ricostruisciDatiPrenotazione(metadata) {
+  // ✅ CORREZIONE: Converti tutti i valori numerici da stringhe
   const datiPrenotazione = {
     dataCheckin: metadata.dataCheckin,
     appartamento: metadata.appartamento,
-    numeroOspiti: metadata.numeroOspiti,
-    numeroNotti: metadata.numeroNotti,
+    numeroOspiti: parseInt(metadata.numeroOspiti) || 0,
+    numeroNotti: parseInt(metadata.numeroNotti) || 0,
     tipoGruppo: metadata.tipoGruppo || null,
-    totale: metadata.totale,
+    totale: parseFloat(metadata.totale) || 0,
     timestamp: metadata.timestamp,
     ospiti: [],
     documenti: [] // Documenti recuperati da Redis
   };
 
-  // Responsabile
+  // Responsabile con conversione età
   datiPrenotazione.ospiti.push({
     numero: 1,
     cognome: metadata.resp_cognome,
     nome: metadata.resp_nome,
     genere: metadata.resp_genere,
     nascita: metadata.resp_nascita,
-    eta: metadata.resp_eta,
+    eta: parseInt(metadata.resp_eta) || 0,
     cittadinanza: metadata.resp_cittadinanza,
     luogoNascita: metadata.resp_luogoNascita,
     comune: metadata.resp_comune,
@@ -225,7 +214,7 @@ function ricostruisciDatiPrenotazione(metadata) {
           nome: o.no,
           genere: o.g,
           nascita: o.na,
-          eta: o.e,
+          eta: parseInt(o.e) || 0,
           cittadinanza: o.ci,
           luogoNascita: o.ln,
           comune: o.co,
@@ -258,6 +247,7 @@ async function generaPDFEInviaEmailConDebug(session) {
         ? `https://${process.env.VERCEL_URL}` 
         : 'https://checkin-six-coral.vercel.app';
       
+      console.log('🔍 Tentativo recupero documenti da Redis...');
       const redisResponse = await fetch(
         `${baseUrl}/api/salva-dati-temporanei?sessionId=${tempSessionId}`,
         {
@@ -271,13 +261,18 @@ async function generaPDFEInviaEmailConDebug(session) {
         if (redisData.success && redisData.datiPrenotazione?.documenti) {
           datiPrenotazione.documenti = redisData.datiPrenotazione.documenti;
           console.log(`✅ Recuperati ${datiPrenotazione.documenti.length} documenti da Redis`);
+        } else {
+          console.warn('⚠️ Nessun documento trovato nella risposta Redis');
         }
       } else {
-        console.warn('⚠️ Dati non trovati su Redis:', await redisResponse.text());
+        const errorText = await redisResponse.text();
+        console.warn('⚠️ Risposta Redis non OK:', redisResponse.status, errorText);
       }
     } catch (redisError) {
       console.warn('⚠️ Errore recupero documenti da Redis:', redisError.message);
     }
+  } else {
+    console.warn('⚠️ Nessun temp_session_id disponibile per recuperare documenti');
   }
   
   const emailProprietario = process.env.EMAIL_PROPRIETARIO;
@@ -287,6 +282,12 @@ async function generaPDFEInviaEmailConDebug(session) {
   }
   
   console.log('📬 Destinatario proprietario:', emailProprietario);
+  console.log('📊 Dati da inviare:', {
+    ospiti: datiPrenotazione.ospiti.length,
+    documenti: datiPrenotazione.documenti.length,
+    totale: datiPrenotazione.totale,
+    tipoTotale: typeof datiPrenotazione.totale
+  });
   
   const baseUrl = process.env.VERCEL_URL 
     ? `https://${process.env.VERCEL_URL}` 
@@ -341,6 +342,13 @@ async function inviaEmailOspite(session, emailCliente) {
   const metadata = session.metadata;
   const datiPrenotazione = ricostruisciDatiPrenotazione(metadata);
   
+  console.log('📊 Dati per email ospite:', {
+    email: emailCliente,
+    totale: datiPrenotazione.totale,
+    tipoTotale: typeof datiPrenotazione.totale,
+    appartamento: datiPrenotazione.appartamento
+  });
+  
   const baseUrl = process.env.VERCEL_URL 
     ? `https://${process.env.VERCEL_URL}` 
     : 'https://checkin-six-coral.vercel.app';
@@ -385,13 +393,4 @@ async function inviaEmailOspite(session, emailCliente) {
     console.log('📧 === FINE INVIO EMAIL OSPITE (ERRORE) ===');
     throw error;
   }
-}
-
-// FUNZIONE FALLBACK: Invia email semplice senza PDF
-async function inviaEmailSemplice(session) {
-  console.log('📧 === FALLBACK: EMAIL SEMPLICE ===');
-  
-  // Implementa invio email semplice senza PDF
-  // Per ora solo log, puoi implementare nodemailer diretto qui se necessario
-  console.warn('⚠️ Invio email semplice non implementato (TODO)');
 }
