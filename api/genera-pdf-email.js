@@ -1,5 +1,5 @@
 // api/genera-pdf-email.js
-// VERSIONE AGGIORNATA: documenti come allegati separati, non nel PDF
+// CORREZIONE: Gestione corretta del tipo di dato per totale
 import nodemailer from 'nodemailer';
 
 export default async function handler(req, res) {
@@ -17,6 +17,24 @@ export default async function handler(req, res) {
         error: 'Dati prenotazione ed email destinatario sono obbligatori' 
       });
     }
+
+    // ✅ CORREZIONE: Converti totale in numero se è stringa
+    if (typeof datiPrenotazione.totale === 'string') {
+      datiPrenotazione.totale = parseFloat(datiPrenotazione.totale);
+    }
+    
+    // Validazione documenti
+    if (!Array.isArray(datiPrenotazione.documenti)) {
+      console.warn('⚠️ documenti non è un array, inizializzo array vuoto');
+      datiPrenotazione.documenti = [];
+    }
+    
+    console.log('📊 Dati validati:', {
+      numeroOspiti: datiPrenotazione.ospiti?.length || 0,
+      numeroDocumenti: datiPrenotazione.documenti.length,
+      totale: datiPrenotazione.totale,
+      tipoTotale: typeof datiPrenotazione.totale
+    });
 
     // 1. Genera HTML per il PDF (SENZA documenti)
     const htmlContent = generaHTMLRiepilogo(datiPrenotazione);
@@ -60,15 +78,17 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error('❌ Errore finale:', error);
+    console.error('Stack:', error.stack);
     return res.status(500).json({ 
       error: 'Errore interno: ' + error.message 
     });
   }
 }
 
-// NUOVA FUNZIONE: Prepara allegati documenti
+// FUNZIONE: Prepara allegati documenti
 function preparaAllegatiDocumenti(documenti) {
   if (!Array.isArray(documenti) || documenti.length === 0) {
+    console.log('📎 Nessun documento da allegare');
     return [];
   }
 
@@ -114,12 +134,6 @@ function preparaAllegatiDocumenti(documenti) {
 async function generaPDFConBrowserless(htmlContent) {
   const browserlessToken = process.env.BROWSERLESS_API_TOKEN;
   
-  console.log('🔍 DEBUG Token:', {
-    isDefined: !!browserlessToken,
-    length: browserlessToken?.length || 0,
-    first10: browserlessToken?.substring(0, 10) || 'N/A'
-  });
-  
   if (!browserlessToken) {
     throw new Error('BROWSERLESS_API_TOKEN non configurato nelle variabili ambiente');
   }
@@ -144,8 +158,6 @@ async function generaPDFConBrowserless(htmlContent) {
       }
     };
 
-    console.log('📦 Request body size:', JSON.stringify(requestBody).length, 'bytes');
-    
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -175,7 +187,7 @@ async function generaPDFConBrowserless(htmlContent) {
   }
 }
 
-// FUNZIONE AGGIORNATA: Genera HTML SENZA documenti embedded con layout ottimizzato per la stampa
+// FUNZIONE: Genera HTML SENZA documenti embedded
 function generaHTMLRiepilogo(dati) {
   const dataFormattata = new Date(dati.dataCheckin).toLocaleDateString('it-IT', {
     weekday: 'long',
@@ -187,13 +199,15 @@ function generaHTMLRiepilogo(dati) {
   const documentiValidi = Array.isArray(dati.documenti) ? dati.documenti : [];
   console.log(`📄 Documenti trovati: ${documentiValidi.length} (verranno allegati separatamente)`);
 
-  // Genera HTML ospiti con page-break intelligenti
+  // ✅ CORREZIONE: Converti totale in numero
+  const totale = typeof dati.totale === 'string' ? parseFloat(dati.totale) : (dati.totale || 0);
+
+  // Genera HTML ospiti
   const ospitiHTML = (dati.ospiti || []).map((ospite, index) => {
     const documento = documentiValidi.find(d => 
       d && d.ospiteNumero && d.ospiteNumero === ospite.numero
     );
     
-    // Page break ogni 2 ospiti (tranne il primo che sta con i dettagli)
     const needsPageBreak = index > 0 && index % 2 === 1;
     
     return `
@@ -268,220 +282,28 @@ function generaHTMLRiepilogo(dati) {
     <head>
       <meta charset="UTF-8">
       <style>
-        @page {
-          size: A4;
-          margin: 15mm;
-        }
-        
-        body {
-          font-family: 'Arial', sans-serif;
-          line-height: 1.4;
-          color: #333;
-          margin: 0;
-          padding: 0;
-        }
-        
-        .header {
-          text-align: center;
-          margin-bottom: 20px;
-          border-bottom: 3px solid #3498db;
-          padding-bottom: 15px;
-          page-break-after: avoid;
-        }
-        
-        .header h1 {
-          color: #2c3e50;
-          font-size: 24px;
-          margin: 0 0 8px 0;
-        }
-        
-        .header p {
-          margin: 0;
-          font-size: 12px;
-          color: #666;
-        }
-        
-        .section {
-          margin: 15px 0;
-          background: #f8f9fa;
-          padding: 15px;
-          border-radius: 6px;
-          border-left: 4px solid #3498db;
-          page-break-inside: avoid;
-        }
-        
-        .section h2 {
-          color: #2c3e50;
-          font-size: 16px;
-          margin: 0 0 12px 0;
-        }
-        
-        .info-grid {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 10px;
-          margin: 10px 0;
-        }
-        
-        .info-item {
-          background: white;
-          padding: 8px 10px;
-          border-radius: 4px;
-          border: 1px solid #e9ecef;
-        }
-        
-        .info-label {
-          font-weight: bold;
-          color: #495057;
-          font-size: 10px;
-          text-transform: uppercase;
-          margin-bottom: 3px;
-        }
-        
-        .info-value {
-          color: #2c3e50;
-          font-size: 13px;
-        }
-        
-        .ospite {
-          background: white;
-          border: 2px solid #e9ecef;
-          border-radius: 6px;
-          padding: 15px;
-          margin: 12px 0;
-          page-break-inside: avoid;
-        }
-        
-        .ospite.responsabile {
-          border-color: #28a745;
-          background: #f8fff9;
-        }
-        
-        .ospite-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 12px;
-          padding-bottom: 8px;
-          border-bottom: 1px solid #dee2e6;
-        }
-        
-        .ospite-nome {
-          font-size: 16px;
-          font-weight: bold;
-          color: #2c3e50;
-        }
-        
-        .ospite-badge {
-          background: #28a745;
-          color: white;
-          padding: 3px 10px;
-          border-radius: 15px;
-          font-size: 11px;
-          font-weight: bold;
-        }
-        
-        .ospite-number {
-          background: #3498db;
-          color: white;
-          padding: 3px 10px;
-          border-radius: 15px;
-          font-size: 11px;
-          font-weight: bold;
-        }
-        
-        .documento-note {
-          margin-top: 10px;
-          padding: 10px;
-          background: #fff3cd;
-          border-left: 4px solid #ffc107;
-          border-radius: 4px;
-          font-size: 12px;
-        }
-        
-        .documento-note strong {
-          color: #856404;
-        }
-        
-        .totale-section {
-          background: #e8f5e8;
-          border: 2px solid #28a745;
-          padding: 15px;
-          border-radius: 6px;
-          text-align: center;
-          margin: 15px 0;
-          page-break-inside: avoid;
-          page-break-before: auto;
-        }
-        
-        .totale-section h2 {
-          margin: 0 0 8px 0;
-          font-size: 16px;
-        }
-        
-        .totale-amount {
-          font-size: 28px;
-          font-weight: bold;
-          color: #28a745;
-          margin: 8px 0;
-        }
-        
-        .allegati-section {
-          margin: 15px 0;
-          padding: 15px;
-          background: #f8f9fa;
-          border-radius: 6px;
-          border-left: 4px solid #3498db;
-          page-break-inside: avoid;
-        }
-        
-        .allegati-section h2 {
-          color: #2c3e50;
-          font-size: 16px;
-          margin: 0 0 10px 0;
-        }
-        
-        .allegati-section ul {
-          margin: 8px 0;
-          padding-left: 20px;
-        }
-        
-        .allegati-section li {
-          margin: 4px 0;
-          font-size: 12px;
-        }
-        
-        .footer {
-          margin-top: 20px;
-          padding-top: 15px;
-          border-top: 1px solid #dee2e6;
-          text-align: center;
-          color: #6c757d;
-          font-size: 10px;
-          page-break-inside: avoid;
-        }
-        
-        /* Regole per la stampa */
-        @media print {
-          body {
-            print-color-adjust: exact;
-            -webkit-print-color-adjust: exact;
-          }
-          
-          .ospite {
-            page-break-inside: avoid;
-          }
-          
-          .section {
-            page-break-inside: avoid;
-          }
-        }
+        @page { size: A4; margin: 15mm; }
+        body { font-family: 'Arial', sans-serif; line-height: 1.4; color: #333; margin: 0; padding: 0; }
+        .header { text-align: center; margin-bottom: 20px; border-bottom: 3px solid #3498db; padding-bottom: 15px; }
+        .header h1 { color: #2c3e50; font-size: 24px; margin: 0 0 8px 0; }
+        .section { margin: 15px 0; background: #f8f9fa; padding: 15px; border-radius: 6px; border-left: 4px solid #3498db; }
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 10px 0; }
+        .info-item { background: white; padding: 8px 10px; border-radius: 4px; border: 1px solid #e9ecef; }
+        .info-label { font-weight: bold; color: #495057; font-size: 10px; text-transform: uppercase; }
+        .info-value { color: #2c3e50; font-size: 13px; }
+        .ospite { background: white; border: 2px solid #e9ecef; border-radius: 6px; padding: 15px; margin: 12px 0; }
+        .ospite.responsabile { border-color: #28a745; background: #f8fff9; }
+        .ospite-header { display: flex; justify-content: space-between; margin-bottom: 12px; border-bottom: 1px solid #dee2e6; }
+        .ospite-nome { font-size: 16px; font-weight: bold; color: #2c3e50; }
+        .ospite-badge { background: #28a745; color: white; padding: 3px 10px; border-radius: 15px; font-size: 11px; }
+        .totale-section { background: #e8f5e8; border: 2px solid #28a745; padding: 15px; border-radius: 6px; text-align: center; margin: 15px 0; }
+        .totale-amount { font-size: 28px; font-weight: bold; color: #28a745; margin: 8px 0; }
       </style>
     </head>
     <body>
       <div class="header">
         <h1>Riepilogo Check-in</h1>
-        <p>Generato il ${new Date().toLocaleDateString('it-IT')} alle ${new Date().toLocaleTimeString('it-IT')}</p>
+        <p>Generato il ${new Date().toLocaleString('it-IT')}</p>
       </div>
 
       <div class="section">
@@ -508,53 +330,43 @@ function generaHTMLRiepilogo(dati) {
 
       <div class="totale-section">
         <h2>💰 Totale Tassa di Soggiorno</h2>
-        <div class="totale-amount">€${(dati.totale || 0).toFixed(2)}</div>
-        <div style="font-size: 11px; color: #666; margin-top: 8px;">
-          Tassa di €1,50 per notte per ospiti dai 4 anni in su
-        </div>
+        <div class="totale-amount">€${totale.toFixed(2)}</div>
       </div>
 
-      <div class="section" style="margin-top: 20px;">
+      <div class="section">
         <h2>👥 Ospiti Registrati</h2>
       </div>
 
       ${ospitiHTML}
 
       ${documentiValidi.length > 0 ? `
-      <div class="allegati-section" style="page-break-before: auto;">
+      <div class="section">
         <h2>📎 Documenti Allegati</h2>
-        <p style="margin: 8px 0; color: #666; font-size: 12px;">
-          I documenti di identità sono allegati separatamente a questa email:
-        </p>
+        <p>I documenti di identità sono allegati separatamente a questa email:</p>
         <ul>
           ${documentiValidi.map(doc => `
-            <li>
-              <strong>Ospite ${doc.ospiteNumero}:</strong> ${doc.nomeFile} 
-              (${Math.round(doc.dimensione / 1024)} KB)
-            </li>
+            <li><strong>Ospite ${doc.ospiteNumero}:</strong> ${doc.nomeFile} (${Math.round(doc.dimensione / 1024)} KB)</li>
           `).join('')}
         </ul>
       </div>
       ` : ''}
-
-      <div class="footer">
-        <p>Documento generato automaticamente dal sistema di check-in</p>
-        <p>${new Date().toLocaleString('it-IT')}</p>
-      </div>
     </body>
     </html>
   `;
 }
 
-// FUNZIONE AGGIORNATA: Invia email CON PDF + documenti come allegati separati
+// FUNZIONE: Invia email CON PDF + documenti
 async function inviaEmailConPDF(emailDestinatario, dati, pdfBuffer, allegatiDocumenti) {
-  const transporter = nodemailer.createTransport({
+  const transporter = nodemailer.createTransporter({
     service: 'gmail',
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASSWORD
     }
   });
+
+  // ✅ CORREZIONE: Converti totale in numero
+  const totale = typeof dati.totale === 'string' ? parseFloat(dati.totale) : (dati.totale || 0);
 
   const oggetto = `Riepilogo Check-in - ${dati.appartamento || 'Appartamento'} - ${new Date(dati.dataCheckin).toLocaleDateString('it-IT')}`;
   
@@ -566,7 +378,7 @@ DETTAGLI SOGGIORNO:
 - Appartamento: ${dati.appartamento || 'Non specificato'}
 - Ospiti: ${dati.numeroOspiti || 0}
 - Notti: ${dati.numeroNotti || 0}
-- Totale tassa soggiorno: €${(dati.totale || 0).toFixed(2)}
+- Totale tassa soggiorno: €${totale.toFixed(2)}
 
 Responsabile: ${dati.ospiti?.[0]?.cognome || 'N/A'} ${dati.ospiti?.[0]?.nome || 'N/A'}
 
@@ -599,9 +411,9 @@ Sistema Check-in Automatico
   await transporter.sendMail(mailOptions);
 }
 
-// FUNZIONE AGGIORNATA: Invia email SENZA PDF ma CON documenti allegati
+// FUNZIONE: Invia email SENZA PDF ma CON documenti
 async function inviaEmailSenzaPDF(emailDestinatario, dati, allegatiDocumenti) {
-  const transporter = nodemailer.createTransport({
+  const transporter = nodemailer.createTransporter({
     service: 'gmail',
     auth: {
       user: process.env.EMAIL_USER,
@@ -609,20 +421,18 @@ async function inviaEmailSenzaPDF(emailDestinatario, dati, allegatiDocumenti) {
     }
   });
 
+  // ✅ CORREZIONE: Converti totale in numero
+  const totale = typeof dati.totale === 'string' ? parseFloat(dati.totale) : (dati.totale || 0);
+
   const oggetto = `Check-in Ricevuto - ${dati.appartamento || 'Appartamento'} - ${new Date(dati.dataCheckin).toLocaleDateString('it-IT')}`;
   
-  // Genera lista ospiti dettagliata
   let listaOspiti = '';
   (dati.ospiti || []).forEach((ospite, index) => {
     listaOspiti += `
 ${index + 1}. ${ospite.cognome} ${ospite.nome}${ospite.isResponsabile ? ' (RESPONSABILE)' : ''}
    - Genere: ${ospite.genere === 'M' ? 'Maschio' : 'Femmina'}
-   - Data nascita: ${ospite.nascita ? new Date(ospite.nascita).toLocaleDateString('it-IT') : 'N/A'}
    - Età: ${ospite.eta || 0} anni
    - Cittadinanza: ${ospite.cittadinanza || 'N/A'}
-   - Luogo nascita: ${ospite.luogoNascita || 'N/A'}${ospite.comune ? ` (${ospite.comune}, ${ospite.provincia})` : ''}${ospite.isResponsabile && ospite.tipoDocumento ? `
-   - Documento: ${ospite.tipoDocumento} - ${ospite.numeroDocumento || 'N/A'}
-   - Luogo rilascio: ${ospite.luogoRilascio || 'N/A'}` : ''}
 `;
   });
   
@@ -638,21 +448,12 @@ Data check-in: ${new Date(dati.dataCheckin).toLocaleDateString('it-IT')}
 Appartamento: ${dati.appartamento || 'Non specificato'}
 Numero ospiti: ${dati.numeroOspiti || 0}
 Numero notti: ${dati.numeroNotti || 0}
-Totale tassa soggiorno: €${(dati.totale || 0).toFixed(2)}
+Totale tassa soggiorno: €${totale.toFixed(2)}
 
 ═══════════════════════════════════════
 OSPITI REGISTRATI
 ═══════════════════════════════════════
 ${listaOspiti}
-
-═══════════════════════════════════════
-RESPONSABILE DELLA PRENOTAZIONE
-═══════════════════════════════════════
-Nome: ${dati.ospiti?.[0]?.nome || 'N/A'}
-Cognome: ${dati.ospiti?.[0]?.cognome || 'N/A'}
-Luogo nascita: ${dati.ospiti?.[0]?.luogoNascita || 'N/A'}
-${dati.ospiti?.[0]?.tipoDocumento ? `Documento: ${dati.ospiti[0].tipoDocumento} - ${dati.ospiti[0].numeroDocumento}
-Luogo rilascio: ${dati.ospiti[0].luogoRilascio || 'N/A'}` : ''}
 
 ${allegatiDocumenti.length > 0 ? `
 ═══════════════════════════════════════
@@ -663,7 +464,6 @@ ${allegatiDocumenti.map(doc => `- ${doc.filename}`).join('\n')}
 
 ---
 Sistema Check-in Automatico
-Generato il ${new Date().toLocaleString('it-IT')}
   `;
 
   const mailOptions = {
