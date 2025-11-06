@@ -549,7 +549,7 @@ function generaHTMLRiepilogo(dati) {
 // FUNZIONE AGGIORNATA: Invia email CON PDF + documenti come allegati separati
 async function inviaEmailConPDF(emailDestinatario, dati, pdfBuffer, allegatiDocumenti) {
   const transporter = nodemailer.createTransport({
-    service: 'gmail',
+    service: 'yahoo',
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASSWORD
@@ -602,7 +602,7 @@ Sistema Check-in Automatico
 // FUNZIONE AGGIORNATA: Invia email SENZA PDF ma CON documenti allegati
 async function inviaEmailSenzaPDF(emailDestinatario, dati, allegatiDocumenti) {
   const transporter = nodemailer.createTransport({
-    service: 'gmail',
+    service: 'yahoo',
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASSWORD
