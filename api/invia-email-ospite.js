@@ -131,8 +131,8 @@ function generaHTMLEmailOspite(dati, codiceCassetta) {
   const totale = typeof dati.totale === 'string' ? parseFloat(dati.totale) : (dati.totale || 0);
 
   // Determina gli orari in base alla data di check-in
-  const CHECKIN_OPEN_TIME = "15:00";
-  const CHECKIN_CLOSE_TIME = "20:00";
+  const CHECKIN_OPEN_TIME = "16:00";
+  const CHECKIN_CLOSE_TIME = "00:00";
   const CHECKOUT_CLOSE_TIME = "10:00";
 
   return `
