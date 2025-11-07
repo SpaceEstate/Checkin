@@ -1,98 +1,3 @@
-// api/invia-email-ospite.js
-// ✅ CORREZIONE: createTransport invece di createTransporter
-import nodemailer from 'nodemailer';
-
-export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Metodo non consentito' });
-  }
-
-  console.log('📧 === INIZIO INVIO EMAIL OSPITE ===');
-
-  try {
-    const { emailOspite, datiPrenotazione } = req.body;
-
-    if (!emailOspite || !datiPrenotazione) {
-      return res.status(400).json({ 
-        error: 'emailOspite e datiPrenotazione sono obbligatori' 
-      });
-    }
-
-    // ✅ CORREZIONE: Converti totale in numero se è stringa
-    if (typeof datiPrenotazione.totale === 'string') {
-      datiPrenotazione.totale = parseFloat(datiPrenotazione.totale);
-    }
-
-    console.log('📧 Email ospite:', emailOspite);
-    console.log('📋 Appartamento:', datiPrenotazione.appartamento);
-    console.log('💰 Totale (tipo):', typeof datiPrenotazione.totale, datiPrenotazione.totale);
-
-    // Determina il codice della cassetta basandosi sull'appartamento
-    const codiceCassetta = determinaCodiceCassetta(datiPrenotazione.appartamento);
-    
-    console.log('🔑 Codice cassetta:', codiceCassetta);
-
-    // ✅ CORREZIONE: createTransport invece di createTransporter
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASSWORD
-      }
-    });
-
-    // Genera contenuto email
-    const htmlContent = generaHTMLEmailOspite(datiPrenotazione, codiceCassetta);
-    const textContent = generaTextEmailOspite(datiPrenotazione, codiceCassetta);
-
-    const oggetto = `🏠 Benvenuto! Codice accesso - ${datiPrenotazione.appartamento}`;
-
-    const mailOptions = {
-      from: `"Space Estate" <${process.env.EMAIL_USER}>`,
-      to: emailOspite,
-      subject: oggetto,
-      text: textContent,
-      html: htmlContent
-    };
-
-    console.log('📤 Invio email in corso...');
-    await transporter.sendMail(mailOptions);
-    
-    console.log('✅ Email inviata con successo a:', emailOspite);
-    console.log('📧 === FINE INVIO EMAIL OSPITE ===');
-
-    return res.status(200).json({ 
-      success: true, 
-      message: 'Email inviata con successo all\'ospite',
-      emailOspite: emailOspite,
-      codiceCassetta: codiceCassetta
-    });
-
-  } catch (error) {
-    console.error('❌ Errore invio email ospite:', error);
-    console.error('Stack:', error.stack);
-    return res.status(500).json({ 
-      error: 'Errore interno: ' + error.message 
-    });
-  }
-}
-
-// FUNZIONE: Determina il codice della cassetta in base all'appartamento
-function determinaCodiceCassetta(appartamento) {
-  if (!appartamento) return 'N/A';
-  
-  const appartamentoLower = appartamento.toLowerCase();
-  
-  if (appartamentoLower.includes('corte')) {
-    return '1933';
-  } else if (appartamentoLower.includes('torre')) {
-    return '1935';
-  }
-  
-  return 'N/A';
-}
-
-// FUNZIONE: Genera HTML email per l'ospite
 function generaHTMLEmailOspite(dati, codiceCassetta) {
   const dataFormattata = new Date(dati.dataCheckin).toLocaleDateString('it-IT', {
     weekday: 'long',
@@ -103,6 +8,11 @@ function generaHTMLEmailOspite(dati, codiceCassetta) {
 
   // ✅ CORREZIONE: Converti totale in numero
   const totale = typeof dati.totale === 'string' ? parseFloat(dati.totale) : (dati.totale || 0);
+
+  // Determina gli orari in base alla data di check-in
+  const CHECKIN_OPEN_TIME = "15:00";
+  const CHECKIN_CLOSE_TIME = "20:00";
+  const CHECKOUT_CLOSE_TIME = "10:00";
 
   return `
     <!DOCTYPE html>
@@ -237,16 +147,28 @@ function generaHTMLEmailOspite(dati, codiceCassetta) {
           color: #856404;
           margin-top: 0;
           font-size: 18px;
+          margin-bottom: 15px;
         }
         
-        .instructions ol {
+        .instructions p {
           margin: 10px 0;
-          padding-left: 20px;
-        }
-        
-        .instructions li {
-          margin: 8px 0;
           color: #8b7d6b;
+          line-height: 1.8;
+        }
+
+        .instructions strong {
+          color: #856404;
+          display: block;
+          margin-top: 15px;
+          margin-bottom: 5px;
+        }
+
+        .address-block {
+          background: white;
+          padding: 12px;
+          border-radius: 6px;
+          margin: 10px 0;
+          border-left: 3px solid #b89968;
         }
         
         .footer {
@@ -287,7 +209,7 @@ function generaHTMLEmailOspite(dati, codiceCassetta) {
     <body>
       <div class="container">
         <div class="header">
-          <h1>🏠 Benvenuto a Space Estate!</h1>
+          <h1>Benvenuto a Space Estate!</h1>
           <p>Il tuo soggiorno sta per iniziare</p>
         </div>
         
@@ -333,13 +255,38 @@ function generaHTMLEmailOspite(dati, codiceCassetta) {
           
           <div class="instructions">
             <h3>📍 Come accedere alla struttura</h3>
-            <ol>
-              <li>Raggiungere la struttura all'indirizzo indicato nella conferma di prenotazione</li>
-              <li>Individuare la <span class="highlight">cassetta di sicurezza</span> posizionata all'ingresso</li>
-              <li>Inserire il codice <span class="highlight">${codiceCassetta}</span></li>
-              <li>Ritirare le chiavi dell'appartamento</li>
-              <li>Accedere al tuo appartamento e goderti il soggiorno!</li>
-            </ol>
+            
+            <div class="address-block">
+              <strong>📍 Indirizzo Struttura:</strong>
+              <p style="margin: 5px 0;">
+                Via Centrale, 48<br>
+                38123 Trento (TN)
+              </p>
+            </div>
+
+            <div class="address-block">
+              <strong>📍 Indirizzo Parcheggio:</strong>
+              <p style="margin: 5px 0;">
+                Via Val Gola, 22<br>
+                38123 Trento (TN)
+              </p>
+            </div>
+
+            <div class="address-block">
+              <strong>⏰ Orari:</strong>
+              <p style="margin: 5px 0;">
+                Check-in: dalle ${CHECKIN_OPEN_TIME} alle ${CHECKIN_CLOSE_TIME}<br>
+                Check-out: entro le ${CHECKOUT_CLOSE_TIME}
+              </p>
+            </div>
+
+            <p style="margin-top: 20px;">
+              • Quando arrivi alla proprietà, la cassetta di sicurezza è situata in una nicchia dietro allo scuro dell'appartamento al piano terra (foto in allegato).
+            </p>
+
+            <p>
+              • La sosta all'interno della proprietà è consentita esclusivamente per le operazioni di carico e scarico dei bagagli.
+            </p>
           </div>
           
           <p style="margin-top: 30px; color: #8b7d6b;">
@@ -362,62 +309,4 @@ function generaHTMLEmailOspite(dati, codiceCassetta) {
     </body>
     </html>
   `;
-}
-
-// FUNZIONE: Genera testo semplice email per l'ospite
-function generaTextEmailOspite(dati, codiceCassetta) {
-  const dataFormattata = new Date(dati.dataCheckin).toLocaleDateString('it-IT', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  });
-
-  // ✅ CORREZIONE: Converti totale in numero
-  const totale = typeof dati.totale === 'string' ? parseFloat(dati.totale) : (dati.totale || 0);
-
-  return `
-🏠 BENVENUTO A SPACE ESTATE!
-
-Gentile ${dati.ospiti?.[0]?.nome || 'Ospite'} ${dati.ospiti?.[0]?.cognome || ''},
-
-Grazie per aver completato il check-in e il pagamento della tassa di soggiorno.
-
-═══════════════════════════════════════
-🔑 CODICE CASSETTA SICUREZZA
-═══════════════════════════════════════
-
-${codiceCassetta}
-
-Conserva questo codice con cura!
-
-═══════════════════════════════════════
-📋 DETTAGLI PRENOTAZIONE
-═══════════════════════════════════════
-
-Data Check-in: ${dataFormattata}
-Appartamento: ${dati.appartamento || 'N/A'}
-Numero Ospiti: ${dati.numeroOspiti || 0}
-Numero Notti: ${dati.numeroNotti || 0}
-Tassa Soggiorno Pagata: €${totale.toFixed(2)}
-
-═══════════════════════════════════════
-📍 COME ACCEDERE ALLA STRUTTURA
-═══════════════════════════════════════
-
-1. Raggiungere la struttura all'indirizzo indicato
-2. Individuare la cassetta di sicurezza all'ingresso
-3. Inserire il codice: ${codiceCassetta}
-4. Ritirare le chiavi dell'appartamento
-5. Accedere al tuo appartamento e goderti il soggiorno!
-
-Per qualsiasi necessità o domanda, non esitare a contattarci.
-Ti auguriamo un soggiorno piacevole e confortevole! 🌟
-
----
-Space Estate
-La Columbera - Appartamenti turistici
-
-Generata il ${new Date().toLocaleString('it-IT')}
-  `.trim();
 }
