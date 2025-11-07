@@ -1,3 +1,124 @@
+// api/invia-email-ospite.js
+// VERSIONE COMPLETA con handler export
+
+import nodemailer from 'nodemailer';
+
+// ===== HANDLER PRINCIPALE (EXPORT DEFAULT) =====
+export default async function handler(req, res) {
+  // CORS Headers
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Metodo non consentito' });
+  }
+
+  console.log('📧 === INIZIO INVIO EMAIL OSPITE ===');
+
+  try {
+    const { emailOspite, datiPrenotazione } = req.body;
+
+    if (!emailOspite || !datiPrenotazione) {
+      return res.status(400).json({ 
+        error: 'Email ospite e dati prenotazione sono obbligatori' 
+      });
+    }
+
+    console.log('📬 Destinatario:', emailOspite);
+    console.log('📊 Appartamento:', datiPrenotazione.appartamento);
+
+    // Genera codice cassetta in base all'appartamento
+    const codiceCassetta = determinaCodiceCassetta(datiPrenotazione.appartamento);
+    console.log('🔑 Codice cassetta generato:', codiceCassetta);
+
+    // Converti totale in numero se necessario
+    if (typeof datiPrenotazione.totale === 'string') {
+      datiPrenotazione.totale = parseFloat(datiPrenotazione.totale);
+    }
+
+    // Genera HTML email
+    const htmlContent = generaHTMLEmailOspite(datiPrenotazione, codiceCassetta);
+
+    // Invia email
+    await inviaEmailConNodemailer(emailOspite, datiPrenotazione, htmlContent);
+
+    console.log('✅ Email ospite inviata con successo');
+    console.log('📧 === FINE INVIO EMAIL OSPITE ===');
+
+    return res.status(200).json({
+      success: true,
+      message: 'Email inviata con successo',
+      codiceCassetta: codiceCassetta,
+      emailDestinatario: emailOspite
+    });
+
+  } catch (error) {
+    console.error('❌ Errore invio email ospite:', error);
+    console.error('Stack:', error.stack);
+    return res.status(500).json({
+      error: 'Errore invio email',
+      message: error.message
+    });
+  }
+}
+
+// ===== FUNZIONI SUPPORTO =====
+
+function determinaCodiceCassetta(appartamento) {
+  if (!appartamento) {
+    console.warn('⚠️ Appartamento non specificato, uso codice generico');
+    return '0000';
+  }
+
+  const appartamentoLower = appartamento.toLowerCase();
+
+  if (appartamentoLower.includes('corte')) {
+    return '1933';
+  } else if (appartamentoLower.includes('torre')) {
+    return '1935';
+  } else {
+    console.warn('⚠️ Appartamento non riconosciuto:', appartamento);
+    return '0000';
+  }
+}
+
+async function inviaEmailConNodemailer(emailOspite, datiPrenotazione, htmlContent) {
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASSWORD
+    }
+  });
+
+  const dataFormattata = new Date(datiPrenotazione.dataCheckin).toLocaleDateString('it-IT', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
+
+  const oggetto = `🏠 Benvenuto a Space Estate - Check-in ${dataFormattata}`;
+
+  const mailOptions = {
+    from: {
+      name: 'Space Estate',
+      address: process.env.EMAIL_USER
+    },
+    to: emailOspite,
+    subject: oggetto,
+    html: htmlContent
+  };
+
+  await transporter.sendMail(mailOptions);
+  console.log('✅ Email inviata a:', emailOspite);
+}
+
+// ===== FUNZIONE GENERAZIONE HTML =====
 function generaHTMLEmailOspite(dati, codiceCassetta) {
   const dataFormattata = new Date(dati.dataCheckin).toLocaleDateString('it-IT', {
     weekday: 'long',
