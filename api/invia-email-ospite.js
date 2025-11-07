@@ -1,7 +1,14 @@
 // api/invia-email-ospite.js
-// VERSIONE COMPLETA con handler export
+// VERSIONE CON ALLEGATI FOTO dalla cartella public/images/cassetta
 
 import nodemailer from 'nodemailer';
+import { readFile } from 'fs/promises';
+import { join } from 'path';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 // ===== HANDLER PRINCIPALE (EXPORT DEFAULT) =====
 export default async function handler(req, res) {
@@ -44,8 +51,12 @@ export default async function handler(req, res) {
     // Genera HTML email
     const htmlContent = generaHTMLEmailOspite(datiPrenotazione, codiceCassetta);
 
-    // Invia email
-    await inviaEmailConNodemailer(emailOspite, datiPrenotazione, htmlContent);
+    // Carica allegati foto
+    const allegati = await caricaAllegatiFoto();
+    console.log(`📎 Foto caricate: ${allegati.length}`);
+
+    // Invia email con foto allegate
+    await inviaEmailConNodemailer(emailOspite, datiPrenotazione, htmlContent, allegati);
 
     console.log('✅ Email ospite inviata con successo');
     console.log('📧 === FINE INVIO EMAIL OSPITE ===');
@@ -54,7 +65,8 @@ export default async function handler(req, res) {
       success: true,
       message: 'Email inviata con successo',
       codiceCassetta: codiceCassetta,
-      emailDestinatario: emailOspite
+      emailDestinatario: emailOspite,
+      numeroAllegati: allegati.length
     });
 
   } catch (error) {
@@ -87,7 +99,60 @@ function determinaCodiceCassetta(appartamento) {
   }
 }
 
-async function inviaEmailConNodemailer(emailOspite, datiPrenotazione, htmlContent) {
+// NUOVA FUNZIONE: Carica le foto dalla cartella public/images/cassetta
+async function caricaAllegatiFoto() {
+  const allegati = [];
+  
+  // Definisci i nomi dei file delle foto
+  const fotoCassetta = [
+    { 
+      filename: '1_ingresso_proprieta.jpg', 
+      cid: 'ingresso_proprieta',
+      nome: 'Ingresso Proprietà'
+    },
+    { 
+      filename: '2_cassetta_sicurezza.jpg', 
+      cid: 'cassetta_sicurezza',
+      nome: 'Cassetta di Sicurezza'
+    },
+    { 
+      filename: '3_ubicazione_cassetta.jpg', 
+      cid: 'ubicazione_cassetta',
+      nome: 'Ubicazione Cassetta'
+    }
+  ];
+
+  for (const foto of fotoCassetta) {
+    try {
+      // IMPORTANTE: Il percorso deve essere relativo alla root del progetto
+      // In Vercel, /var/task è la root, quindi usiamo percorso relativo
+      const filePath = join(process.cwd(), 'public', 'images', 'cassetta', foto.filename);
+      
+      console.log(`📷 Caricamento foto: ${foto.filename}`);
+      console.log(`📁 Percorso: ${filePath}`);
+      
+      const imageBuffer = await readFile(filePath);
+      
+      allegati.push({
+        filename: foto.filename,
+        content: imageBuffer,
+        contentType: 'image/jpeg',
+        cid: foto.cid, // Content ID per riferimento nell'HTML
+        encoding: 'base64'
+      });
+      
+      console.log(`✅ Foto caricata: ${foto.filename} (${(imageBuffer.length / 1024).toFixed(2)} KB)`);
+      
+    } catch (error) {
+      console.error(`❌ Errore caricamento foto ${foto.filename}:`, error.message);
+      // Continua anche se una foto fallisce
+    }
+  }
+
+  return allegati;
+}
+
+async function inviaEmailConNodemailer(emailOspite, datiPrenotazione, htmlContent, allegati) {
   const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
@@ -111,14 +176,15 @@ async function inviaEmailConNodemailer(emailOspite, datiPrenotazione, htmlConten
     },
     to: emailOspite,
     subject: oggetto,
-    html: htmlContent
+    html: htmlContent,
+    attachments: allegati // ⭐ AGGIUNTO: Allega le foto
   };
 
   await transporter.sendMail(mailOptions);
   console.log('✅ Email inviata a:', emailOspite);
 }
 
-// ===== FUNZIONE GENERAZIONE HTML =====
+// ===== FUNZIONE GENERAZIONE HTML (MODIFICATA per includere foto inline) =====
 function generaHTMLEmailOspite(dati, codiceCassetta) {
   const dataFormattata = new Date(dati.dataCheckin).toLocaleDateString('it-IT', {
     weekday: 'long',
@@ -127,7 +193,6 @@ function generaHTMLEmailOspite(dati, codiceCassetta) {
     day: 'numeric'
   });
 
-  // ✅ CORREZIONE: Converti totale in numero
   const totale = typeof dati.totale === 'string' ? parseFloat(dati.totale) : (dati.totale || 0);
 
   // Determina gli orari in base alla data di check-in
@@ -158,6 +223,7 @@ function generaHTMLEmailOspite(dati, codiceCassetta) {
           border-radius: 16px;
           overflow: hidden;
           box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+          border: 1px solid rgba(232, 220, 192, 0.3);
         }
         
         .header {
@@ -291,6 +357,37 @@ function generaHTMLEmailOspite(dati, codiceCassetta) {
           margin: 10px 0;
           border-left: 3px solid #b89968;
         }
+
+        /* NUOVA SEZIONE: Galleria foto */
+        .photo-gallery {
+          margin: 30px 0;
+        }
+
+        .photo-gallery h3 {
+          color: #8b7d6b;
+          font-size: 20px;
+          margin-bottom: 20px;
+          text-align: center;
+        }
+
+        .photo-item {
+          margin: 20px 0;
+          text-align: center;
+        }
+
+        .photo-item img {
+          max-width: 100%;
+          height: auto;
+          border-radius: 12px;
+          box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+          margin-bottom: 10px;
+        }
+
+        .photo-caption {
+          font-size: 14px;
+          color: #8b7d6b;
+          font-style: italic;
+        }
         
         .footer {
           background: #f5f2e9;
@@ -309,21 +406,6 @@ function generaHTMLEmailOspite(dati, codiceCassetta) {
           padding: 2px 6px;
           border-radius: 4px;
           font-weight: 600;
-        }
-        
-        @media (max-width: 600px) {
-          .container {
-            margin: 10px;
-          }
-          
-          .content {
-            padding: 20px 15px;
-          }
-          
-          .code-box {
-            font-size: 36px;
-            letter-spacing: 4px;
-          }
         }
       </style>
     </head>
@@ -402,12 +484,32 @@ function generaHTMLEmailOspite(dati, codiceCassetta) {
             </div>
 
             <p style="margin-top: 20px;">
-              • Quando arrivi alla proprietà, la cassetta di sicurezza è situata in una nicchia dietro allo scuro dell'appartamento al piano terra (foto in allegato).
+              • Quando arrivi alla proprietà, la cassetta di sicurezza è situata in una nicchia dietro allo scuro dell'appartamento al piano terra (vedi foto sotto).
             </p>
 
             <p>
               • La sosta all'interno della proprietà è consentita esclusivamente per le operazioni di carico e scarico dei bagagli.
             </p>
+          </div>
+
+          <!-- ⭐ NUOVA SEZIONE: Galleria foto inline -->
+          <div class="photo-gallery">
+            <h3>📸 Foto di riferimento per l'accesso</h3>
+            
+            <div class="photo-item">
+              <img src="cid:ingresso_proprieta" alt="Ingresso Proprietà">
+              <p class="photo-caption">1. Ingresso della proprietà</p>
+            </div>
+
+            <div class="photo-item">
+              <img src="cid:cassetta_sicurezza" alt="Cassetta di Sicurezza">
+              <p class="photo-caption">2. Cassetta di sicurezza con codice ${codiceCassetta}</p>
+            </div>
+
+            <div class="photo-item">
+              <img src="cid:ubicazione_cassetta" alt="Ubicazione Cassetta">
+              <p class="photo-caption">3. Ubicazione esatta della cassetta</p>
+            </div>
           </div>
           
           <p style="margin-top: 30px; color: #8b7d6b;">
