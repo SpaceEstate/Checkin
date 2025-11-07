@@ -1,482 +1,535 @@
-// api/stripeWebhook.js
-// VERSIONE CON DEDUPLICAZIONE EVENTI per evitare email duplicate
+// api/invia-email-ospite.js
+// VERSIONE CON ALLEGATI FOTO dalla cartella public/images/cassetta
 
-import Stripe from 'stripe';
-import { GoogleSpreadsheet } from 'google-spreadsheet';
-import { JWT } from 'google-auth-library';
-import { createClient } from 'redis';
+import nodemailer from 'nodemailer';
+import { readFile } from 'fs/promises';
+import { join } from 'path';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
-// Client Redis per deduplicazione
-let redisClient = null;
-
-async function getRedisClient() {
-  if (redisClient && redisClient.isOpen) {
-    return redisClient;
-  }
-
-  const redisUrl = process.env.REDIS_URL;
-  if (!redisUrl) {
-    console.warn('⚠️ REDIS_URL non configurato - deduplicazione disabilitata');
-    return null;
-  }
-
-  console.log('🔌 Connessione Redis per deduplicazione...');
-  const useTLS = redisUrl.startsWith('rediss://');
-  
-  redisClient = createClient({
-    url: redisUrl,
-    socket: {
-      tls: useTLS,
-      rejectUnauthorized: false,
-      connectTimeout: 10000,
-    },
-  });
-
-  redisClient.on("error", (err) => {
-    console.error("❌ Redis Error:", err.message);
-  });
-
-  try {
-    await redisClient.connect();
-    console.log("✅ Redis connesso per deduplicazione");
-    return redisClient;
-  } catch (error) {
-    console.error("❌ Errore connessione Redis:", error.message);
-    return null;
-  }
-}
-
-// ⭐ NUOVA FUNZIONE: Verifica se evento già processato
-async function isEventProcessed(eventId) {
-  try {
-    const client = await getRedisClient();
-    if (!client) {
-      console.warn('⚠️ Redis non disponibile - skip deduplicazione');
-      return false;
-    }
-
-    const exists = await client.exists(`webhook_event:${eventId}`);
-    return exists === 1;
-  } catch (error) {
-    console.error('❌ Errore controllo evento duplicato:', error.message);
-    return false; // In caso di errore, processa comunque
-  }
-}
-
-// ⭐ NUOVA FUNZIONE: Marca evento come processato
-async function markEventAsProcessed(eventId) {
-  try {
-    const client = await getRedisClient();
-    if (!client) {
-      console.warn('⚠️ Redis non disponibile - skip salvataggio evento');
-      return;
-    }
-
-    // Salva l'evento con TTL di 7 giorni (604800 secondi)
-    await client.setEx(`webhook_event:${eventId}`, 604800, new Date().toISOString());
-    console.log(`✅ Evento ${eventId} marcato come processato`);
-  } catch (error) {
-    console.error('❌ Errore salvataggio evento:', error.message);
-  }
-}
-
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
-
+// ===== HANDLER PRINCIPALE (EXPORT DEFAULT) =====
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+  // CORS Headers
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
   }
 
-  let event;
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Metodo non consentito' });
+  }
+
+  console.log('📧 === INIZIO INVIO EMAIL OSPITE ===');
 
   try {
-    const buf = await buffer(req);
-    const sig = req.headers['stripe-signature'];
+    const { emailOspite, datiPrenotazione } = req.body;
 
-    event = stripe.webhooks.constructEvent(buf, sig, endpointSecret);
-    console.log('✅ Webhook verificato:', event.type, 'ID:', event.id);
-  } catch (err) {
-    console.error('❌ Errore verifica webhook:', err.message);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
-  }
-
-  // ⭐ DEDUPLICAZIONE: Controlla se evento già processato
-  if (event.type === 'checkout.session.completed') {
-    const alreadyProcessed = await isEventProcessed(event.id);
-    
-    if (alreadyProcessed) {
-      console.warn(`⚠️ EVENTO DUPLICATO RILEVATO: ${event.id} - Skip elaborazione`);
-      return res.status(200).json({ 
-        received: true, 
-        duplicate: true,
-        message: 'Evento già processato in precedenza'
+    if (!emailOspite || !datiPrenotazione) {
+      return res.status(400).json({ 
+        error: 'Email ospite e dati prenotazione sono obbligatori' 
       });
     }
 
-    console.log('🆕 Evento nuovo - Inizio elaborazione');
+    console.log('📬 Destinatario:', emailOspite);
+    console.log('📊 Appartamento:', datiPrenotazione.appartamento);
 
+    // Genera codice cassetta in base all'appartamento
+    const codiceCassetta = determinaCodiceCassetta(datiPrenotazione.appartamento);
+    console.log('🔑 Codice cassetta generato:', codiceCassetta);
+
+    // Converti totale in numero se necessario
+    if (typeof datiPrenotazione.totale === 'string') {
+      datiPrenotazione.totale = parseFloat(datiPrenotazione.totale);
+    }
+
+    // Genera HTML email
+    const htmlContent = generaHTMLEmailOspite(datiPrenotazione, codiceCassetta);
+
+    // Carica allegati foto
+    const allegati = await caricaAllegatiFoto();
+    console.log(`📎 Foto caricate: ${allegati.length}`);
+
+    // Invia email con foto allegate
+    await inviaEmailConNodemailer(emailOspite, datiPrenotazione, htmlContent, allegati);
+
+    console.log('✅ Email ospite inviata con successo');
+    console.log('📧 === FINE INVIO EMAIL OSPITE ===');
+
+    return res.status(200).json({
+      success: true,
+      message: 'Email inviata con successo',
+      codiceCassetta: codiceCassetta,
+      emailDestinatario: emailOspite,
+      numeroAllegati: allegati.length
+    });
+
+  } catch (error) {
+    console.error('❌ Errore invio email ospite:', error);
+    console.error('Stack:', error.stack);
+    return res.status(500).json({
+      error: 'Errore invio email',
+      message: error.message
+    });
+  }
+}
+
+// ===== FUNZIONI SUPPORTO =====
+
+function determinaCodiceCassetta(appartamento) {
+  if (!appartamento) {
+    console.warn('⚠️ Appartamento non specificato, uso codice generico');
+    return '0000';
+  }
+
+  const appartamentoLower = appartamento.toLowerCase();
+
+  if (appartamentoLower.includes('corte')) {
+    return '1933';
+  } else if (appartamentoLower.includes('torre')) {
+    return '1935';
+  } else {
+    console.warn('⚠️ Appartamento non riconosciuto:', appartamento);
+    return '0000';
+  }
+}
+
+// NUOVA FUNZIONE: Carica le foto dalla cartella public/images/cassetta
+async function caricaAllegatiFoto() {
+  const allegati = [];
+  
+  // Definisci i nomi dei file delle foto
+  const fotoCassetta = [
+    { 
+      filename: '1_ingresso_proprieta.jpg', 
+      cid: 'ingresso_proprieta',
+      nome: 'Ingresso Proprietà'
+    },
+    { 
+      filename: '2_cassetta_sicurezza.jpg', 
+      cid: 'cassetta_sicurezza',
+      nome: 'Cassetta di Sicurezza'
+    },
+    { 
+      filename: '3_ubicazione_cassetta.jpg', 
+      cid: 'ubicazione_cassetta',
+      nome: 'Ubicazione Cassetta'
+    }
+  ];
+
+  for (const foto of fotoCassetta) {
     try {
-      const session = event.data.object;
-      console.log('💰 Pagamento completato per sessione:', session.id);
+      // IMPORTANTE: Il percorso deve essere relativo alla root del progetto
+      // In Vercel, /var/task è la root, quindi usiamo percorso relativo
+      const filePath = join(process.cwd(), 'public', 'images', 'cassetta', foto.filename);
       
-      // Estrai email cliente da Stripe
-      const emailCliente = session.customer_details?.email || null;
-      console.log('📧 Email cliente da Stripe:', emailCliente || 'NESSUNA');
+      console.log(`📷 Caricamento foto: ${foto.filename}`);
+      console.log(`📁 Percorso: ${filePath}`);
       
-      // 1. Scrivi dati su Google Sheets (priorità)
-      await scriviDatiSuGoogleSheets(session);
-      console.log('✅ Dati scritti su Google Sheets');
+      const imageBuffer = await readFile(filePath);
       
-      // 2. Genera PDF e invia email al proprietario
-      try {
-        await generaPDFEInviaEmailConDebug(session);
-        console.log('✅ PDF e email proprietario processati');
-      } catch (pdfError) {
-        console.error('⚠️ Errore PDF/Email proprietario:', pdfError.message);
-      }
+      allegati.push({
+        filename: foto.filename,
+        content: imageBuffer,
+        contentType: 'image/jpeg',
+        cid: foto.cid, // Content ID per riferimento nell'HTML
+        encoding: 'base64'
+      });
       
-      // 3. Invia email ospite con codice accesso
-      if (emailCliente) {
-        try {
-          await inviaEmailOspite(session, emailCliente);
-          console.log('✅ Email ospite inviata con successo');
-        } catch (emailError) {
-          console.error('⚠️ Errore invio email ospite:', emailError.message);
-        }
-      } else {
-        console.warn('⚠️ Email cliente non disponibile, email ospite non inviata');
-      }
-
-      // ⭐ MARCA EVENTO COME PROCESSATO (solo se tutto ok)
-      await markEventAsProcessed(event.id);
-      console.log('🎉 Elaborazione webhook completata con successo');
+      console.log(`✅ Foto caricata: ${foto.filename} (${(imageBuffer.length / 1024).toFixed(2)} KB)`);
       
     } catch (error) {
-      console.error('❌ Errore elaborazione webhook:', error);
-      // NON marcare come processato se c'è stato un errore
-      return res.status(500).json({ error: 'Errore interno: ' + error.message });
+      console.error(`❌ Errore caricamento foto ${foto.filename}:`, error.message);
+      // Continua anche se una foto fallisce
     }
   }
 
-  res.status(200).json({ received: true, duplicate: false });
+  return allegati;
 }
 
-// === FUNZIONI SUPPORTO (invariate) ===
-
-async function buffer(req) {
-  const chunks = [];
-  for await (const chunk of req) {
-    chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
-  }
-  return Buffer.concat(chunks);
-}
-
-async function scriviDatiSuGoogleSheets(session) {
-  console.log('📊 === INIZIO SCRITTURA GOOGLE SHEETS ===');
-  
-  const metadata = session.metadata;
-  
-  try {
-    const serviceAccountAuth = new JWT({
-      email: process.env.GOOGLE_CLIENT_EMAIL,
-      key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-      scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-    });
-
-    const doc = new GoogleSpreadsheet(process.env.SHEET_ID, serviceAccountAuth);
-    await doc.loadInfo();
-    
-    const sheet = doc.sheetsByIndex[0];
-    
-    // Riga responsabile
-    const rigaResponsabile = {
-      'Data Check-in': metadata.dataCheckin || '',
-      'Appartamento': metadata.appartamento || '',
-      'Numero Ospiti': metadata.numeroOspiti || '',
-      'Numero Notti': metadata.numeroNotti || '',
-      'Tipo Gruppo': metadata.tipoGruppo || '',
-      'Totale': metadata.totale || '',
-      'Numero Ospite': '1',
-      'Cognome': metadata.resp_cognome || '',
-      'Nome': metadata.resp_nome || '',
-      'Genere': metadata.resp_genere || '',
-      'Data Nascita': metadata.resp_nascita || '',
-      'Età': metadata.resp_eta || '',
-      'Cittadinanza': metadata.resp_cittadinanza || '',
-      'Luogo Nascita': metadata.resp_luogoNascita || '',
-      'Comune': metadata.resp_comune || '',
-      'Provincia': metadata.resp_provincia || '',
-      'Tipo Documento': metadata.resp_tipoDocumento || '',
-      'Numero Documento': metadata.resp_numeroDocumento || '',
-      'Luogo Rilascio': metadata.resp_luogoRilascio || '',
-      'Timestamp': metadata.timestamp || new Date().toISOString(),
-      'Stripe Session ID': session.id,
-    };
-    
-    await sheet.addRow(rigaResponsabile);
-    console.log('✅ Responsabile aggiunto a Google Sheets');
-    
-    // Altri ospiti
-    if (metadata.altri_ospiti) {
-      try {
-        const altriOspiti = JSON.parse(metadata.altri_ospiti);
-        for (const ospite of altriOspiti) {
-          const rigaOspite = {
-            'Data Check-in': metadata.dataCheckin || '',
-            'Appartamento': metadata.appartamento || '',
-            'Numero Ospiti': metadata.numeroOspiti || '',
-            'Numero Notti': metadata.numeroNotti || '',
-            'Tipo Gruppo': metadata.tipoGruppo || '',
-            'Totale': metadata.totale || '',
-            'Numero Ospite': ospite.n.toString(),
-            'Cognome': ospite.c || '',
-            'Nome': ospite.no || '',
-            'Genere': ospite.g || '',
-            'Data Nascita': ospite.na || '',
-            'Età': ospite.e ? ospite.e.toString() : '',
-            'Cittadinanza': ospite.ci || '',
-            'Luogo Nascita': ospite.ln || '',
-            'Comune': ospite.co || '',
-            'Provincia': ospite.p || '',
-            'Timestamp': metadata.timestamp || new Date().toISOString(),
-            'Stripe Session ID': session.id,
-          };
-          await sheet.addRow(rigaOspite);
-        }
-        console.log(`✅ ${altriOspiti.length} altri ospiti aggiunti a Google Sheets`);
-      } catch (e) {
-        console.warn('⚠️ Errore nel parsing altri_ospiti:', e);
-      }
+async function inviaEmailConNodemailer(emailOspite, datiPrenotazione, htmlContent, allegati) {
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASSWORD
     }
-    
-    console.log('📊 === FINE SCRITTURA GOOGLE SHEETS ===');
-  } catch (error) {
-    console.error('❌ Errore Google Sheets:', error);
-    throw error;
-  }
-}
+  });
 
-function ricostruisciDatiPrenotazione(metadata) {
-  const datiPrenotazione = {
-    dataCheckin: metadata.dataCheckin,
-    appartamento: metadata.appartamento,
-    numeroOspiti: parseInt(metadata.numeroOspiti) || 0,
-    numeroNotti: parseInt(metadata.numeroNotti) || 0,
-    tipoGruppo: metadata.tipoGruppo || null,
-    totale: parseFloat(metadata.totale) || 0,
-    timestamp: metadata.timestamp,
-    ospiti: [],
-    documenti: []
+  const dataFormattata = new Date(datiPrenotazione.dataCheckin).toLocaleDateString('it-IT', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
+
+  const oggetto = `🏠 Benvenuto a Space Estate - Check-in ${dataFormattata}`;
+
+  const mailOptions = {
+    from: {
+      name: 'Space Estate',
+      address: process.env.EMAIL_USER
+    },
+    to: emailOspite,
+    subject: oggetto,
+    html: htmlContent,
+    attachments: allegati // ⭐ AGGIUNTO: Allega le foto
   };
 
-  datiPrenotazione.ospiti.push({
-    numero: 1,
-    cognome: metadata.resp_cognome,
-    nome: metadata.resp_nome,
-    genere: metadata.resp_genere,
-    nascita: metadata.resp_nascita,
-    eta: parseInt(metadata.resp_eta) || 0,
-    cittadinanza: metadata.resp_cittadinanza,
-    luogoNascita: metadata.resp_luogoNascita,
-    comune: metadata.resp_comune,
-    provincia: metadata.resp_provincia,
-    tipoDocumento: metadata.resp_tipoDocumento,
-    numeroDocumento: metadata.resp_numeroDocumento,
-    luogoRilascio: metadata.resp_luogoRilascio,
-    isResponsabile: true
-  });
-
-  if (metadata.altri_ospiti) {
-    try {
-      const altriOspiti = JSON.parse(metadata.altri_ospiti);
-      altriOspiti.forEach(o => {
-        datiPrenotazione.ospiti.push({
-          numero: o.n,
-          cognome: o.c,
-          nome: o.no,
-          genere: o.g,
-          nascita: o.na,
-          eta: parseInt(o.e) || 0,
-          cittadinanza: o.ci,
-          luogoNascita: o.ln,
-          comune: o.co,
-          provincia: o.p
-        });
-      });
-    } catch (e) {
-      console.warn('⚠️ Errore parsing altri_ospiti:', e);
-    }
-  }
-
-  return datiPrenotazione;
+  await transporter.sendMail(mailOptions);
+  console.log('✅ Email inviata a:', emailOspite);
 }
 
-async function generaPDFEInviaEmailConDebug(session) {
-  console.log('📧 === INIZIO INVIO EMAIL PROPRIETARIO (da webhook) ===');
-  
-  const metadata = session.metadata;
-  const tempSessionId = metadata.temp_session_id;
-  
-  console.log('🔑 Temp Session ID:', tempSessionId || 'NESSUNO');
-  
-  let datiPrenotazione = ricostruisciDatiPrenotazione(metadata);
-  
-  if (tempSessionId) {
-    try {
-      const baseUrl = process.env.VERCEL_URL 
-        ? `https://${process.env.VERCEL_URL}` 
-        : 'https://checkin-six-coral.vercel.app';
-      
-      console.log('🔍 Tentativo recupero documenti da Redis...');
-      const redisResponse = await fetch(
-        `${baseUrl}/api/salva-dati-temporanei?sessionId=${tempSessionId}`,
-        {
-          method: 'GET',
-          headers: { 'Accept': 'application/json' }
-        }
-      );
-      
-      if (redisResponse.ok) {
-        const redisData = await redisResponse.json();
-        if (redisData.success && redisData.datiPrenotazione?.documenti) {
-          datiPrenotazione.documenti = redisData.datiPrenotazione.documenti;
-          console.log(`✅ Recuperati ${datiPrenotazione.documenti.length} documenti da Redis`);
-        } else {
-          console.warn('⚠️ Nessun documento trovato nella risposta Redis');
-        }
-      } else {
-        const errorText = await redisResponse.text();
-        console.warn('⚠️ Risposta Redis non OK:', redisResponse.status, errorText);
-      }
-    } catch (redisError) {
-      console.warn('⚠️ Errore recupero documenti da Redis:', redisError.message);
-    }
-  } else {
-    console.warn('⚠️ Nessun temp_session_id disponibile per recuperare documenti');
-  }
-  
-  const emailProprietario = process.env.EMAIL_PROPRIETARIO;
-  
-  if (!emailProprietario) {
-    throw new Error('EMAIL_PROPRIETARIO non configurato');
-  }
-  
-  console.log('📬 Destinatario proprietario:', emailProprietario);
-  console.log('📊 Dati da inviare:', {
-    ospiti: datiPrenotazione.ospiti.length,
-    documenti: datiPrenotazione.documenti.length,
-    totale: datiPrenotazione.totale,
-    tipoTotale: typeof datiPrenotazione.totale
+// ===== FUNZIONE GENERAZIONE HTML (MODIFICATA per includere foto inline) =====
+function generaHTMLEmailOspite(dati, codiceCassetta) {
+  const dataFormattata = new Date(dati.dataCheckin).toLocaleDateString('it-IT', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
   });
-  
-  const baseUrl = process.env.VERCEL_URL 
-    ? `https://${process.env.VERCEL_URL}` 
-    : 'https://checkin-six-coral.vercel.app';
-  
-  const apiUrl = `${baseUrl}/api/genera-pdf-email`;
-  console.log('🌐 Chiamata API email proprietario:', apiUrl);
-  
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 25000);
-    
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': 'CheckinWebhook/1.0',
-        'Accept': 'application/json'
-      },
-      body: JSON.stringify({
-        datiPrenotazione: datiPrenotazione,
-        emailDestinatario: emailProprietario
-      }),
-      signal: controller.signal
-    });
-    
-    clearTimeout(timeoutId);
-    
-    console.log('📡 Status risposta API email proprietario:', response.status);
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ Errore API email proprietario:', errorText);
-      throw new Error(`Errore API (${response.status}): ${errorText}`);
-    }
-    
-    const result = await response.json();
-    console.log('✅ Risposta API email proprietario:', result);
-    console.log('📧 === FINE INVIO EMAIL PROPRIETARIO (SUCCESSO) ===');
-    
-  } catch (error) {
-    console.error('❌ Errore invio email proprietario:', error.message);
-    console.log('📧 === FINE INVIO EMAIL PROPRIETARIO (ERRORE) ===');
-    throw error;
-  }
-}
 
-async function inviaEmailOspite(session, emailCliente) {
-  console.log('📧 === INIZIO INVIO EMAIL OSPITE (da webhook) ===');
-  
-  const metadata = session.metadata;
-  const datiPrenotazione = ricostruisciDatiPrenotazione(metadata);
-  
-  console.log('📊 Dati per email ospite:', {
-    email: emailCliente,
-    totale: datiPrenotazione.totale,
-    tipoTotale: typeof datiPrenotazione.totale,
-    appartamento: datiPrenotazione.appartamento
-  });
-  
-  const baseUrl = process.env.VERCEL_URL 
-    ? `https://${process.env.VERCEL_URL}` 
-    : 'https://checkin-six-coral.vercel.app';
-  
-  const apiUrl = `${baseUrl}/api/invia-email-ospite`;
-  console.log('🌐 Chiamata API email ospite:', apiUrl);
-  
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
-    
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': 'CheckinWebhook/1.0',
-        'Accept': 'application/json'
-      },
-      body: JSON.stringify({
-        emailOspite: emailCliente,
-        datiPrenotazione: datiPrenotazione
-      }),
-      signal: controller.signal
-    });
-    
-    clearTimeout(timeoutId);
-    
-    console.log('📡 Status risposta API email ospite:', response.status);
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ Errore API email ospite:', errorText);
-      throw new Error(`Errore API (${response.status}): ${errorText}`);
-    }
-    
-    const result = await response.json();
-    console.log('✅ Risposta API email ospite:', result);
-    console.log('📧 === FINE INVIO EMAIL OSPITE (SUCCESSO) ===');
-    
-  } catch (error) {
-    console.error('❌ Errore invio email ospite:', error.message);
-    console.log('📧 === FINE INVIO EMAIL OSPITE (ERRORE) ===');
-    throw error;
-  }
+  const totale = typeof dati.totale === 'string' ? parseFloat(dati.totale) : (dati.totale || 0);
+
+  // Determina gli orari in base alla data di check-in
+  const CHECKIN_OPEN_TIME = "16:00";
+  const CHECKIN_CLOSE_TIME = "00:00";
+  const CHECKOUT_CLOSE_TIME = "10:00";
+
+  return `
+    <!DOCTYPE html>
+    <html lang="it">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <style>
+        body {
+          font-family: 'Arial', sans-serif;
+          line-height: 1.6;
+          color: #333;
+          background-color: #f5f2e9;
+          margin: 0;
+          padding: 0;
+        }
+        
+        .container {
+          max-width: 600px;
+          margin: 20px auto;
+          background: white;
+          border-radius: 16px;
+          overflow: hidden;
+          box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+          border: 1px solid rgba(232, 220, 192, 0.3);
+        }
+        
+        .header {
+          background: linear-gradient(135deg, #b89968 0%, #a67c52 100%);
+          color: white;
+          padding: 40px 20px;
+          text-align: center;
+        }
+        
+        .header h1 {
+          margin: 0;
+          font-size: 28px;
+          font-weight: 600;
+        }
+        
+        .header p {
+          margin: 10px 0 0 0;
+          font-size: 16px;
+          opacity: 0.95;
+        }
+        
+        .content {
+          padding: 40px 30px;
+        }
+        
+        .welcome-text {
+          font-size: 18px;
+          color: #8b7d6b;
+          margin-bottom: 20px;
+        }
+        
+        .code-section {
+          background: linear-gradient(135deg, #a67c52 0%, #8b7d6b 100%);
+          color: white;
+          padding: 30px;
+          border-radius: 12px;
+          text-align: center;
+          margin: 30px 0;
+        }
+        
+        .code-title {
+          font-size: 20px;
+          font-weight: 600;
+          margin-bottom: 15px;
+        }
+        
+        .code-box {
+          background: rgba(255, 255, 255, 0.2);
+          padding: 20px;
+          border-radius: 8px;
+          font-size: 48px;
+          font-weight: bold;
+          letter-spacing: 8px;
+          margin: 15px 0;
+        }
+        
+        .code-note {
+          font-size: 14px;
+          opacity: 0.9;
+          margin-top: 10px;
+        }
+        
+        .info-section {
+          background: #faf9f6;
+          padding: 20px;
+          border-radius: 8px;
+          margin: 20px 0;
+          border-left: 4px solid #b89968;
+        }
+        
+        .info-title {
+          font-size: 18px;
+          font-weight: 600;
+          color: #8b7d6b;
+          margin-bottom: 15px;
+        }
+        
+        .info-item {
+          display: flex;
+          justify-content: space-between;
+          padding: 8px 0;
+          border-bottom: 1px solid #e8dcc0;
+        }
+        
+        .info-item:last-child {
+          border-bottom: none;
+        }
+        
+        .info-label {
+          font-weight: 500;
+          color: #a0927f;
+        }
+        
+        .info-value {
+          font-weight: 600;
+          color: #8b7d6b;
+        }
+        
+        .instructions {
+          background: #fff9e6;
+          padding: 20px;
+          border-radius: 8px;
+          margin: 20px 0;
+          border-left: 4px solid #ffc107;
+        }
+        
+        .instructions h3 {
+          color: #856404;
+          margin-top: 0;
+          font-size: 18px;
+          margin-bottom: 15px;
+        }
+        
+        .instructions p {
+          margin: 10px 0;
+          color: #8b7d6b;
+          line-height: 1.8;
+        }
+
+        .instructions strong {
+          color: #856404;
+          display: block;
+          margin-top: 15px;
+          margin-bottom: 5px;
+        }
+
+        .address-block {
+          background: white;
+          padding: 12px;
+          border-radius: 6px;
+          margin: 10px 0;
+          border-left: 3px solid #b89968;
+        }
+
+        /* NUOVA SEZIONE: Galleria foto */
+        .photo-gallery {
+          margin: 30px 0;
+        }
+
+        .photo-gallery h3 {
+          color: #8b7d6b;
+          font-size: 20px;
+          margin-bottom: 20px;
+          text-align: center;
+        }
+
+        .photo-item {
+          margin: 20px 0;
+          text-align: center;
+        }
+
+        .photo-item img {
+          max-width: 100%;
+          height: auto;
+          border-radius: 12px;
+          box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+          margin-bottom: 10px;
+        }
+
+        .photo-caption {
+          font-size: 14px;
+          color: #8b7d6b;
+          font-style: italic;
+        }
+        
+        .footer {
+          background: #f5f2e9;
+          padding: 30px;
+          text-align: center;
+          color: #a0927f;
+          font-size: 14px;
+        }
+        
+        .footer p {
+          margin: 5px 0;
+        }
+        
+        .highlight {
+          background: #fff3cd;
+          padding: 2px 6px;
+          border-radius: 4px;
+          font-weight: 600;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>Benvenuto a Space Estate!</h1>
+          <p>Il tuo soggiorno sta per iniziare</p>
+        </div>
+        
+        <div class="content">
+          <p class="welcome-text">
+            Gentile <strong>${dati.ospiti?.[0]?.nome || 'Ospite'} ${dati.ospiti?.[0]?.cognome || ''}</strong>,
+          </p>
+          
+          <p>
+            Grazie per aver completato il check-in e il pagamento della tassa di soggiorno. 
+            Siamo felici di accoglierti nella nostra struttura!
+          </p>
+          
+          <div class="code-section">
+            <div class="code-title">🔑 Codice Cassetta Sicurezza</div>
+            <div class="code-box">${codiceCassetta}</div>
+            <div class="code-note">Conserva questo codice con cura</div>
+          </div>
+          
+          <div class="info-section">
+            <div class="info-title">📋 Dettagli della tua prenotazione</div>
+            <div class="info-item">
+              <span class="info-label">Data Check-in:</span>
+              <span class="info-value">${dataFormattata}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Appartamento:</span>
+              <span class="info-value">${dati.appartamento || 'N/A'}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Numero Ospiti:</span>
+              <span class="info-value">${dati.numeroOspiti || 0}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Numero Notti:</span>
+              <span class="info-value">${dati.numeroNotti || 0}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Tassa Soggiorno Pagata:</span>
+              <span class="info-value">€${totale.toFixed(2)}</span>
+            </div>
+          </div>
+          
+          <div class="instructions">
+            <h3>📍 Come accedere alla struttura</h3>
+            
+            <div class="address-block">
+              <strong>📍 Indirizzo Struttura:</strong>
+              <p style="margin: 5px 0;">
+                Via Centrale, 48<br>
+                38123 Trento (TN)
+              </p>
+            </div>
+
+            <div class="address-block">
+              <strong>📍 Indirizzo Parcheggio:</strong>
+              <p style="margin: 5px 0;">
+                Via Val Gola, 22<br>
+                38123 Trento (TN)
+              </p>
+            </div>
+
+            <div class="address-block">
+              <strong>⏰ Orari:</strong>
+              <p style="margin: 5px 0;">
+                Check-in: dalle ${CHECKIN_OPEN_TIME} alle ${CHECKIN_CLOSE_TIME}<br>
+                Check-out: entro le ${CHECKOUT_CLOSE_TIME}
+              </p>
+            </div>
+
+            <p style="margin-top: 20px;">
+              • Quando arrivi alla proprietà, la cassetta di sicurezza è situata in una nicchia dietro allo scuro dell'appartamento al piano terra (vedi foto sotto).
+            </p>
+
+            <p>
+              • La sosta all'interno della proprietà è consentita esclusivamente per le operazioni di carico e scarico dei bagagli.
+            </p>
+          </div>
+
+          <!-- ⭐ NUOVA SEZIONE: Galleria foto inline -->
+          <div class="photo-gallery">
+            <h3>📸 Foto di riferimento per l'accesso</h3>
+            
+            <div class="photo-item">
+              <img src="cid:ingresso_proprieta" alt="Ingresso Proprietà">
+              <p class="photo-caption">1. Ingresso della proprietà</p>
+            </div>
+
+            <div class="photo-item">
+              <img src="cid:cassetta_sicurezza" alt="Cassetta di Sicurezza">
+              <p class="photo-caption">2. Cassetta di sicurezza con codice ${codiceCassetta}</p>
+            </div>
+
+            <div class="photo-item">
+              <img src="cid:ubicazione_cassetta" alt="Ubicazione Cassetta">
+              <p class="photo-caption">3. Ubicazione esatta della cassetta</p>
+            </div>
+          </div>
+          
+          <p style="margin-top: 30px; color: #8b7d6b;">
+            Per qualsiasi necessità o domanda, non esitare a contattarci. 
+            Ti auguriamo un soggiorno piacevole e confortevole! 🌟
+          </p>
+        </div>
+        
+        <div class="footer">
+          <p><strong>Space Estate</strong></p>
+          <p>La Columbera - Appartamenti turistici</p>
+          <p style="margin-top: 15px; font-size: 12px;">
+            Questa è una email automatica, per favore non rispondere direttamente.
+          </p>
+          <p style="font-size: 12px;">
+            Generata il ${new Date().toLocaleString('it-IT')}
+          </p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
 }
