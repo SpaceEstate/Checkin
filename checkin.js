@@ -1,9 +1,10 @@
 // === CONFIGURAZIONE GLOBALE ===
-let currentStep = 1;
+let currentStep = 0; // CAMBIATO: inizia da 0 (verifica prenotazione)
 let numeroOspiti = 0;
 let numeroNotti = 0;
 let dataCheckin = '';
 let stepGenerated = false;
+let datiPrecompilati = false; // NUOVO: Flag per dati pre-compilati
  
 const API_BASE_URL = 'https://checkin-six-coral.vercel.app/api';
 
@@ -197,7 +198,8 @@ function validaStep1() {
   const oggi = new Date();
   oggi.setHours(0, 0, 0, 0);
   
-  if (dataScelta < oggi) {
+  // MODIFICATO: Non bloccare se i dati sono pre-compilati
+  if (!datiPrecompilati && dataScelta < oggi) {
     showNotification("La data di check-in non può essere nel passato", "error");
     dataCheckinInput?.focus();
     return false;
@@ -868,7 +870,6 @@ function creaCustomDateInput(originalInput) {
     e.preventDefault();
     e.stopPropagation();
     
-    // Mostra temporaneamente l'input originale per il click
     originalInput.type = 'date';
     originalInput.style.cssText = `
       position: absolute;
@@ -879,12 +880,10 @@ function creaCustomDateInput(originalInput) {
       pointer-events: auto;
     `;
     
-    // Focus e click sull'input originale
     setTimeout(() => {
       originalInput.focus();
       originalInput.click();
       
-      // Ripristina dopo che il picker si è aperto
       setTimeout(() => {
         originalInput.style.cssText = '';
         originalInput.type = 'hidden';
@@ -1003,7 +1002,7 @@ document.addEventListener('DOMContentLoaded', function() {
   }
   
   document.querySelectorAll('.step').forEach(step => step.classList.remove('active'));
-  const firstStep = document.getElementById('step-1');
+  const firstStep = document.getElementById('step-0');
   if (firstStep) firstStep.classList.add('active');
   
   gestisciRitornoStripe();
