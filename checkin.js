@@ -139,6 +139,7 @@ window.toggleComuneProvincia = function(ospiteNum) {
 // === GESTIONE VERIFICA PRENOTAZIONE ===
 
 // Funzione per verificare la prenotazione
+// SOSTITUISCI TUTTA LA FUNZIONE verificaPrenotazione con questa:
 window.verificaPrenotazione = async function() {
   const input = document.getElementById('numero-prenotazione');
   const numeroPrenotazione = input?.value?.trim();
@@ -170,35 +171,30 @@ window.verificaPrenotazione = async function() {
     const result = await response.json();
     
     if (result.found && result.dati) {
-      // Prenotazione trovata - pre-compila i dati
       showNotification('✅ Prenotazione trovata!', 'success');
-      
       precompilaDatiPrenotazione(result.dati);
       window.datiPrecompilati = true;
-      
-      // Vai allo step 1
       currentStep = 1;
       mostraStepCorrente();
-      
     } else {
-      // Prenotazione non trovata
-      showNotification('❌ Numero di prenotazione non trovato. Procedi con inserimento manuale.', 'error');
-      
-      setTimeout(() => {
-        saltaVerifica();
-      }, 2000);
+      // RESTA SULLA SCHERMATA - NON VA AVANTI
+      showNotification('❌ Numero di prenotazione non trovato. Verifica il codice o procedi con inserimento manuale.', 'error');
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+      }
+      input?.focus();
     }
-    
   } catch (error) {
     console.error('Errore verifica prenotazione:', error);
-    showNotification('Errore nella verifica. Procedi con inserimento manuale.', 'error');
-    
-    setTimeout(() => {
-      saltaVerifica();
-    }, 2000);
-    
-  } finally {
+    showNotification('Errore nella verifica. Riprova o procedi con inserimento manuale.', 'error');
     if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = originalText;
+    }
+    input?.focus();
+  } finally {
+    if (currentStep === 0 && btn) {
       btn.disabled = false;
       btn.innerHTML = originalText;
     }
@@ -621,16 +617,34 @@ function preparaRiepilogo() {
   aggiornaBottonePagamento(totale);
 }
 
+// SOSTITUISCI TUTTA LA FUNZIONE con questa:
 function aggiornaBottonePagamento(totale) {
   const finalStep = document.getElementById('step-final');
   const buttonGroup = finalStep?.querySelector('.button-group');
   if (!buttonGroup) return;
   buttonGroup.innerHTML = `
     <button type="button" class="btn btn-secondary" onclick="indietroStep()">← Indietro</button>
-    <button type="button" class="btn btn-primary btn-payment" onclick="procediAlPagamento()">
+    <button type="button" class="btn btn-primary btn-payment" id="btn-procedi-pagamento" disabled onclick="procediAlPagamento()">
       💳 Paga €${totale.toFixed(2)} con Stripe
     </button>
   `;
+  
+  // Gestione checkbox privacy
+  setTimeout(() => {
+    const privacyCheckbox = document.getElementById('privacy-consent');
+    const paymentBtn = document.getElementById('btn-procedi-pagamento');
+    
+    if (privacyCheckbox && paymentBtn) {
+      paymentBtn.disabled = !privacyCheckbox.checked;
+      
+      privacyCheckbox.addEventListener('change', function() {
+        paymentBtn.disabled = !this.checked;
+        if (this.checked) {
+          showNotification('✅ Privacy accettata', 'success');
+        }
+      });
+    }
+  }, 100);
 }
 
 // === GESTIONE FOTOCAMERA ===
@@ -727,6 +741,12 @@ window.closeCamera = function(ospiteNum) {
 
 // === PAGAMENTO ===
 window.procediAlPagamento = async function() {
+ const privacyCheckbox = document.getElementById('privacy-consent');
+  if (!privacyCheckbox?.checked) {
+    showNotification('⚠️ Devi accettare l\'informativa privacy per procedere', 'error');
+    privacyCheckbox?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
   if (!validaPrenotazioneCompleta()) return;
   
   const payButton = document.querySelector('.btn-payment');
