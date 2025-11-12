@@ -89,6 +89,7 @@
                 class="form-input" 
                 placeholder="Es. BK12345"
                 autocomplete="off"
+                inputmode="text"
                 style="text-transform: uppercase;">
             </div>
             <a href="#" class="no-booking-link" onclick="event.preventDefault(); saltaVerifica();">
@@ -178,7 +179,7 @@
               <label for="privacy-consent" class="privacy-label">
                 <span class="checkbox-custom"></span>
                 <span class="privacy-text">
-                  Dichiaro di aver letto e compreso l'informativa privacy ai sensi del Regolamento UE 2016/679 e autorizzo il trattamento dei miei dati personali per le finalità legate alla registrazione presso la struttura e alla trasmissione alla Questura, come previsto dalla normativa vigente (art. 109 TULPS).
+                  Dichiaro di aver letto e compreso l'informativa privacy ai sensi del Regolamento UE 2016/679 e autorizzo il trattamento dei miei dati personali per le finalità legate alla registrazione presso la struttura e alla trasmissione alla Questura, come previsto dalla normativa vigente (art. 109 TULPS).<span style="color: #e74c3c; font-weight: bold;">*</span>
                 </span>
               </label>
             </div>
@@ -186,9 +187,9 @@
 
           <!-- Bottoni statici -->
           <div class="button-group">
-            <button type="button" class="btn btn-secondary" onclick="indietroStep()">← Indietro</button>
-            <button type="submit" class="btn btn-success">Procedi al Pagamento</button>
-          </div>
+  <button type="button" class="btn btn-secondary" onclick="indietroStep()">← Indietro</button>
+  <button type="button" class="btn btn-success" id="btn-procedi-pagamento" disabled onclick="procediAlPagamento()">Procedi al Pagamento</button>
+</div>
         </div>
 
         <!-- Step successo -->
