@@ -1,10 +1,10 @@
 // === CONFIGURAZIONE GLOBALE ===
-let currentStep = 0; // CAMBIATO: inizia da 0 (verifica prenotazione)
+let currentStep = 0; // Inizia da 0 (verifica prenotazione)
 let numeroOspiti = 0;
 let numeroNotti = 0;
 let dataCheckin = '';
 let stepGenerated = false;
-let datiPrecompilati = false; // NUOVO: Flag per dati pre-compilati
+window.datiPrecompilati = false; // Flag globale per dati pre-compilati
  
 const API_BASE_URL = 'https://checkin-six-coral.vercel.app/api';
 
@@ -136,6 +136,163 @@ window.toggleComuneProvincia = function(ospiteNum) {
   }
 }
 
+// === GESTIONE VERIFICA PRENOTAZIONE ===
+
+// Funzione per verificare la prenotazione
+window.verificaPrenotazione = async function() {
+  const input = document.getElementById('numero-prenotazione');
+  const numeroPrenotazione = input?.value?.trim();
+  
+  if (!numeroPrenotazione) {
+    showNotification('Inserisci un numero di prenotazione', 'error');
+    input?.focus();
+    return;
+  }
+  
+  const btn = document.querySelector('#step-0 .btn-primary');
+  const originalText = btn?.innerHTML || 'Verifica e continua →';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Verifica in corso...';
+  }
+  
+  try {
+    showNotification('🔍 Ricerca prenotazione in corso...', 'info');
+    
+    const response = await fetch(`${API_BASE_URL}/verifica-prenotazione`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ numeroPrenotazione })
+    });
+    
+    const result = await response.json();
+    
+    if (result.found && result.dati) {
+      // Prenotazione trovata - pre-compila i dati
+      showNotification('✅ Prenotazione trovata!', 'success');
+      
+      precompilaDatiPrenotazione(result.dati);
+      window.datiPrecompilati = true;
+      
+      // Vai allo step 1
+      currentStep = 1;
+      mostraStepCorrente();
+      
+    } else {
+      // Prenotazione non trovata
+      showNotification('❌ Numero di prenotazione non trovato. Procedi con inserimento manuale.', 'error');
+      
+      setTimeout(() => {
+        saltaVerifica();
+      }, 2000);
+    }
+    
+  } catch (error) {
+    console.error('Errore verifica prenotazione:', error);
+    showNotification('Errore nella verifica. Procedi con inserimento manuale.', 'error');
+    
+    setTimeout(() => {
+      saltaVerifica();
+    }, 2000);
+    
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = originalText;
+    }
+  }
+}
+
+// Funzione per saltare la verifica
+window.saltaVerifica = function() {
+  window.datiPrecompilati = false;
+  currentStep = 1;
+  mostraStepCorrente();
+  showNotification('Compila manualmente i dati della prenotazione', 'info');
+}
+
+// Funzione per tornare alla verifica
+window.tornaAVerifica = function() {
+  if (window.datiPrecompilati) {
+    // Se i dati erano pre-compilati, chiedi conferma
+    if (confirm('Vuoi tornare alla schermata di verifica? I dati precompilati rimarranno.')) {
+      currentStep = 0;
+      mostraStepCorrente();
+    }
+  } else {
+    currentStep = 0;
+    mostraStepCorrente();
+  }
+}
+
+// Funzione per pre-compilare i dati
+function precompilaDatiPrenotazione(dati) {
+  console.log('📝 Pre-compilazione dati:', dati);
+  
+  // Data check-in
+  const dataInput = document.getElementById('data-checkin');
+  if (dataInput && dati.dataCheckin) {
+    dataInput.value = dati.dataCheckin;
+    dataInput.readOnly = true;
+    dataInput.style.backgroundColor = '#f5f2e9';
+    dataInput.style.cursor = 'not-allowed';
+  }
+  
+  // Appartamento
+  const appartamentoSelect = document.getElementById('appartamento');
+  if (appartamentoSelect && dati.appartamento) {
+    appartamentoSelect.value = dati.appartamento;
+    appartamentoSelect.disabled = true;
+    appartamentoSelect.style.backgroundColor = '#f5f2e9';
+    appartamentoSelect.style.cursor = 'not-allowed';
+  }
+  
+  // Numero ospiti
+  const ospitiSelect = document.getElementById('numero-ospiti');
+  if (ospitiSelect && dati.numeroOspiti) {
+    ospitiSelect.value = dati.numeroOspiti.toString();
+    ospitiSelect.disabled = true;
+    ospitiSelect.style.backgroundColor = '#f5f2e9';
+    ospitiSelect.style.cursor = 'not-allowed';
+    
+    // Trigger change per mostrare tipo gruppo se necessario
+    ospitiSelect.dispatchEvent(new Event('change'));
+  }
+  
+  // Numero notti
+  const nottiInput = document.getElementById('numero-notti');
+  if (nottiInput && dati.numeroNotti) {
+    nottiInput.value = dati.numeroNotti;
+    nottiInput.readOnly = true;
+    nottiInput.style.backgroundColor = '#f5f2e9';
+    nottiInput.style.cursor = 'not-allowed';
+  }
+  
+  // Tipo gruppo rimane VUOTO e modificabile
+  const tipoGruppoSelect = document.getElementById('tipo-gruppo');
+  if (tipoGruppoSelect) {
+    tipoGruppoSelect.value = '';
+    tipoGruppoSelect.disabled = false;
+    tipoGruppoSelect.style.backgroundColor = 'white';
+    tipoGruppoSelect.style.cursor = 'pointer';
+  }
+  
+  // Aggiungi un badge per indicare dati pre-compilati
+  const stepHeader = document.querySelector('#step-1 .step-subtitle');
+  if (stepHeader) {
+    stepHeader.innerHTML = `
+      <span style="color: #27ae60; font-weight: 600;">✓ Dati prenotazione verificati</span><br>
+      <span style="font-size: 0.9rem; color: #a0927f;">
+        ${dati.numeroOspiti > 1 ? 'Seleziona il tipo di gruppo' : 'Verifica i dati e prosegui'}
+      </span>
+    `;
+  }
+  
+  console.log('✅ Dati pre-compilati con successo');
+}
+
 // === NAVIGAZIONE STEP ===
 window.prossimoStep = function() {
   if (currentStep === 1) {
@@ -199,7 +356,7 @@ function validaStep1() {
   oggi.setHours(0, 0, 0, 0);
   
   // MODIFICATO: Non bloccare se i dati sono pre-compilati
-  if (!datiPrecompilati && dataScelta < oggi) {
+  if (!window.datiPrecompilati && dataScelta < oggi) {
     showNotification("La data di check-in non può essere nel passato", "error");
     dataCheckinInput?.focus();
     return false;
@@ -1001,9 +1158,21 @@ document.addEventListener('DOMContentLoaded', function() {
     dataCheckinInput.min = oggi;
   }
   
+  // Inizializza mostrando lo step 0 (verifica prenotazione)
   document.querySelectorAll('.step').forEach(step => step.classList.remove('active'));
   const firstStep = document.getElementById('step-0');
   if (firstStep) firstStep.classList.add('active');
+  
+  // Event listener per Enter sulla prenotazione
+  const numeroPrenotazioneInput = document.getElementById('numero-prenotazione');
+  if (numeroPrenotazioneInput) {
+    numeroPrenotazioneInput.addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        verificaPrenotazione();
+      }
+    });
+  }
   
   gestisciRitornoStripe();
   
