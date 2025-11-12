@@ -1128,7 +1128,7 @@ function ottimizzaFormMobile() {
       input.setAttribute('inputmode', 'email');
     }
 
-    if (input.name && input.name.includes('numero') && input.type !== 'date') {
+    if (input.name && input.name.includes('numero') && input.type !== 'date' && input.name !== 'numero-prenotazione') {
       input.setAttribute('inputmode', 'numeric');
     }
   });
