@@ -4,7 +4,7 @@
     "api/**/*.js": {
       "maxDuration": 30
     }
-  }, 
+  },
   "headers": [
     {
       "source": "/api/(.*)",
@@ -28,10 +28,12 @@
       ]
     }
   ],
-  "routes": [
+  "rewrites": [
     {
-      "src": "/(.*)",
-      "dest": "/$1"
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
     }
-  ]
+  ],
+  "cleanUrls": true,
+  "trailingSlash": false
 }
