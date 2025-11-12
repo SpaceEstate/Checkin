@@ -15,7 +15,7 @@
         },
         {
           "key": "Access-Control-Allow-Origin",
-          "value": "https://spaceestate.github.io"
+          "value": "*"
         },
         {
           "key": "Access-Control-Allow-Methods",
