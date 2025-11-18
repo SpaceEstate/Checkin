@@ -202,13 +202,17 @@ function generaHTMLRiepilogo(dati) {
   // ✅ CORREZIONE: Converti totale in numero
   const totale = typeof dati.totale === 'string' ? parseFloat(dati.totale) : (dati.totale || 0);
 
-  // Genera HTML ospiti
+  // Genera HTML ospiti con page-break corretto
   const ospitiHTML = (dati.ospiti || []).map((ospite, index) => {
     const documento = documentiValidi.find(d => 
       d && d.ospiteNumero && d.ospiteNumero === ospite.numero
     );
     
-    const needsPageBreak = index > 0 && index % 2 === 1;
+    // ✅ CORREZIONE: Ospite 1 da solo in pag 1, poi 2 ospiti per pagina
+    // Pag 1: Dettagli + Ospite 1
+    // Pag 2: Ospite 2 e 3 (break prima del 2)
+    // Pag 3: Ospite 4 e 5 (break prima del 4)
+    const needsPageBreak = index === 1 || (index > 1 && (index - 1) % 2 === 0);
     
     return `
       <div class="ospite ${ospite.isResponsabile ? 'responsabile' : ''}" ${needsPageBreak ? 'style="page-break-before: always;"' : ''}>
@@ -296,8 +300,10 @@ function generaHTMLRiepilogo(dati) {
         .ospite-header { display: flex; justify-content: space-between; margin-bottom: 12px; border-bottom: 1px solid #dee2e6; }
         .ospite-nome { font-size: 16px; font-weight: bold; color: #2c3e50; }
         .ospite-badge { background: #28a745; color: white; padding: 3px 10px; border-radius: 15px; font-size: 11px; }
+        .ospite-number { background: #6c757d; color: white; padding: 3px 10px; border-radius: 15px; font-size: 11px; }
         .totale-section { background: #e8f5e8; border: 2px solid #28a745; padding: 15px; border-radius: 6px; text-align: center; margin: 15px 0; }
         .totale-amount { font-size: 28px; font-weight: bold; color: #28a745; margin: 8px 0; }
+        .documento-note { background: #fff3cd; border: 1px solid #ffc107; padding: 8px; border-radius: 4px; margin-top: 10px; font-size: 12px; }
       </style>
     </head>
     <body>
