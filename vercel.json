@@ -30,8 +30,18 @@
   ],
   "rewrites": [
     {
-      "source": "/(.*)",
-      "destination": "/$1"
+      "source": "/",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/api/:path*",
+      "destination": "/api/:path*"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/$1"
     }
   ],
   "cleanUrls": true,
