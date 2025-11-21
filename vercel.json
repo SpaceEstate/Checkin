@@ -1,13 +1,13 @@
 {
   "version": 2,
   "functions": {
-    "api-functions/**/*.js": {
+    "api/**/*.js": {
       "maxDuration": 30
     }
   },
   "headers": [
     {
-      "source": "/api-functions/(.*)",
+      "source": "/api/(.*)",
       "headers": [
         { "key": "Access-Control-Allow-Credentials", "value": "true" },
         { "key": "Access-Control-Allow-Origin", "value": "*" },
@@ -19,7 +19,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "/api-functions/:path*"
+      "destination": "/api/:path*"
     },
     {
       "source": "/(.*)",
