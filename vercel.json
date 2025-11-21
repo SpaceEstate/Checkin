@@ -38,11 +38,7 @@
       "destination": "/api/:path*"
     }
   ],
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "/$1"
-    }
+  
   ],
   "cleanUrls": true,
   "trailingSlash": false
