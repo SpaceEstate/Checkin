@@ -1,388 +1,481 @@
-// api/stripeWebhook.js
-// VERSIONE CON LOGGING DETTAGLIATO
-
-import Stripe from 'stripe';
-import { GoogleSpreadsheet } from 'google-spreadsheet';
-import { JWT } from 'google-auth-library';
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
-
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
+// api/genera-pdf-email.js
+// CORREZIONE: nodemailer.createTransport (non createTransporter)
+import nodemailer from 'nodemailer';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    return res.status(405).json({ error: 'Metodo non consentito' });
   }
 
-  let event;
+  console.log('📧 Inizio generazione PDF e invio email (Browserless)');
 
   try {
-    const buf = await buffer(req);
-    const sig = req.headers['stripe-signature'];
+    const { datiPrenotazione, emailDestinatario } = req.body;
 
-    event = stripe.webhooks.constructEvent(buf, sig, endpointSecret);
-    console.log('✅ Webhook verificato:', event.type);
-  } catch (err) {
-    console.error('❌ Errore verifica webhook:', err.message);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
-  }
-
-  if (event.type === 'checkout.session.completed') {
-    const session = event.data.object;
-    console.log('💰 Pagamento completato per sessione:', session.id);
-    
-    const emailCliente = session.customer_details?.email || null;
-    console.log('📧 Email cliente da Stripe:', emailCliente || 'NESSUNA');
-    
-    try {
-      // 1. Google Sheets (priorità massima)
-      console.log('📊 === INIZIO SCRITTURA GOOGLE SHEETS ===');
-      await scriviDatiSuGoogleSheets(session);
-      console.log('✅ Google Sheets completato');
-      
-      // 2. Email proprietario con PDF
-      console.log('📧 === INIZIO EMAIL PROPRIETARIO ===');
-      try {
-        await generaPDFEInviaEmailConDebug(session);
-        console.log('✅ Email proprietario completata');
-      } catch (pdfError) {
-        console.error('⚠️ ERRORE Email proprietario:', pdfError.message);
-        console.error('Stack completo:', pdfError.stack);
-        // NON bloccare il flusso - continua comunque
-      }
-      
-      // 3. Email ospite
-      if (emailCliente) {
-        console.log('📧 === INIZIO EMAIL OSPITE ===');
-        try {
-          await inviaEmailOspite(session, emailCliente);
-          console.log('✅ Email ospite completata');
-        } catch (emailError) {
-          console.error('⚠️ ERRORE Email ospite:', emailError.message);
-          console.error('Stack completo:', emailError.stack);
-        }
-      } else {
-        console.warn('⚠️ Email cliente non disponibile, skip email ospite');
-      }
-      
-      console.log('🎉 === WEBHOOK COMPLETATO CON SUCCESSO ===');
-      
-    } catch (error) {
-      console.error('❌ ERRORE CRITICO elaborazione webhook:', error);
-      console.error('Stack completo:', error.stack);
-      return res.status(500).json({ 
-        error: 'Errore interno', 
-        message: error.message 
+    if (!datiPrenotazione || !emailDestinatario) {
+      return res.status(400).json({ 
+        error: 'Dati prenotazione ed email destinatario sono obbligatori' 
       });
     }
-  }
 
-  res.status(200).json({ received: true });
-}
-
-// === FUNZIONI SUPPORTO ===
-
-async function buffer(req) {
-  const chunks = [];
-  for await (const chunk of req) {
-    chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
-  }
-  return Buffer.concat(chunks);
-}
-
-async function scriviDatiSuGoogleSheets(session) {
-  console.log('📊 Scrittura Google Sheets...');
-  
-  const metadata = session.metadata;
-  
-  try {
-    const serviceAccountAuth = new JWT({
-      email: process.env.GOOGLE_CLIENT_EMAIL,
-      key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-      scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-    });
-
-    const doc = new GoogleSpreadsheet(process.env.SHEET_ID, serviceAccountAuth);
-    await doc.loadInfo();
-    
-    const sheet = doc.sheetsByIndex[0];
-    
-    // Riga responsabile
-    const rigaResponsabile = {
-      'Data Check-in': metadata.dataCheckin || '',
-      'Appartamento': metadata.appartamento || '',
-      'Numero Ospiti': metadata.numeroOspiti || '',
-      'Numero Notti': metadata.numeroNotti || '',
-      'Tipo Gruppo': metadata.tipoGruppo || '',
-      'Totale': metadata.totale || '',
-      'Numero Ospite': '1',
-      'Cognome': metadata.resp_cognome || '',
-      'Nome': metadata.resp_nome || '',
-      'Genere': metadata.resp_genere || '',
-      'Data Nascita': metadata.resp_nascita || '',
-      'Età': metadata.resp_eta || '',
-      'Cittadinanza': metadata.resp_cittadinanza || '',
-      'Luogo Nascita': metadata.resp_luogoNascita || '',
-      'Comune': metadata.resp_comune || '',
-      'Provincia': metadata.resp_provincia || '',
-      'Tipo Documento': metadata.resp_tipoDocumento || '',
-      'Numero Documento': metadata.resp_numeroDocumento || '',
-      'Luogo Rilascio': metadata.resp_luogoRilascio || '',
-      'Timestamp': metadata.timestamp || new Date().toISOString(),
-      'Stripe Session ID': session.id,
-    };
-    
-    await sheet.addRow(rigaResponsabile);
-    console.log('✅ Responsabile aggiunto');
-    
-    // Altri ospiti
-    if (metadata.altri_ospiti) {
-      try {
-        const altriOspiti = JSON.parse(metadata.altri_ospiti);
-        for (const ospite of altriOspiti) {
-          const rigaOspite = {
-            'Data Check-in': metadata.dataCheckin || '',
-            'Appartamento': metadata.appartamento || '',
-            'Numero Ospiti': metadata.numeroOspiti || '',
-            'Numero Notti': metadata.numeroNotti || '',
-            'Tipo Gruppo': metadata.tipoGruppo || '',
-            'Totale': metadata.totale || '',
-            'Numero Ospite': ospite.n.toString(),
-            'Cognome': ospite.c || '',
-            'Nome': ospite.no || '',
-            'Genere': ospite.g || '',
-            'Data Nascita': ospite.na || '',
-            'Età': ospite.e ? ospite.e.toString() : '',
-            'Cittadinanza': ospite.ci || '',
-            'Luogo Nascita': ospite.ln || '',
-            'Comune': ospite.co || '',
-            'Provincia': ospite.p || '',
-            'Timestamp': metadata.timestamp || new Date().toISOString(),
-            'Stripe Session ID': session.id,
-          };
-          await sheet.addRow(rigaOspite);
-        }
-        console.log(`✅ ${altriOspiti.length} altri ospiti aggiunti`);
-      } catch (e) {
-        console.warn('⚠️ Errore parsing altri_ospiti:', e);
-      }
+    // ✅ CORREZIONE: Converti totale in numero se è stringa
+    if (typeof datiPrenotazione.totale === 'string') {
+      datiPrenotazione.totale = parseFloat(datiPrenotazione.totale);
     }
     
+    // Validazione documenti
+    if (!Array.isArray(datiPrenotazione.documenti)) {
+      console.warn('⚠️ documenti non è un array, inizializzo array vuoto');
+      datiPrenotazione.documenti = [];
+    }
+    
+    console.log('📊 Dati validati:', {
+      numeroOspiti: datiPrenotazione.ospiti?.length || 0,
+      numeroDocumenti: datiPrenotazione.documenti.length,
+      totale: datiPrenotazione.totale,
+      tipoTotale: typeof datiPrenotazione.totale
+    });
+
+    // 1. Genera HTML per il PDF (SENZA documenti)
+    const htmlContent = generaHTMLRiepilogo(datiPrenotazione);
+    
+    let pdfBuffer = null;
+    let pdfGenerato = false;
+
+    // 2. PROVA a generare PDF con Browserless (con gestione errori)
+    try {
+      console.log('🌐 Tentativo generazione PDF con Browserless...');
+      pdfBuffer = await generaPDFConBrowserless(htmlContent);
+      pdfGenerato = true;
+      console.log('✅ PDF generato con successo');
+    } catch (pdfError) {
+      console.warn('⚠️ Impossibile generare PDF:', pdfError.message);
+      console.log('📧 Procedo con invio email senza PDF');
+    }
+    
+    // 3. Prepara allegati documenti
+    const allegatiDocumenti = preparaAllegatiDocumenti(datiPrenotazione.documenti);
+    console.log(`📎 Allegati documenti preparati: ${allegatiDocumenti.length}`);
+    
+    // 4. Invia email (con o senza PDF + documenti come allegati)
+    console.log('📧 Invio email in corso...');
+    if (pdfGenerato && pdfBuffer) {
+      await inviaEmailConPDF(emailDestinatario, datiPrenotazione, pdfBuffer, allegatiDocumenti);
+      console.log('✅ Email inviata CON PDF e documenti allegati');
+    } else {
+      await inviaEmailSenzaPDF(emailDestinatario, datiPrenotazione, allegatiDocumenti);
+      console.log('✅ Email inviata SENZA PDF (solo testo + documenti)');
+    }
+    
+    return res.status(200).json({ 
+      success: true, 
+      message: pdfGenerato 
+        ? 'PDF generato e email inviata con successo' 
+        : 'Email inviata con successo (PDF non disponibile)',
+      pdfGenerato: pdfGenerato,
+      numeroDocumenti: allegatiDocumenti.length
+    });
+
   } catch (error) {
-    console.error('❌ Errore Google Sheets:', error);
+    console.error('❌ Errore finale:', error);
+    console.error('Stack:', error.stack);
+    return res.status(500).json({ 
+      error: 'Errore interno: ' + error.message 
+    });
+  }
+}
+
+// FUNZIONE: Prepara allegati documenti
+function preparaAllegatiDocumenti(documenti) {
+  if (!Array.isArray(documenti) || documenti.length === 0) {
+    console.log('📎 Nessun documento da allegare');
+    return [];
+  }
+
+  const allegati = [];
+  
+  documenti.forEach((doc, index) => {
+    if (!doc.base64 || !doc.nomeFile) {
+      console.warn(`⚠️ Documento ${index + 1} incompleto, saltato`);
+      return;
+    }
+
+    try {
+      // Rimuovi il prefixo data:image/...;base64, se presente
+      let base64Data = doc.base64;
+      if (base64Data.includes(',')) {
+        base64Data = base64Data.split(',')[1];
+      }
+
+      // Converti base64 in Buffer
+      const buffer = Buffer.from(base64Data, 'base64');
+
+      // Determina il nome file con prefisso ospite
+      const ospitePrefix = doc.ospiteNumero ? `Ospite_${doc.ospiteNumero}_` : '';
+      const nomeFile = `${ospitePrefix}${doc.nomeFile}`;
+
+      allegati.push({
+        filename: nomeFile,
+        content: buffer,
+        contentType: doc.tipo || 'application/octet-stream'
+      });
+
+      console.log(`📎 Allegato preparato: ${nomeFile} (${(buffer.length / 1024).toFixed(2)} KB)`);
+
+    } catch (error) {
+      console.error(`❌ Errore preparazione documento ${index + 1}:`, error.message);
+    }
+  });
+
+  return allegati;
+}
+
+// FUNZIONE: Genera PDF usando Browserless API
+async function generaPDFConBrowserless(htmlContent) {
+  const browserlessToken = process.env.BROWSERLESS_API_TOKEN;
+  
+  if (!browserlessToken) {
+    throw new Error('BROWSERLESS_API_TOKEN non configurato nelle variabili ambiente');
+  }
+
+  try {
+    console.log('📤 Invio richiesta a Browserless...');
+    
+    const url = `https://production-sfo.browserless.io/pdf?token=${browserlessToken}`;
+    
+    const requestBody = {
+      html: htmlContent,
+      options: {
+        format: 'A4',
+        margin: {
+          top: '20mm',
+          bottom: '20mm',
+          left: '20mm',
+          right: '20mm'
+        },
+        printBackground: true,
+        scale: 1
+      }
+    };
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache'
+      },
+      body: JSON.stringify(requestBody)
+    });
+
+    console.log('📡 Response status:', response.status);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ Errore Browserless:', errorText);
+      throw new Error(`Browserless error (${response.status}): ${errorText}`);
+    }
+
+    const pdfBuffer = await response.arrayBuffer();
+    const sizeKB = (pdfBuffer.byteLength / 1024).toFixed(2);
+    console.log(`✅ PDF generato: ${sizeKB} KB`);
+    
+    return Buffer.from(pdfBuffer);
+    
+  } catch (error) {
+    console.error('❌ Errore generazione PDF:', error.message);
     throw error;
   }
 }
 
-function ricostruisciDatiPrenotazione(metadata) {
-  const datiPrenotazione = {
-    dataCheckin: metadata.dataCheckin,
-    appartamento: metadata.appartamento,
-    numeroOspiti: parseInt(metadata.numeroOspiti) || 0,
-    numeroNotti: parseInt(metadata.numeroNotti) || 0,
-    tipoGruppo: metadata.tipoGruppo || null,
-    totale: parseFloat(metadata.totale) || 0,
-    timestamp: metadata.timestamp,
-    ospiti: [],
-    documenti: []
+// FUNZIONE: Genera HTML SENZA documenti embedded
+function generaHTMLRiepilogo(dati) {
+  const dataFormattata = new Date(dati.dataCheckin).toLocaleDateString('it-IT', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
+
+  const documentiValidi = Array.isArray(dati.documenti) ? dati.documenti : [];
+  console.log(`📄 Documenti trovati: ${documentiValidi.length} (verranno allegati separatamente)`);
+
+  // ✅ CORREZIONE: Converti totale in numero
+  const totale = typeof dati.totale === 'string' ? parseFloat(dati.totale) : (dati.totale || 0);
+
+  // Genera HTML ospiti con page-break corretto
+  const ospitiHTML = (dati.ospiti || []).map((ospite, index) => {
+    const documento = documentiValidi.find(d => 
+      d && d.ospiteNumero && d.ospiteNumero === ospite.numero
+    );
+    
+    // ✅ CORREZIONE: Ospite 1 da solo in pag 1, poi 2 ospiti per pagina
+    // Pag 1: Dettagli + Ospite 1
+    // Pag 2: Ospite 2 e 3 (break prima del 2)
+    // Pag 3: Ospite 4 e 5 (break prima del 4)
+    const needsPageBreak = index === 1 || (index > 1 && (index - 1) % 2 === 0);
+    
+    return `
+      <div class="ospite ${ospite.isResponsabile ? 'responsabile' : ''}" ${needsPageBreak ? 'style="page-break-before: always;"' : ''}>
+        <div class="ospite-header">
+          <div class="ospite-nome">
+            ${ospite.cognome || 'N/A'} ${ospite.nome || 'N/A'}
+          </div>
+          ${ospite.isResponsabile ? '<div class="ospite-badge">RESPONSABILE</div>' : `<div class="ospite-number">Ospite ${ospite.numero}</div>`}
+        </div>
+        
+        <div class="info-grid">
+          <div class="info-item">
+            <div class="info-label">Genere</div>
+            <div class="info-value">${ospite.genere === 'M' ? 'Maschio' : ospite.genere === 'F' ? 'Femmina' : 'N/A'}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Data Nascita</div>
+            <div class="info-value">${ospite.nascita ? new Date(ospite.nascita).toLocaleDateString('it-IT') : 'N/A'}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Età</div>
+            <div class="info-value">${ospite.eta || 0} anni ${(ospite.eta || 0) >= 4 ? '(tassabile)' : '(esente)'}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Cittadinanza</div>
+            <div class="info-value">${ospite.cittadinanza || 'N/A'}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Luogo Nascita</div>
+            <div class="info-value">${ospite.luogoNascita || 'N/A'}</div>
+          </div>
+          ${ospite.comune && ospite.provincia ? `
+          <div class="info-item">
+            <div class="info-label">Comune/Provincia</div>
+            <div class="info-value">${ospite.comune} (${ospite.provincia})</div>
+          </div>
+          ` : ''}
+        </div>
+        
+        ${ospite.isResponsabile && ospite.tipoDocumento ? `
+        <div class="info-grid" style="margin-top: 10px;">
+          <div class="info-item">
+            <div class="info-label">Tipo Documento</div>
+            <div class="info-value">${ospite.tipoDocumento}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Numero Documento</div>
+            <div class="info-value">${ospite.numeroDocumento || 'N/A'}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Luogo Rilascio</div>
+            <div class="info-value">${ospite.luogoRilascio || 'N/A'}</div>
+          </div>
+        </div>
+        ` : ''}
+        
+        ${documento ? `
+        <div class="documento-note">
+          <strong>📎 Documento allegato:</strong> ${documento.nomeFile || 'Documento'} 
+          (${Math.round(documento.dimensione / 1024)} KB) - 
+          <em>Vedi allegati email separati</em>
+        </div>
+        ` : ''}
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <!DOCTYPE html>
+    <html lang="it">
+    <head>
+      <meta charset="UTF-8">
+      <style>
+        @page { size: A4; margin: 15mm; }
+        body { font-family: 'Arial', sans-serif; line-height: 1.4; color: #333; margin: 0; padding: 0; }
+        .header { text-align: center; margin-bottom: 20px; border-bottom: 3px solid #3498db; padding-bottom: 15px; }
+        .header h1 { color: #2c3e50; font-size: 24px; margin: 0 0 8px 0; }
+        .section { margin: 15px 0; background: #f8f9fa; padding: 15px; border-radius: 6px; border-left: 4px solid #3498db; }
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 10px 0; }
+        .info-item { background: white; padding: 8px 10px; border-radius: 4px; border: 1px solid #e9ecef; }
+        .info-label { font-weight: bold; color: #495057; font-size: 10px; text-transform: uppercase; }
+        .info-value { color: #2c3e50; font-size: 13px; }
+        .ospite { background: white; border: 2px solid #e9ecef; border-radius: 6px; padding: 15px; margin: 12px 0; }
+        .ospite.responsabile { border-color: #28a745; background: #f8fff9; }
+        .ospite-header { display: flex; justify-content: space-between; margin-bottom: 12px; border-bottom: 1px solid #dee2e6; }
+        .ospite-nome { font-size: 16px; font-weight: bold; color: #2c3e50; }
+        .ospite-badge { background: #28a745; color: white; padding: 3px 10px; border-radius: 15px; font-size: 11px; }
+        .ospite-number { background: #6c757d; color: white; padding: 3px 10px; border-radius: 15px; font-size: 11px; }
+        .totale-section { background: #e8f5e8; border: 2px solid #28a745; padding: 15px; border-radius: 6px; text-align: center; margin: 15px 0; }
+        .totale-amount { font-size: 28px; font-weight: bold; color: #28a745; margin: 8px 0; }
+        .documento-note { background: #fff3cd; border: 1px solid #ffc107; padding: 8px; border-radius: 4px; margin-top: 10px; font-size: 12px; }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <h1>Riepilogo Check-in</h1>
+        <p>Generato il ${new Date().toLocaleString('it-IT')}</p>
+      </div>
+
+      <div class="section">
+        <h2>📍 Dettagli Soggiorno</h2>
+        <div class="info-grid">
+          <div class="info-item">
+            <div class="info-label">Data Check-in</div>
+            <div class="info-value">${dataFormattata}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Appartamento</div>
+            <div class="info-value">${dati.appartamento || 'Non specificato'}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Numero Ospiti</div>
+            <div class="info-value">${dati.numeroOspiti || 0}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Numero Notti</div>
+            <div class="info-value">${dati.numeroNotti || 0}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="totale-section">
+        <h2>💰 Totale Tassa di Soggiorno</h2>
+        <div class="totale-amount">€${totale.toFixed(2)}</div>
+      </div>
+
+      <div class="section">
+        <h2>👥 Ospiti Registrati</h2>
+      </div>
+
+      ${ospitiHTML}
+
+      ${documentiValidi.length > 0 ? `
+      <div class="section">
+        <h2>📎 Documenti Allegati</h2>
+        <p>I documenti di identità sono allegati separatamente a questa email:</p>
+        <ul>
+          ${documentiValidi.map(doc => `
+            <li><strong>Ospite ${doc.ospiteNumero}:</strong> ${doc.nomeFile} (${Math.round(doc.dimensione / 1024)} KB)</li>
+          `).join('')}
+        </ul>
+      </div>
+      ` : ''}
+    </body>
+    </html>
+  `;
+}
+
+// ✅ CORREZIONE: createTransport invece di createTransporter
+async function inviaEmailConPDF(emailDestinatario, dati, pdfBuffer, allegatiDocumenti) {
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASSWORD
+    }
+  });
+
+  const totale = typeof dati.totale === 'string' ? parseFloat(dati.totale) : (dati.totale || 0);
+
+  const oggetto = `Riepilogo Check-in - ${dati.appartamento || 'Appartamento'} - ${new Date(dati.dataCheckin).toLocaleDateString('it-IT')}`;
+  
+  const corpoEmail = `
+Nuovo check-in ricevuto!
+
+DETTAGLI SOGGIORNO:
+- Data check-in: ${new Date(dati.dataCheckin).toLocaleDateString('it-IT')}
+- Appartamento: ${dati.appartamento || 'Non specificato'}
+- Ospiti: ${dati.numeroOspiti || 0}
+- Notti: ${dati.numeroNotti || 0}
+- Totale tassa soggiorno: €${totale.toFixed(2)}
+
+Responsabile: ${dati.ospiti?.[0]?.cognome || 'N/A'} ${dati.ospiti?.[0]?.nome || 'N/A'}
+
+📎 ALLEGATI:
+- Riepilogo completo (PDF)
+${allegatiDocumenti.length > 0 ? `- ${allegatiDocumenti.length} documento/i di identità` : ''}
+
+---
+Sistema Check-in Automatico
+  `;
+
+  const allegati = [
+    {
+      filename: `checkin-${Date.now()}.pdf`,
+      content: pdfBuffer,
+      contentType: 'application/pdf'
+    },
+    ...allegatiDocumenti
+  ];
+
+  const mailOptions = {
+    from: process.env.EMAIL_USER,
+    to: emailDestinatario,
+    subject: oggetto,
+    text: corpoEmail,
+    attachments: allegati
   };
 
-  // Responsabile
-  datiPrenotazione.ospiti.push({
-    numero: 1,
-    cognome: metadata.resp_cognome,
-    nome: metadata.resp_nome,
-    genere: metadata.resp_genere,
-    nascita: metadata.resp_nascita,
-    eta: parseInt(metadata.resp_eta) || 0,
-    cittadinanza: metadata.resp_cittadinanza,
-    luogoNascita: metadata.resp_luogoNascita,
-    comune: metadata.resp_comune,
-    provincia: metadata.resp_provincia,
-    tipoDocumento: metadata.resp_tipoDocumento,
-    numeroDocumento: metadata.resp_numeroDocumento,
-    luogoRilascio: metadata.resp_luogoRilascio,
-    isResponsabile: true
-  });
-
-  // Altri ospiti
-  if (metadata.altri_ospiti) {
-    try {
-      const altriOspiti = JSON.parse(metadata.altri_ospiti);
-      altriOspiti.forEach(o => {
-        datiPrenotazione.ospiti.push({
-          numero: o.n,
-          cognome: o.c,
-          nome: o.no,
-          genere: o.g,
-          nascita: o.na,
-          eta: parseInt(o.e) || 0,
-          cittadinanza: o.ci,
-          luogoNascita: o.ln,
-          comune: o.co,
-          provincia: o.p
-        });
-      });
-    } catch (e) {
-      console.warn('⚠️ Errore parsing altri_ospiti:', e);
-    }
-  }
-
-  return datiPrenotazione;
+  await transporter.sendMail(mailOptions);
 }
 
-async function generaPDFEInviaEmailConDebug(session) {
-  console.log('📧 Preparazione email proprietario...');
-  
-  const metadata = session.metadata;
-  const tempSessionId = metadata.temp_session_id;
-  
-  console.log('🔑 Temp Session ID:', tempSessionId || 'NESSUNO');
-  
-  let datiPrenotazione = ricostruisciDatiPrenotazione(metadata);
-  
-  // Recupera documenti da Redis
-  if (tempSessionId) {
-    try {
-      const baseUrl = process.env.VERCEL_URL 
-        ? `https://${process.env.VERCEL_URL}` 
-        : 'https://checkin-six-coral.vercel.app';
-      
-      console.log('🔍 Recupero documenti da Redis...');
-      const redisResponse = await fetch(
-        `${baseUrl}/api/salva-dati-temporanei?sessionId=${tempSessionId}`,
-        {
-          method: 'GET',
-          headers: { 'Accept': 'application/json' }
-        }
-      );
-      
-      if (redisResponse.ok) {
-        const redisData = await redisResponse.json();
-        if (redisData.success && redisData.datiPrenotazione?.documenti) {
-          datiPrenotazione.documenti = redisData.datiPrenotazione.documenti;
-          console.log(`✅ Recuperati ${datiPrenotazione.documenti.length} documenti`);
-        }
-      } else {
-        console.warn('⚠️ Redis non disponibile:', redisResponse.status);
-      }
-    } catch (redisError) {
-      console.warn('⚠️ Errore recupero Redis:', redisError.message);
+// ✅ CORREZIONE: createTransport invece di createTransporter
+async function inviaEmailSenzaPDF(emailDestinatario, dati, allegatiDocumenti) {
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASSWORD
     }
-  }
+  });
+
+  const totale = typeof dati.totale === 'string' ? parseFloat(dati.totale) : (dati.totale || 0);
+
+  const oggetto = `Check-in Ricevuto - ${dati.appartamento || 'Appartamento'} - ${new Date(dati.dataCheckin).toLocaleDateString('it-IT')}`;
   
-  const emailProprietario = process.env.EMAIL_PROPRIETARIO;
-  
-  if (!emailProprietario) {
-    throw new Error('EMAIL_PROPRIETARIO non configurato nelle variabili ambiente');
-  }
-  
-  console.log('📬 Destinatario proprietario:', emailProprietario);
-  console.log('📊 Dati da inviare:', {
-    ospiti: datiPrenotazione.ospiti.length,
-    documenti: datiPrenotazione.documenti.length,
-    totale: datiPrenotazione.totale
+  let listaOspiti = '';
+  (dati.ospiti || []).forEach((ospite, index) => {
+    listaOspiti += `
+${index + 1}. ${ospite.cognome} ${ospite.nome}${ospite.isResponsabile ? ' (RESPONSABILE)' : ''}
+   - Genere: ${ospite.genere === 'M' ? 'Maschio' : 'Femmina'}
+   - Età: ${ospite.eta || 0} anni
+   - Cittadinanza: ${ospite.cittadinanza || 'N/A'}
+`;
   });
   
-  const baseUrl = process.env.VERCEL_URL 
-    ? `https://${process.env.VERCEL_URL}` 
-    : 'https://checkin-six-coral.vercel.app';
-  
-  const apiUrl = `${baseUrl}/api/genera-pdf-email`;
-  console.log('🌐 Chiamata API:', apiUrl);
-  
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 25000);
-    
-    console.log('📤 Invio richiesta...');
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': 'CheckinWebhook/1.0',
-        'Accept': 'application/json'
-      },
-      body: JSON.stringify({
-        datiPrenotazione: datiPrenotazione,
-        emailDestinatario: emailProprietario
-      }),
-      signal: controller.signal
-    });
-    
-    clearTimeout(timeoutId);
-    
-    console.log('📡 Status risposta:', response.status);
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ Errore API:', errorText);
-      throw new Error(`Errore API (${response.status}): ${errorText}`);
-    }
-    
-    const result = await response.json();
-    console.log('✅ Risposta API:', result);
-    
-  } catch (error) {
-    console.error('❌ Errore fetch:', error.message);
-    if (error.name === 'AbortError') {
-      console.error('⏱️ TIMEOUT: L\'invio email ha superato i 25 secondi');
-    }
-    throw error;
-  }
-}
+  const corpoEmail = `
+Nuovo check-in ricevuto!
 
-async function inviaEmailOspite(session, emailCliente) {
-  console.log('📧 Preparazione email ospite...');
-  
-  const metadata = session.metadata;
-  const datiPrenotazione = ricostruisciDatiPrenotazione(metadata);
-  
-  const baseUrl = process.env.VERCEL_URL 
-    ? `https://${process.env.VERCEL_URL}` 
-    : 'https://checkin-six-coral.vercel.app';
-  
-  const apiUrl = `${baseUrl}/api/invia-email-ospite`;
-  console.log('🌐 Chiamata API ospite:', apiUrl);
-  
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
-    
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': 'CheckinWebhook/1.0',
-        'Accept': 'application/json'
-      },
-      body: JSON.stringify({
-        emailOspite: emailCliente,
-        datiPrenotazione: datiPrenotazione
-      }),
-      signal: controller.signal
-    });
-    
-    clearTimeout(timeoutId);
-    
-    console.log('📡 Status risposta ospite:', response.status);
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ Errore API ospite:', errorText);
-      throw new Error(`Errore API (${response.status}): ${errorText}`);
-    }
-    
-    const result = await response.json();
-    console.log('✅ Risposta API ospite:', result);
-    
-  } catch (error) {
-    console.error('❌ Errore invio ospite:', error.message);
-    throw error;
-  }
+⚠️ NOTA: Il PDF non è stato generato. Di seguito i dettagli completi.
+
+═══════════════════════════════════════
+DETTAGLI SOGGIORNO
+═══════════════════════════════════════
+Data check-in: ${new Date(dati.dataCheckin).toLocaleDateString('it-IT')}
+Appartamento: ${dati.appartamento || 'Non specificato'}
+Numero ospiti: ${dati.numeroOspiti || 0}
+Numero notti: ${dati.numeroNotti || 0}
+Totale tassa soggiorno: €${totale.toFixed(2)}
+
+═══════════════════════════════════════
+OSPITI REGISTRATI
+═══════════════════════════════════════
+${listaOspiti}
+
+${allegatiDocumenti.length > 0 ? `
+═══════════════════════════════════════
+DOCUMENTI ALLEGATI: ${allegatiDocumenti.length}
+═══════════════════════════════════════
+${allegatiDocumenti.map(doc => `- ${doc.filename}`).join('\n')}
+` : ''}
+
+---
+Sistema Check-in Automatico
+  `;
+
+  const mailOptions = {
+    from: process.env.EMAIL_USER,
+    to: emailDestinatario,
+    subject: oggetto,
+    text: corpoEmail,
+    attachments: allegatiDocumenti
+  };
+
+  await transporter.sendMail(mailOptions);
 }
