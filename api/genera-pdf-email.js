@@ -212,7 +212,7 @@ function generaHTMLRiepilogo(dati) {
     // Pag 1: Dettagli + Ospite 1
     // Pag 2: Ospite 2 e 3 (break prima del 2)
     // Pag 3: Ospite 4 e 5 (break prima del 4)
-    const needsPageBreak = index === 1 || (index > 1 && (index - 1) % 2 === 0);
+    const needsPageBreak = index === 1 || index === 4;
     
     return `
       <div class="ospite ${ospite.isResponsabile ? 'responsabile' : ''}" ${needsPageBreak ? 'style="page-break-before: always;"' : ''}>
