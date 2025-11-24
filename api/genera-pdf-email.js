@@ -288,9 +288,9 @@ function generaHTMLRiepilogo(dati) {
       <style>
         @page { size: A4; margin: 15mm; }
         body { font-family: 'Arial', sans-serif; line-height: 1.4; color: #333; margin: 0; padding: 0; }
-        .header { text-align: center; margin-bottom: 20px; border-bottom: 3px solid #3498db; padding-bottom: 15px; }
+        .header { text-align: center; margin-bottom: 10px; border-bottom: 3px solid #3498db; padding-bottom: 15px; }
         .header h1 { color: #2c3e50; font-size: 24px; margin: 0 0 8px 0; }
-        .section { margin: 15px 0; background: #f8f9fa; padding: 15px; border-radius: 6px; border-left: 4px solid #3498db; }
+        .section { margin: 8px 0; background: #f8f9fa; padding: 8px; border-radius: 6px; border-left: 4px solid #3498db; }
         .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 10px 0; }
         .info-item { background: white; padding: 8px 10px; border-radius: 4px; border: 1px solid #e9ecef; }
         .info-label { font-weight: bold; color: #495057; font-size: 10px; text-transform: uppercase; }
@@ -301,8 +301,8 @@ function generaHTMLRiepilogo(dati) {
         .ospite-nome { font-size: 16px; font-weight: bold; color: #2c3e50; }
         .ospite-badge { background: #28a745; color: white; padding: 3px 10px; border-radius: 15px; font-size: 11px; }
         .ospite-number { background: #6c757d; color: white; padding: 3px 10px; border-radius: 15px; font-size: 11px; }
-        .totale-section { background: #e8f5e8; border: 2px solid #28a745; padding: 15px; border-radius: 6px; text-align: center; margin: 15px 0; }
-        .totale-amount { font-size: 28px; font-weight: bold; color: #28a745; margin: 8px 0; }
+        .totale-section { background: #e8f5e8; border: 2px solid #28a745; padding: 8px; border-radius: 6px; text-align: center; margin: 8px 0; }
+        .totale-amount { font-size: 22px; font-weight: bold; color: #28a745; margin: 8px 0; }
         .documento-note { background: #fff3cd; border: 1px solid #ffc107; padding: 8px; border-radius: 4px; margin-top: 10px; font-size: 12px; }
       </style>
     </head>
