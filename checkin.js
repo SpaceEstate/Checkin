@@ -649,7 +649,46 @@ function preparaRiepilogo() {
   
   aggiornaBottonePagamento(totale);
 }
+/**
+ * Precarica risorse Stripe quando l'utente arriva al riepilogo
+ * Riduce il tempo di attesa al click su "Paga"
+ */
+function precaricaStripe() {
+  console.log('🚀 Precaricamento risorse Stripe...');
+  
+  // Precarica script Stripe
+  const stripeSupportScript = document.createElement('link');
+  stripeSupportScript.rel = 'preload';
+  stripeSupportScript.as = 'script';
+  stripeSupportScript.href = 'https://js.stripe.com/v3/';
+  document.head.appendChild(stripeSupportScript);
+  
+  // Prefetch pagina checkout (warm up DNS)
+  const stripePrefetch = document.createElement('link');
+  stripePrefetch.rel = 'prefetch';
+  stripePrefetch.href = 'https://checkout.stripe.com';
+  document.head.appendChild(stripePrefetch);
+  
+  // Warm up API backend
+  const apiPrefetch = document.createElement('link');
+  apiPrefetch.rel = 'prefetch';
+  apiPrefetch.href = `${API_BASE_URL}/crea-pagamento-stripe`;
+  document.head.appendChild(apiPrefetch);
+}
 
+// ✅ MODIFICA preparaRiepilogo() - AGGIUNGI questa chiamata alla fine:
+function preparaRiepilogo() {
+  const totale = calcolaTotale();
+  const summaryContent = document.getElementById('summary-content');
+  if (!summaryContent) return;
+  
+  // ... tutto il codice esistente ...
+  
+  aggiornaBottonePagamento(totale);
+  
+  // ✅ NUOVO: Precarica Stripe quando l'utente arriva qui
+  precaricaStripe();
+}
 
 // SOSTITUISCI TUTTA LA FUNZIONE con questa:
 function aggiornaBottonePagamento(totale) {
