@@ -577,43 +577,62 @@ function generaStepOspiti() {
 }
 
 // === RIEPILOGO ===
+// === RIEPILOGO ===
 function preparaRiepilogo() {
   const totale = calcolaTotale();
   const summaryContent = document.getElementById('summary-content');
   if (!summaryContent) return;
   
-  let ospitiHTML = '';
+  // ✅ Crea tutto in memoria prima di inserire nel DOM
+  const fragment = document.createDocumentFragment();
+  
+  // Sezione dettagli soggiorno
+  const dettagliSection = document.createElement('div');
+  dettagliSection.className = 'summary-section';
+  dettagliSection.innerHTML = `
+    <h3>📍 Dettagli soggiorno</h3>
+    <div class="summary-item"><span>Data Check-in:</span><span><strong>${formatDataItaliana(dataCheckin)}</strong></span></div>
+    <div class="summary-item"><span>Appartamento:</span><span><strong>${document.getElementById('appartamento')?.value || 'N/A'}</strong></span></div>
+    <div class="summary-item"><span>Numero ospiti:</span><span><strong>${numeroOspiti}</strong></span></div>
+    <div class="summary-item"><span>Numero notti:</span><span><strong>${numeroNotti}</strong></span></div>
+  `;
+  fragment.appendChild(dettagliSection);
+  
+  // Sezione ospiti
+  const ospitiSection = document.createElement('div');
+  ospitiSection.className = 'summary-section';
+  ospitiSection.innerHTML = '<h3>👥 Ospiti</h3>';
+  
   for (let i = 1; i <= numeroOspiti; i++) {
     const cognome = document.querySelector(`input[name="ospite${i}_cognome"]`)?.value || '';
     const nome = document.querySelector(`input[name="ospite${i}_nome"]`)?.value || '';
     const nascita = document.querySelector(`input[name="ospite${i}_nascita"]`)?.value || '';
     const eta = nascita ? calcolaEta(nascita) : 0;
-    ospitiHTML += `
-      <div class="guest-summary">
-        <strong>${cognome} ${nome}</strong> ${i === 1 ? '(Responsabile)' : ''}
-        <span class="age">Età: ${eta} anni ${eta >= 4 ? '(soggetto a tassa)' : '(esente)'}</span>
-      </div>
+    
+    const guestDiv = document.createElement('div');
+    guestDiv.className = 'guest-summary';
+    guestDiv.innerHTML = `
+      <strong>${cognome} ${nome}</strong> ${i === 1 ? '(Responsabile)' : ''}
+      <span class="age">Età: ${eta} anni ${eta >= 4 ? '(soggetto a tassa)' : '(esente)'}</span>
     `;
+    ospitiSection.appendChild(guestDiv);
   }
+  fragment.appendChild(ospitiSection);
   
-  summaryContent.innerHTML = `
-    <div class="summary-section">
-      <h3>📍 Dettagli soggiorno</h3>
-      <div class="summary-item"><span>Data Check-in:</span><span><strong>${formatDataItaliana(dataCheckin)}</strong></span></div>
-      <div class="summary-item"><span>Appartamento:</span><span><strong>${document.getElementById('appartamento')?.value || 'N/A'}</strong></span></div>
-      <div class="summary-item"><span>Numero ospiti:</span><span><strong>${numeroOspiti}</strong></span></div>
-      <div class="summary-item"><span>Numero notti:</span><span><strong>${numeroNotti}</strong></span></div>
-    </div>
-    <div class="summary-section">
-      <h3>👥 Ospiti</h3>
-      ${ospitiHTML}
-    </div>
-    <div class="summary-section">
-      <h3>💰 Totale tassa di soggiorno</h3>
-      <div class="total-amount">€${totale.toFixed(2)}</div>
-      <small class="tax-note">Tassa di €1,50 per notte per ospiti dai 4 anni in su</small>
-    </div>
+  // Sezione totale
+  const totaleSection = document.createElement('div');
+  totaleSection.className = 'summary-section';
+  totaleSection.innerHTML = `
+    <h3>💰 Totale tassa di soggiorno</h3>
+    <div class="total-amount">€${totale.toFixed(2)}</div>
+    <small class="tax-note">Tassa di €1,50 per notte per ospiti dai 4 anni in su</small>
   `;
+  fragment.appendChild(totaleSection);
+  
+  // ✅ Un solo inserimento nel DOM
+  summaryContent.innerHTML = '';
+  summaryContent.appendChild(fragment);
+  
   aggiornaBottonePagamento(totale);
 }
 
