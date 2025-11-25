@@ -656,24 +656,19 @@ function preparaRiepilogo() {
 function precaricaStripe() {
   console.log('🚀 Precaricamento risorse Stripe...');
   
-  // Precarica script Stripe
-  const stripeSupportScript = document.createElement('link');
-  stripeSupportScript.rel = 'preload';
-  stripeSupportScript.as = 'script';
-  stripeSupportScript.href = 'https://js.stripe.com/v3/';
-  document.head.appendChild(stripeSupportScript);
-  
-  // Prefetch pagina checkout (warm up DNS)
-  const stripePrefetch = document.createElement('link');
-  stripePrefetch.rel = 'prefetch';
-  stripePrefetch.href = 'https://checkout.stripe.com';
-  document.head.appendChild(stripePrefetch);
-  
-  // Warm up API backend
   const apiPrefetch = document.createElement('link');
-  apiPrefetch.rel = 'prefetch';
-  apiPrefetch.href = `${API_BASE_URL}/crea-pagamento-stripe`;
+  apiPrefetch.rel = 'dns-prefetch';
+  apiPrefetch.href = API_BASE_URL;
   document.head.appendChild(apiPrefetch);
+  
+  const stripePreconnect = document.createElement('link');
+  stripePreconnect.rel = 'preconnect';
+  stripePreconnect.href = 'https://checkout.stripe.com';
+  stripePreconnect.crossOrigin = 'anonymous';
+  document.head.appendChild(stripePreconnect);
+  
+  console.log('✅ DNS prefetch configurato per:', API_BASE_URL);
+  console.log('✅ Preconnect a Stripe Checkout configurato');
 }
 
 // ✅ MODIFICA preparaRiepilogo() - AGGIUNGI questa chiamata alla fine:
