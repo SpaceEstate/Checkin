@@ -291,6 +291,8 @@ function precompilaDatiPrenotazione(dati) {
 
 // === NAVIGAZIONE STEP ===
 window.prossimoStep = function() {
+  console.log(`🚀 prossimoStep - currentStep: ${currentStep}`);
+  
   if (currentStep === 1) {
     if (!validaStep1()) return;
     if (!stepGenerated) {
@@ -300,16 +302,45 @@ window.prossimoStep = function() {
     currentStep = 2;
   } else if (currentStep >= 2 && currentStep <= numeroOspiti + 1) {
     const ospiteCorrente = currentStep - 1;
+    console.log(`✅ Validazione ospite ${ospiteCorrente}...`);
+    
     if (!validaStepOspite(ospiteCorrente)) return;
+    
     if (currentStep === numeroOspiti + 1) {
+      console.log('📋 === ULTIMO OSPITE - VAI AL RIEPILOGO ===');
+      console.log(`Dati: ospiti=${numeroOspiti}, notti=${numeroNotti}, dataCheckin=${dataCheckin}`);
+      
+      // Verifica che l'elemento esista prima di chiamare preparaRiepilogo
+      const summaryContent = document.getElementById('summary-content');
+      if (!summaryContent) {
+        console.error('❌ ERRORE CRITICO: #summary-content non trovato!');
+        showNotification('Errore nel caricamento del riepilogo. Ricarica la pagina.', 'error');
+        return;
+      }
+      
       preparaRiepilogo();
       currentStep = 99;
+      
+      // Verifica che il riepilogo sia stato effettivamente creato
+      setTimeout(() => {
+        if (summaryContent.children.length === 0) {
+          console.error('❌ RIEPILOGO VUOTO DOPO preparaRiepilogo()!');
+          showNotification('Errore nella visualizzazione del riepilogo', 'error');
+        } else {
+          console.log('✅ Riepilogo visualizzato con successo:', summaryContent.children.length, 'sezioni');
+        }
+      }, 100);
     } else {
       currentStep++;
     }
   }
+  
   mostraStepCorrente();
 }
+
+// === AGGIUNGI QUESTA FUNZIONE DI VERIFICA ALL'INIZIALIZZAZIONE ===
+document.addEventListener('DOMContentLoaded', function() {
+  console.log('🚀 Check-in form inizializzato');
 
 window.indietroStep = function() {
   if (currentStep === 99) {
@@ -577,31 +608,62 @@ function generaStepOspiti() {
 }
 
 // === RIEPILOGO ===
-// === RIEPILOGO ===
 function preparaRiepilogo() {
+  console.log('📋 === PREPARAZIONE RIEPILOGO ===');
+  
   const totale = calcolaTotale();
   const summaryContent = document.getElementById('summary-content');
-  if (!summaryContent) return;
   
-  // ✅ Crea tutto in memoria prima di inserire nel DOM
+  if (!summaryContent) {
+    console.error('❌ Elemento summary-content non trovato!');
+    return;
+  }
+  
+  console.log('✅ Container riepilogo trovato');
+  console.log(`💰 Totale calcolato: €${totale.toFixed(2)}`);
+  
+  // ✅ Pulisci contenitore
+  summaryContent.innerHTML = '';
+  
+  // ✅ Crea fragment per performance
   const fragment = document.createDocumentFragment();
   
-  // Sezione dettagli soggiorno
+  // === SEZIONE DETTAGLI SOGGIORNO ===
   const dettagliSection = document.createElement('div');
   dettagliSection.className = 'summary-section';
+  
+  const appartamento = document.getElementById('appartamento')?.value || 'N/A';
+  const dataFormatted = formatDataItaliana(dataCheckin);
+  
+  console.log('📍 Dettagli:', { dataCheckin, appartamento, numeroOspiti, numeroNotti });
+  
   dettagliSection.innerHTML = `
-    <h3>📍 Dettagli soggiorno</h3>
-    <div class="summary-item"><span>Data Check-in:</span><span><strong>${formatDataItaliana(dataCheckin)}</strong></span></div>
-    <div class="summary-item"><span>Appartamento:</span><span><strong>${document.getElementById('appartamento')?.value || 'N/A'}</strong></span></div>
-    <div class="summary-item"><span>Numero ospiti:</span><span><strong>${numeroOspiti}</strong></span></div>
-    <div class="summary-item"><span>Numero notti:</span><span><strong>${numeroNotti}</strong></span></div>
+    <h3 style="font-size: 1.5rem; color: #8b7d6b; margin-bottom: 20px;">📍 Dettagli soggiorno</h3>
+    <div class="summary-item">
+      <span>Data Check-in:</span>
+      <span><strong>${dataFormatted}</strong></span>
+    </div>
+    <div class="summary-item">
+      <span>Appartamento:</span>
+      <span><strong>${appartamento}</strong></span>
+    </div>
+    <div class="summary-item">
+      <span>Numero ospiti:</span>
+      <span><strong>${numeroOspiti}</strong></span>
+    </div>
+    <div class="summary-item">
+      <span>Numero notti:</span>
+      <span><strong>${numeroNotti}</strong></span>
+    </div>
   `;
   fragment.appendChild(dettagliSection);
   
-  // Sezione ospiti
+  // === SEZIONE OSPITI ===
   const ospitiSection = document.createElement('div');
   ospitiSection.className = 'summary-section';
-  ospitiSection.innerHTML = '<h3>👥 Ospiti</h3>';
+  ospitiSection.style.marginTop = '20px';
+  
+  let ospitiHTML = '<h3 style="font-size: 1.5rem; color: #8b7d6b; margin-bottom: 20px;">👥 Ospiti</h3>';
   
   for (let i = 1; i <= numeroOspiti; i++) {
     const cognome = document.querySelector(`input[name="ospite${i}_cognome"]`)?.value || '';
@@ -609,33 +671,86 @@ function preparaRiepilogo() {
     const nascita = document.querySelector(`input[name="ospite${i}_nascita"]`)?.value || '';
     const eta = nascita ? calcolaEta(nascita) : 0;
     
-    const guestDiv = document.createElement('div');
-    guestDiv.className = 'guest-summary';
-    guestDiv.innerHTML = `
-      <strong>${cognome} ${nome}</strong> ${i === 1 ? '(Responsabile)' : ''}
-      <span class="age">Età: ${eta} anni ${eta >= 4 ? '(soggetto a tassa)' : '(esente)'}</span>
+    console.log(`👤 Ospite ${i}:`, { cognome, nome, eta });
+    
+    ospitiHTML += `
+      <div class="guest-summary" style="background: white; padding: 15px; border-radius: 10px; margin-bottom: 12px; border: 1px solid #e8dcc0;">
+        <strong style="color: #8b7d6b; font-size: 1.05rem; display: block;">${cognome} ${nome}</strong>
+        ${i === 1 ? '<span style="color: #a67c52; font-size: 0.9rem; display: block;">(Responsabile)</span>' : ''}
+        <span class="age" style="color: #a0927f; font-size: 0.9rem; display: block; margin-top: 5px;">
+          Età: ${eta} anni ${eta >= 4 ? '(soggetto a tassa)' : '(esente)'}
+        </span>
+      </div>
     `;
-    ospitiSection.appendChild(guestDiv);
   }
+  
+  ospitiSection.innerHTML = ospitiHTML;
   fragment.appendChild(ospitiSection);
   
-  // Sezione totale
+  // === SEZIONE TOTALE ===
   const totaleSection = document.createElement('div');
   totaleSection.className = 'summary-section';
+  totaleSection.style.marginTop = '20px';
   totaleSection.innerHTML = `
-    <h3>💰 Totale tassa di soggiorno</h3>
-    <div class="total-amount">€${totale.toFixed(2)}</div>
-    <small class="tax-note">Tassa di €1,50 per notte per ospiti dai 4 anni in su</small>
+    <h3 style="font-size: 1.5rem; color: #8b7d6b; margin-bottom: 20px;">💰 Totale tassa di soggiorno</h3>
+    <div class="total-amount" style="font-size: 2rem; font-weight: 700; color: #a67c52; text-align: center; margin: 20px 0; padding: 20px; background: linear-gradient(135deg, rgba(184, 153, 104, 0.1) 0%, rgba(166, 124, 82, 0.1) 100%); border-radius: 12px;">
+      €${totale.toFixed(2)}
+    </div>
+    <small class="tax-note" style="display: block; text-align: center; color: #a0927f; font-size: 0.85rem; font-style: italic; margin-top: 10px;">
+      Tassa di €1,50 per notte per ospiti dai 4 anni in su
+    </small>
   `;
   fragment.appendChild(totaleSection);
   
-  // ✅ Un solo inserimento nel DOM
-  summaryContent.innerHTML = '';
+  // ✅ Inserisci tutto in una volta
   summaryContent.appendChild(fragment);
   
+  console.log('✅ Riepilogo inserito nel DOM');
+  console.log('📋 === FINE PREPARAZIONE RIEPILOGO ===');
+  
+  // Aggiorna bottoni
   aggiornaBottonePagamento(totale);
+  
+  // Forza scroll verso il riepilogo
+  setTimeout(() => {
+    const finalStep = document.getElementById('step-final');
+    if (finalStep) {
+      finalStep.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, 100);
 }
 
+// === FUNZIONE DI DEBUG ===
+// Aggiungi questa funzione per testare il riepilogo
+window.testRiepilogo = function() {
+  console.log('🧪 Test visualizzazione riepilogo');
+  
+  // Verifica che l'elemento esista
+  const summaryContent = document.getElementById('summary-content');
+  console.log('Container riepilogo:', summaryContent);
+  
+  if (!summaryContent) {
+    console.error('❌ #summary-content NON TROVATO nel DOM!');
+    console.log('HTML del form:', document.getElementById('checkin-form')?.innerHTML.substring(0, 500));
+    return;
+  }
+  
+  // Verifica che i dati siano presenti
+  console.log('Dati globali:', {
+    currentStep,
+    numeroOspiti,
+    numeroNotti,
+    dataCheckin,
+    stepGenerated
+  });
+  
+  // Forza preparazione riepilogo
+  console.log('🔄 Forzando preparazione riepilogo...');
+  preparaRiepilogo();
+  
+  // Verifica il contenuto
+  console.log('Contenuto summary-content:', summaryContent.innerHTML.substring(0, 500));
+}
 // SOSTITUISCI TUTTA LA FUNZIONE con questa:
 function aggiornaBottonePagamento(totale) {
   const finalStep = document.getElementById('step-final');
@@ -1260,6 +1375,16 @@ document.addEventListener('DOMContentLoaded', function() {
   window.addEventListener('beforeunload', function() {
     if (currentStream) currentStream.getTracks().forEach(track => track.stop());
   });
+});
+ setTimeout(() => {
+    const summaryContent = document.getElementById('summary-content');
+    if (!summaryContent) {
+      console.error('⚠️ ATTENZIONE: #summary-content non trovato nel DOM al caricamento!');
+      console.log('Verifica che index.html contenga <div id="summary-content"></div> dentro #step-final');
+    } else {
+      console.log('✅ #summary-content presente nel DOM');
+    }
+  }, 500);
 });
 
 // Stili aggiuntivi per input errore
