@@ -5,23 +5,20 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    
-    
     "test": "echo 'No tests specified'"
   },
   "dependencies": {
-    "stripe": "^14.11.0",
+    "stripe": "^17.6.0",
     "google-spreadsheet": "^5.0.2",
-    "google-auth-library": "^9.4.1",
-    "puppeteer": "^21.6.1",
-    "nodemailer": "^6.9.8",
+    "google-auth-library": "^9.15.0",
+    "nodemailer": "^6.9.18",
     "redis": "^4.7.0"
   },
   "devDependencies": {
-    "@vercel/node": "^3.0.12"
+    "@vercel/node": "^3.2.27"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": "18.x"
   },
   "keywords": [
     "checkin",
@@ -31,10 +28,10 @@
     "vercel",
     "nodejs"
   ],
-  "author": "Your Name",
+  "author": "Space Estate",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/checkin-system.git"
+    "url": "https://github.com/SpaceEstate/Checkin.git"
   }
 }
