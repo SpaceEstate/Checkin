@@ -352,18 +352,29 @@ window.indietroStep = function() {
 }
 
 function mostraStepCorrente() {
-  document.querySelectorAll('.step').forEach(step => step.classList.remove('active'));
-  let stepToShow;
-  if (currentStep === 99) {
-    stepToShow = document.getElementById('step-final');
-  } else {
-    stepToShow = document.getElementById(`step-${currentStep}`);
-  }
+  // ✅ RACCOGLI TUTTI GLI STEP IN UNA VOLTA
+  const steps = document.querySelectorAll('.step');
+  
+  // ✅ MODIFICA CLASSI IN BATCH (usando DocumentFragment se necessario)
+  steps.forEach(step => {
+    step.classList.remove('active');
+  });
+  
+  // Determina quale step mostrare
+  const stepToShow = currentStep === 99 
+    ? document.getElementById('step-final')
+    : document.getElementById(`step-${currentStep}`);
+  
   if (stepToShow) {
     stepToShow.classList.add('active');
-    stepToShow.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    
+    // ✅ Usa requestAnimationFrame per operazioni visive
+    requestAnimationFrame(() => {
+      stepToShow.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
   }
 }
+
 
 // === VALIDAZIONE ===
 function validaStep1() {
@@ -487,11 +498,10 @@ function generaStepOspiti() {
   const stepFinal = document.getElementById('step-final');
   if (!form || !stepFinal) return;
   
+  // ✅ GENERA TUTTO L'HTML COME STRINGA (evita N inserimenti DOM)
+  const stepsHTML = [];
+  
   for (let i = 1; i <= numeroOspiti; i++) {
-    const stepDiv = document.createElement('div');
-    stepDiv.className = 'step';
-    stepDiv.id = `step-${i + 1}`;
-    
     const campiDocumento = i === 1 ? `
       <div class="form-group">
         <label class="form-label" for="ospite1_tipo_documento">Tipo documento *</label>
@@ -514,96 +524,108 @@ function generaStepOspiti() {
       </div>
     ` : '';
     
-    stepDiv.innerHTML = `
-      <div class="step-header">
-        <h2 class="step-title">Ospite ${i}${i === 1 ? ' (Responsabile)' : ''}</h2>
-        <p class="step-subtitle">Inserisci i dati dell'ospite</p>
-      </div>
-      <div class="form-grid">
-        <div class="form-group">
-          <label class="form-label" for="ospite${i}_cognome">Cognome *</label>
-          <input type="text" id="ospite${i}_cognome" name="ospite${i}_cognome" class="form-input" required maxlength="50">
+    stepsHTML.push(`
+      <div class="step" id="step-${i + 1}">
+        <div class="step-header">
+          <h2 class="step-title">Ospite ${i}${i === 1 ? ' (Responsabile)' : ''}</h2>
+          <p class="step-subtitle">Inserisci i dati dell'ospite</p>
         </div>
-        <div class="form-group">
-          <label class="form-label" for="ospite${i}_nome">Nome *</label>
-          <input type="text" id="ospite${i}_nome" name="ospite${i}_nome" class="form-input" required maxlength="50">
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="ospite${i}_genere">Genere *</label>
-          <select id="ospite${i}_genere" name="ospite${i}_genere" class="form-select" required>
-            <option value="">Seleziona genere</option>
-            <option value="M">Maschio</option>
-            <option value="F">Femmina</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="ospite${i}_nascita">Data di nascita *</label>
-          <input type="date" id="ospite${i}_nascita" name="ospite${i}_nascita" 
-                 class="form-input" required max="${new Date().toISOString().split('T')[0]}" min="1900-01-01">
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="ospite${i}_cittadinanza">Cittadinanza *</label>
-          <select id="ospite${i}_cittadinanza" name="ospite${i}_cittadinanza" class="form-select" required>
-            <option value="">Seleziona cittadinanza</option>
-            ${stati.map(stato => `<option value="${stato}">${stato}</option>`).join('')}
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="ospite${i}_luogo_nascita">Luogo di nascita *</label>
-          <select id="ospite${i}_luogo_nascita" name="ospite${i}_luogo_nascita" 
-                  class="form-select" required onchange="toggleComuneProvincia(${i})">
-            <option value="">Seleziona luogo nascita</option>
-            ${stati.map(stato => `<option value="${stato}">${stato}</option>`).join('')}
-          </select>
-        </div>
-        <div id="comune-provincia-wrapper-${i}" style="display: none;" class="form-group full-width">
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label" for="ospite${i}_comune">Comune *</label>
-              <input type="text" id="ospite${i}_comune" name="ospite${i}_comune" 
-                     class="form-input" placeholder="Es. Napoli" maxlength="50">
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label" for="ospite${i}_cognome">Cognome *</label>
+            <input type="text" id="ospite${i}_cognome" name="ospite${i}_cognome" class="form-input" required maxlength="50">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="ospite${i}_nome">Nome *</label>
+            <input type="text" id="ospite${i}_nome" name="ospite${i}_nome" class="form-input" required maxlength="50">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="ospite${i}_genere">Genere *</label>
+            <select id="ospite${i}_genere" name="ospite${i}_genere" class="form-select" required>
+              <option value="">Seleziona genere</option>
+              <option value="M">Maschio</option>
+              <option value="F">Femmina</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="ospite${i}_nascita">Data di nascita *</label>
+            <input type="date" id="ospite${i}_nascita" name="ospite${i}_nascita" 
+                   class="form-input" required max="${new Date().toISOString().split('T')[0]}" min="1900-01-01">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="ospite${i}_cittadinanza">Cittadinanza *</label>
+            <select id="ospite${i}_cittadinanza" name="ospite${i}_cittadinanza" class="form-select" required>
+              <option value="">Seleziona cittadinanza</option>
+              ${stati.map(stato => `<option value="${stato}">${stato}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="ospite${i}_luogo_nascita">Luogo di nascita *</label>
+            <select id="ospite${i}_luogo_nascita" name="ospite${i}_luogo_nascita" 
+                    class="form-select" required onchange="toggleComuneProvincia(${i})">
+              <option value="">Seleziona luogo nascita</option>
+              ${stati.map(stato => `<option value="${stato}">${stato}</option>`).join('')}
+            </select>
+          </div>
+          <div id="comune-provincia-wrapper-${i}" style="display: none;" class="form-group full-width">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="ospite${i}_comune">Comune *</label>
+                <input type="text" id="ospite${i}_comune" name="ospite${i}_comune" 
+                       class="form-input" placeholder="Es. Napoli" maxlength="50">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="ospite${i}_provincia">Provincia *</label>
+                <select id="ospite${i}_provincia" name="ospite${i}_provincia" class="form-select">
+                  <option value="">Seleziona provincia</option>
+                  ${province.map(prov => `<option value="${prov}">${prov}</option>`).join('')}
+                </select>
+              </div>
             </div>
-            <div class="form-group">
-              <label class="form-label" for="ospite${i}_provincia">Provincia *</label>
-              <select id="ospite${i}_provincia" name="ospite${i}_provincia" class="form-select">
-                <option value="">Seleziona provincia</option>
-                ${province.map(prov => `<option value="${prov}">${prov}</option>`).join('')}
-              </select>
+          </div>
+          ${campiDocumento}
+        </div>
+        <div class="document-section">
+          <h3 class="document-title">📄 Documento di identità</h3>
+          <p class="document-subtitle">Carica una foto o scansione del documento</p>
+          <div class="document-upload">
+            <div class="upload-group">
+              <label for="ospite${i}_documento_file" class="upload-label">📎 Scegli file</label>
+              <input type="file" id="ospite${i}_documento_file" name="ospite${i}_documento_file" 
+                     class="upload-input" accept="image/*,.pdf" onchange="handleFileUpload(this, ${i})">
+            </div>
+            <div class="camera-group">
+              <button type="button" class="camera-btn" onclick="openCamera(${i})">📷 Fotografa documento</button>
+            </div>
+          </div>
+          <div id="camera-preview-${i}" class="camera-preview" style="display: none;">
+            <video id="camera-video-${i}" autoplay playsinline></video>
+            <canvas id="camera-canvas-${i}" style="display: none;"></canvas>
+            <div class="camera-controls">
+              <button type="button" class="capture-btn" onclick="capturePhoto(${i})">📸 Scatta</button>
+              <button type="button" class="close-camera-btn" onclick="closeCamera(${i})">✕ Chiudi</button>
             </div>
           </div>
         </div>
-        ${campiDocumento}
-      </div>
-      <div class="document-section">
-        <h3 class="document-title">📄 Documento di identità</h3>
-        <p class="document-subtitle">Carica una foto o scansione del documento</p>
-        <div class="document-upload">
-          <div class="upload-group">
-            <label for="ospite${i}_documento_file" class="upload-label">📎 Scegli file</label>
-            <input type="file" id="ospite${i}_documento_file" name="ospite${i}_documento_file" 
-                   class="upload-input" accept="image/*,.pdf" onchange="handleFileUpload(this, ${i})">
-          </div>
-          <div class="camera-group">
-            <button type="button" class="camera-btn" onclick="openCamera(${i})">📷 Fotografa documento</button>
-          </div>
-        </div>
-        <div id="camera-preview-${i}" class="camera-preview" style="display: none;">
-          <video id="camera-video-${i}" autoplay playsinline></video>
-          <canvas id="camera-canvas-${i}" style="display: none;"></canvas>
-          <div class="camera-controls">
-            <button type="button" class="capture-btn" onclick="capturePhoto(${i})">📸 Scatta</button>
-            <button type="button" class="close-camera-btn" onclick="closeCamera(${i})">✕ Chiudi</button>
-          </div>
+        <div class="button-group">
+          <button type="button" class="btn btn-secondary" onclick="indietroStep()">← Indietro</button>
+          <button type="button" class="btn btn-primary" onclick="prossimoStep()">
+            ${i === numeroOspiti ? 'Vai al riepilogo →' : 'Prossimo ospite →'}
+          </button>
         </div>
       </div>
-      <div class="button-group">
-        <button type="button" class="btn btn-secondary" onclick="indietroStep()">← Indietro</button>
-        <button type="button" class="btn btn-primary" onclick="prossimoStep()">
-          ${i === numeroOspiti ? 'Vai al riepilogo →' : 'Prossimo ospite →'}
-        </button>
-      </div>
-    `;
-    form.insertBefore(stepDiv, stepFinal);
+    `);
+  }
+  
+  // ✅ UN SOLO insertAdjacentHTML (molto più veloce di N appendChild)
+  const htmlCombinato = stepsHTML.join('');
+  stepFinal.insertAdjacentHTML('beforebegin', htmlCombinato);
+  
+  // ✅ Ottimizza input date DOPO l'inserimento (batch)
+  if (isMobile) {
+    requestAnimationFrame(() => {
+      potenziaTuosDateInput();
+    });
   }
 }
 
@@ -619,106 +641,89 @@ function preparaRiepilogo() {
     return;
   }
   
-  console.log('✅ Container riepilogo trovato');
-  console.log(`💰 Totale calcolato: €${totale.toFixed(2)}`);
+  // ✅ RACCOGLI TUTTI I DATI PRIMA (evita letture DOM multiple)
+  const datiRiepilogo = {
+    dataCheckin: dataCheckin,
+    dataFormatted: formatDataItaliana(dataCheckin),
+    appartamento: document.getElementById('appartamento')?.value || 'N/A',
+    numeroOspiti: numeroOspiti,
+    numeroNotti: numeroNotti,
+    totale: totale,
+    ospiti: []
+  };
   
-  // ✅ Pulisci contenitore
-  summaryContent.innerHTML = '';
-  
-  // ✅ Crea fragment per performance
-  const fragment = document.createDocumentFragment();
-  
-  // === SEZIONE DETTAGLI SOGGIORNO ===
-  const dettagliSection = document.createElement('div');
-  dettagliSection.className = 'summary-section';
-  
-  const appartamento = document.getElementById('appartamento')?.value || 'N/A';
-  const dataFormatted = formatDataItaliana(dataCheckin);
-  
-  console.log('📍 Dettagli:', { dataCheckin, appartamento, numeroOspiti, numeroNotti });
-  
-  dettagliSection.innerHTML = `
-    <h3 style="font-size: 1.5rem; color: #8b7d6b; margin-bottom: 20px;">📍 Dettagli soggiorno</h3>
-    <div class="summary-item">
-      <span>Data Check-in:</span>
-      <span><strong>${dataFormatted}</strong></span>
-    </div>
-    <div class="summary-item">
-      <span>Appartamento:</span>
-      <span><strong>${appartamento}</strong></span>
-    </div>
-    <div class="summary-item">
-      <span>Numero ospiti:</span>
-      <span><strong>${numeroOspiti}</strong></span>
-    </div>
-    <div class="summary-item">
-      <span>Numero notti:</span>
-      <span><strong>${numeroNotti}</strong></span>
-    </div>
-  `;
-  fragment.appendChild(dettagliSection);
-  
-  // === SEZIONE OSPITI ===
-  const ospitiSection = document.createElement('div');
-  ospitiSection.className = 'summary-section';
-  ospitiSection.style.marginTop = '20px';
-  
-  let ospitiHTML = '<h3 style="font-size: 1.5rem; color: #8b7d6b; margin-bottom: 20px;">👥 Ospiti</h3>';
-  
+  // Raccogli dati ospiti in un'unica passata
   for (let i = 1; i <= numeroOspiti; i++) {
-    const cognome = document.querySelector(`input[name="ospite${i}_cognome"]`)?.value || '';
-    const nome = document.querySelector(`input[name="ospite${i}_nome"]`)?.value || '';
     const nascita = document.querySelector(`input[name="ospite${i}_nascita"]`)?.value || '';
-    const eta = nascita ? calcolaEta(nascita) : 0;
-    
-    console.log(`👤 Ospite ${i}:`, { cognome, nome, eta });
-    
-    ospitiHTML += `
-      <div class="guest-summary" style="background: white; padding: 15px; border-radius: 10px; margin-bottom: 12px; border: 1px solid #e8dcc0;">
-        <strong style="color: #8b7d6b; font-size: 1.05rem; display: block;">${cognome} ${nome}</strong>
-        ${i === 1 ? '<span style="color: #a67c52; font-size: 0.9rem; display: block;">(Responsabile)</span>' : ''}
-        <span class="age" style="color: #a0927f; font-size: 0.9rem; display: block; margin-top: 5px;">
-          Età: ${eta} anni ${eta >= 4 ? '(soggetto a tassa)' : '(esente)'}
-        </span>
-      </div>
-    `;
+    datiRiepilogo.ospiti.push({
+      numero: i,
+      cognome: document.querySelector(`input[name="ospite${i}_cognome"]`)?.value || '',
+      nome: document.querySelector(`input[name="ospite${i}_nome"]`)?.value || '',
+      eta: nascita ? calcolaEta(nascita) : 0
+    });
   }
   
-  ospitiSection.innerHTML = ospitiHTML;
-  fragment.appendChild(ospitiSection);
-  
-  // === SEZIONE TOTALE ===
-  const totaleSection = document.createElement('div');
-  totaleSection.className = 'summary-section';
-  totaleSection.style.marginTop = '20px';
-  totaleSection.innerHTML = `
-    <h3 style="font-size: 1.5rem; color: #8b7d6b; margin-bottom: 20px;">💰 Totale tassa di soggiorno</h3>
-    <div class="total-amount" style="font-size: 2rem; font-weight: 700; color: #a67c52; text-align: center; margin: 20px 0; padding: 20px; background: linear-gradient(135deg, rgba(184, 153, 104, 0.1) 0%, rgba(166, 124, 82, 0.1) 100%); border-radius: 12px;">
-      €${totale.toFixed(2)}
+  // ✅ GENERA HTML COMPLETO COME STRINGA (velocissimo)
+  const htmlCompleto = `
+    <div class="summary-section">
+      <h3 style="font-size: 1.5rem; color: #8b7d6b; margin-bottom: 20px;">📍 Dettagli soggiorno</h3>
+      <div class="summary-item">
+        <span>Data Check-in:</span>
+        <span><strong>${datiRiepilogo.dataFormatted}</strong></span>
+      </div>
+      <div class="summary-item">
+        <span>Appartamento:</span>
+        <span><strong>${datiRiepilogo.appartamento}</strong></span>
+      </div>
+      <div class="summary-item">
+        <span>Numero ospiti:</span>
+        <span><strong>${datiRiepilogo.numeroOspiti}</strong></span>
+      </div>
+      <div class="summary-item">
+        <span>Numero notti:</span>
+        <span><strong>${datiRiepilogo.numeroNotti}</strong></span>
+      </div>
     </div>
-    <small class="tax-note" style="display: block; text-align: center; color: #a0927f; font-size: 0.85rem; font-style: italic; margin-top: 10px;">
-      Tassa di €1,50 per notte per ospiti dai 4 anni in su
-    </small>
+    
+    <div class="summary-section" style="margin-top: 20px;">
+      <h3 style="font-size: 1.5rem; color: #8b7d6b; margin-bottom: 20px;">👥 Ospiti</h3>
+      ${datiRiepilogo.ospiti.map(ospite => `
+        <div class="guest-summary">
+          <strong>${ospite.cognome} ${ospite.nome}</strong>
+          ${ospite.numero === 1 ? '<span style="color: #a67c52; font-size: 0.9rem; display: block;">(Responsabile)</span>' : ''}
+          <span class="age">
+            Età: ${ospite.eta} anni ${ospite.eta >= 4 ? '(soggetto a tassa)' : '(esente)'}
+          </span>
+        </div>
+      `).join('')}
+    </div>
+    
+    <div class="summary-section" style="margin-top: 20px;">
+      <h3 style="font-size: 1.5rem; color: #8b7d6b; margin-bottom: 20px;">💰 Totale tassa di soggiorno</h3>
+      <div class="total-amount">€${datiRiepilogo.totale.toFixed(2)}</div>
+      <small class="tax-note">
+        Tassa di €1,50 per notte per ospiti dai 4 anni in su
+      </small>
+    </div>
   `;
-  fragment.appendChild(totaleSection);
   
-  // ✅ Inserisci tutto in una volta
-  summaryContent.appendChild(fragment);
+  // ✅ UN SOLO ACCESSO AL DOM (velocissimo)
+  summaryContent.innerHTML = htmlCompleto;
   
-  console.log('✅ Riepilogo inserito nel DOM');
-  console.log('📋 === FINE PREPARAZIONE RIEPILOGO ===');
+  console.log('✅ Riepilogo inserito (1 operazione DOM)');
   
   // Aggiorna bottoni
   aggiornaBottonePagamento(totale);
   
-  // Forza scroll verso il riepilogo
-  setTimeout(() => {
+  // ✅ Usa requestAnimationFrame per scroll fluido
+  requestAnimationFrame(() => {
     const finalStep = document.getElementById('step-final');
     if (finalStep) {
       finalStep.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
-  }, 100);
+  });
 }
+
 
 // === FUNZIONE DI DEBUG ===
 // Aggiungi questa funzione per testare il riepilogo
@@ -756,6 +761,8 @@ function aggiornaBottonePagamento(totale) {
   const finalStep = document.getElementById('step-final');
   const buttonGroup = finalStep?.querySelector('.button-group');
   if (!buttonGroup) return;
+  
+  // ✅ UN SOLO innerHTML (invece di creare elementi)
   buttonGroup.innerHTML = `
     <button type="button" class="btn btn-secondary" onclick="indietroStep()">← Indietro</button>
     <button type="button" class="btn btn-primary btn-payment" id="btn-procedi-pagamento" disabled onclick="procediAlPagamento()">
@@ -763,22 +770,33 @@ function aggiornaBottonePagamento(totale) {
     </button>
   `;
   
-  // Gestione checkbox privacy
-  setTimeout(() => {
-    const privacyCheckbox = document.getElementById('privacy-consent');
-    const paymentBtn = document.getElementById('btn-procedi-pagamento');
+  // ✅ Usa requestIdleCallback per logica non critica
+  if ('requestIdleCallback' in window) {
+    requestIdleCallback(() => {
+      agganciaEventoPrivacy();
+    });
+  } else {
+    setTimeout(() => {
+      agganciaEventoPrivacy();
+    }, 100);
+  }
+}
+
+// Helper function per eventi privacy
+function agganciaEventoPrivacy() {
+  const privacyCheckbox = document.getElementById('privacy-consent');
+  const paymentBtn = document.getElementById('btn-procedi-pagamento');
+  
+  if (privacyCheckbox && paymentBtn) {
+    paymentBtn.disabled = !privacyCheckbox.checked;
     
-    if (privacyCheckbox && paymentBtn) {
-      paymentBtn.disabled = !privacyCheckbox.checked;
-      
-      privacyCheckbox.addEventListener('change', function() {
-        paymentBtn.disabled = !this.checked;
-        if (this.checked) {
-          showNotification('✅ Privacy accettata', 'success');
-        }
-      });
-    }
-  }, 100);
+    privacyCheckbox.addEventListener('change', function() {
+      paymentBtn.disabled = !this.checked;
+      if (this.checked) {
+        showNotification('✅ Privacy accettata', 'success');
+      }
+    });
+  }
 }
 
 // === GESTIONE FOTOCAMERA ===
