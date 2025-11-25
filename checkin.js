@@ -353,8 +353,7 @@ window.prossimoStep = function() {
 }
 
 // === AGGIUNGI QUESTA FUNZIONE DI VERIFICA ALL'INIZIALIZZAZIONE ===
-document.addEventListener('DOMContentLoaded', function() {
-  console.log('🚀 Check-in form inizializzato');
+
 
 window.indietroStep = function() {
   if (currentStep === 99) {
@@ -1376,7 +1375,7 @@ document.addEventListener('DOMContentLoaded', function() {
   window.addEventListener('beforeunload', function() {
     if (currentStream) currentStream.getTracks().forEach(track => track.stop());
   });
-});
+
  setTimeout(() => {
     const summaryContent = document.getElementById('summary-content');
     if (!summaryContent) {
