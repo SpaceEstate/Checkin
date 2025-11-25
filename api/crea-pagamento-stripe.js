@@ -140,13 +140,7 @@ export default async function handler(req, res) {
     }
   },
   
-  // Configura opzioni di pagamento
-  payment_method_options: {
-    card: {
-      setup_future_usage: null // Non salvare la carta (più veloce)
-    }
-  },
-  
+
   // Abilita coupon/promo (opzionale)
   allow_promotion_codes: false, // Cambia a true se vuoi abilitare codici sconto
   
