@@ -597,10 +597,8 @@ function preparaRiepilogo() {
   const summaryContent = document.getElementById('summary-content');
   if (!summaryContent) return;
   
-  // ✅ Crea tutto in memoria prima di inserire nel DOM
   const fragment = document.createDocumentFragment();
   
-  // Sezione dettagli soggiorno
   const dettagliSection = document.createElement('div');
   dettagliSection.className = 'summary-section';
   dettagliSection.innerHTML = `
@@ -612,7 +610,6 @@ function preparaRiepilogo() {
   `;
   fragment.appendChild(dettagliSection);
   
-  // Sezione ospiti
   const ospitiSection = document.createElement('div');
   ospitiSection.className = 'summary-section';
   ospitiSection.innerHTML = '<h3>👥 Ospiti</h3>';
@@ -633,7 +630,6 @@ function preparaRiepilogo() {
   }
   fragment.appendChild(ospitiSection);
   
-  // Sezione totale
   const totaleSection = document.createElement('div');
   totaleSection.className = 'summary-section';
   totaleSection.innerHTML = `
@@ -643,7 +639,6 @@ function preparaRiepilogo() {
   `;
   fragment.appendChild(totaleSection);
   
-  // ✅ Un solo inserimento nel DOM
   summaryContent.innerHTML = '';
   summaryContent.appendChild(fragment);
   
