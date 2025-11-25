@@ -1,0 +1,7 @@
+{
+  "name": "checkin-frontend",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "mkdir -p public && cp index.html checkin.css checkin.js successo-pagamento.html public/ && cp -r public/images public/"
+  }
+}
