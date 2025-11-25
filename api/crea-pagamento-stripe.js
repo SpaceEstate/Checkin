@@ -121,27 +121,58 @@ export default async function handler(req, res) {
     const finalCancelUrl = cancelUrl || "https://spaceestate.github.io/checkin/index.html?canceled=true";
 
     // Crea la sessione di pagamento
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ["card"],
-      mode: "payment",
-      customer_email: responsabile.email || undefined,
-      line_items: [
-        {
-          price_data: {
-            currency: "eur",
-            product_data: {
-              name: `Tassa soggiorno - ${appartamento}`,
-              description: `Check-in: ${dataCheckin} | Ospiti: ${numeroOspiti} | Notti: ${numeroNotti}`
-            },
-            unit_amount: Math.round(totale * 100),
-          },
-          quantity: 1,
+   const session = await stripe.checkout.sessions.create({
+  payment_method_types: ["card"],
+  mode: "payment",
+  customer_email: responsabile.email || undefined,
+  
+  // 🎨 NUOVE OPZIONI DI PERSONALIZZAZIONE
+  locale: 'it', // Forza italiano
+  
+  billing_address_collection: 'auto', // Raccoglie indirizzo solo se necessario
+  
+  // Personalizza intestazione
+  payment_intent_data: {
+    description: `Tassa soggiorno - ${appartamento.substring(0, 100)}`,
+    metadata: {
+      dataCheckin: dataCheckin,
+      appartamento: appartamento.substring(0, 490)
+    }
+  },
+  
+  // Configura opzioni di pagamento
+  payment_method_options: {
+    card: {
+      setup_future_usage: null // Non salvare la carta (più veloce)
+    }
+  },
+  
+  // Abilita coupon/promo (opzionale)
+  allow_promotion_codes: false, // Cambia a true se vuoi abilitare codici sconto
+  
+  line_items: [
+    {
+      price_data: {
+        currency: "eur",
+        product_data: {
+          name: `Tassa soggiorno - ${appartamento}`,
+          description: `Check-in: ${dataCheckin} | Ospiti: ${numeroOspiti} | Notti: ${numeroNotti}`,
+          // 🎨 Aggiungi immagini (opzionale - sostituisci con URL reale)
+          // images: ['https://tuosito.com/logo.png']
         },
-      ],
-      success_url: finalSuccessUrl,
-      cancel_url: finalCancelUrl,
-      metadata: metadata,
-    });
+        unit_amount: Math.round(totale * 100),
+      },
+      quantity: 1,
+    },
+  ],
+  
+  success_url: finalSuccessUrl,
+  cancel_url: finalCancelUrl,
+  metadata: metadata,
+  
+  // 🚀 OTTIMIZZAZIONE: Scadenza sessione più breve = meno carico server
+  expires_at: Math.floor(Date.now() / 1000) + (30 * 60), // 30 minuti invece di default 24h
+});
 
     console.log("✅ Sessione creata:", session.id);
 
