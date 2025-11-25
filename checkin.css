@@ -18,6 +18,10 @@ body {
   padding: 20px;
   line-height: 1.6;
 }
+.step:not(.active) {
+  content-visibility: hidden;
+  contain: layout style paint;
+}
 
 .container {
   max-width: 900px;
