@@ -15,6 +15,20 @@ const tipiDocumento = ["PASSAPORTO ORDINARIO", "CARTA DI IDENTITA'", "CARTA IDEN
 
 const province = ["AG", "AL", "AN", "AO", "AR", "AP", "AT", "AV", "BA", "BT", "BL", "BN", "BG", "BI", "BO", "BZ", "BS", "BR", "CA", "CL", "CB", "CI", "CE", "CT", "CZ", "CH", "CO", "CS", "CR", "KR", "CN", "EN", "FM", "FE", "FI", "FG", "FC", "FR", "GE", "GO", "GR", "IM", "IS", "SP", "AQ", "LT", "LE", "LC", "LI", "LO", "LU", "MC", "MN", "MS", "MT", "ME", "MI", "MO", "MB", "NA", "NO", "NU", "OT", "OR", "PD", "PA", "PR", "PV", "PG", "PU", "PE", "PC", "PI", "PT", "PN", "PZ", "PO", "RG", "RA", "RC", "RE", "RI", "RN", "RM", "RO", "SA", "VS", "SS", "SV", "SI", "SR", "SO", "TA", "TE", "TR", "TO", "OG", "TP", "TN", "TV", "TS", "UD", "VA", "VE", "VB", "VC", "VR", "VV", "VI", "VT"];
 
+function mostraStepCorrente() {
+  document.querySelectorAll('.step').forEach(step => step.classList.remove('active'));
+  let stepToShow;
+  if (currentStep === 99) {
+    stepToShow = document.getElementById('step-final');
+  } else {
+    stepToShow = document.getElementById(`step-${currentStep}`);
+  }
+  if (stepToShow) {
+    stepToShow.classList.add('active');
+    stepToShow.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
 // === FUNZIONI UTILITÀ ===
 async function fileToBase64(file) {
   return new Promise((resolve, reject) => {
@@ -351,19 +365,6 @@ window.indietroStep = function() {
   mostraStepCorrente();
 }
 
-function mostraStepCorrente() {
-  document.querySelectorAll('.step').forEach(step => step.classList.remove('active'));
-  let stepToShow;
-  if (currentStep === 99) {
-    stepToShow = document.getElementById('step-final');
-  } else {
-    stepToShow = document.getElementById(`step-${currentStep}`);
-  }
-  if (stepToShow) {
-    stepToShow.classList.add('active');
-    stepToShow.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
-}
 
 // === VALIDAZIONE ===
 function validaStep1() {
