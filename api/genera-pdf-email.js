@@ -288,25 +288,172 @@ const needsPageBreak = index === 1 || index === 4 || index === 7;
     <head>
       <meta charset="UTF-8">
       <style>
-        @page { size: A4; margin: 15mm; }
-        body { font-family: 'Arial', sans-serif; line-height: 1.4; color: #333; margin: 0; padding: 0; }
-        .header { text-align: center; margin-bottom: 10px; border-bottom: 3px solid #3498db; padding-bottom: 15px; }
-        .header h1 { color: #2c3e50; font-size: 24px; margin: 0 0 8px 0; }
-        .section { margin: 8px 0; background: #f8f9fa; padding: 8px; border-radius: 6px; border-left: 4px solid #3498db; }
-        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 10px 0; }
-        .info-item { background: white; padding: 8px 10px; border-radius: 4px; border: 1px solid #e9ecef; }
-        .info-label { font-weight: bold; color: #495057; font-size: 10px; text-transform: uppercase; }
-        .info-value { color: #2c3e50; font-size: 13px; }
-        .ospite { background: white; border: 2px solid #e9ecef; border-radius: 6px; padding: 15px; margin: 12px 0; }
-        .ospite.responsabile { border-color: #28a745; background: #f8fff9; }
-        .ospite-header { display: flex; justify-content: space-between; margin-bottom: 12px; border-bottom: 1px solid #dee2e6; }
-        .ospite-nome { font-size: 16px; font-weight: bold; color: #2c3e50; }
-        .ospite-badge { background: #28a745; color: white; padding: 3px 10px; border-radius: 15px; font-size: 11px; }
-        .ospite-number { background: #6c757d; color: white; padding: 3px 10px; border-radius: 15px; font-size: 11px; }
-        .totale-section { background: #e8f5e8; border: 2px solid #28a745; padding: 8px; border-radius: 6px; text-align: center; margin: 8px 0; }
-        .totale-amount { font-size: 22px; font-weight: bold; color: #28a745; margin: 8px 0; }
-        .documento-note { background: #fff3cd; border: 1px solid #ffc107; padding: 8px; border-radius: 4px; margin-top: 10px; font-size: 12px; }
-      </style>
+        @page { size: A4; margin: 12mm; }
+body { font-family: 'Arial', sans-serif; line-height: 1.3; color: #333; margin: 0; padding: 0; font-size: 11px; }
+
+/* Header compatto */
+.header { 
+  text-align: center; 
+  margin-bottom: 8px; 
+  border-bottom: 2px solid #3498db; 
+  padding-bottom: 8px; 
+}
+.header h1 { 
+  color: #2c3e50; 
+  font-size: 18px; 
+  margin: 0 0 4px 0; 
+  line-height: 1.2;
+}
+.header p {
+  font-size: 10px;
+  margin: 0;
+  color: #7f8c8d;
+}
+
+/* Sezioni compatte */
+.section { 
+  margin: 6px 0; 
+  background: #f8f9fa; 
+  padding: 6px 8px; 
+  border-radius: 4px; 
+  border-left: 3px solid #3498db; 
+}
+.section h2 {
+  font-size: 13px;
+  margin: 0 0 6px 0;
+  color: #2c3e50;
+}
+
+/* Grid info compatto */
+.info-grid { 
+  display: grid; 
+  grid-template-columns: 1fr 1fr; 
+  gap: 6px; 
+  margin: 6px 0; 
+}
+.info-item { 
+  background: white; 
+  padding: 5px 7px; 
+  border-radius: 3px; 
+  border: 1px solid #e9ecef; 
+}
+.info-label { 
+  font-weight: bold; 
+  color: #495057; 
+  font-size: 9px; 
+  text-transform: uppercase; 
+  line-height: 1.2;
+}
+.info-value { 
+  color: #2c3e50; 
+  font-size: 11px; 
+  margin-top: 2px;
+  line-height: 1.2;
+}
+
+/* Totale compatto */
+.totale-section { 
+  background: #e8f5e8; 
+  border: 2px solid #28a745; 
+  padding: 8px; 
+  border-radius: 4px; 
+  text-align: center; 
+  margin: 6px 0; 
+}
+.totale-section h2 {
+  font-size: 13px;
+  margin: 0 0 6px 0;
+  color: #28a745;
+}
+.totale-amount { 
+  font-size: 20px; 
+  font-weight: bold; 
+  color: #28a745; 
+  margin: 4px 0; 
+  line-height: 1;
+}
+
+/* Ospiti compatti */
+.ospite { 
+  background: white; 
+  border: 1px solid #dee2e6; 
+  border-radius: 4px; 
+  padding: 8px; 
+  margin: 6px 0; 
+  page-break-inside: avoid;
+}
+.ospite.responsabile { 
+  border-color: #28a745; 
+  background: #f8fff9; 
+}
+.ospite-header { 
+  display: flex; 
+  justify-content: space-between; 
+  align-items: center;
+  margin-bottom: 6px; 
+  padding-bottom: 4px;
+  border-bottom: 1px solid #dee2e6; 
+}
+.ospite-nome { 
+  font-size: 13px; 
+  font-weight: bold; 
+  color: #2c3e50; 
+  line-height: 1.2;
+}
+.ospite-badge { 
+  background: #28a745; 
+  color: white; 
+  padding: 2px 8px; 
+  border-radius: 10px; 
+  font-size: 9px; 
+  white-space: nowrap;
+}
+.ospite-number { 
+  background: #6c757d; 
+  color: white; 
+  padding: 2px 8px; 
+  border-radius: 10px; 
+  font-size: 9px; 
+}
+
+/* Grid ospite compatto */
+.ospite .info-grid {
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+}
+.ospite .info-item {
+  padding: 4px 6px;
+}
+.ospite .info-label {
+  font-size: 8px;
+  margin-bottom: 1px;
+}
+.ospite .info-value {
+  font-size: 10px;
+}
+
+/* Documento note compatto */
+.documento-note { 
+  background: #fff3cd; 
+  border: 1px solid #ffc107; 
+  padding: 5px 7px; 
+  border-radius: 3px; 
+  margin-top: 6px; 
+  font-size: 9px; 
+  line-height: 1.3;
+}
+
+/* Sezione documenti allegati */
+.section ul {
+  margin: 6px 0 0 0;
+  padding-left: 18px;
+}
+.section li {
+  font-size: 10px;
+  margin: 3px 0;
+  line-height: 1.3;
+}
+</style>
     </head>
     <body>
       <div class="header">
