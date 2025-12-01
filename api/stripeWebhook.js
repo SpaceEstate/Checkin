@@ -393,4 +393,238 @@ async function inviaEmailOspite(session, emailCliente) {
     console.log('📧 === FINE INVIO EMAIL OSPITE (ERRORE) ===');
     throw error;
   }
+  // AGGIUNGI QUESTA FUNZIONE in api/stripeWebhook.js
+
+// ✅ NUOVA FUNZIONE: Ricostruisci dati completi da Redis + Metadata
+async function ricostruisciDatiPrenotazioneCompleti(metadata) {
+  console.log('🔄 === RICOSTRUZIONE DATI COMPLETI ===');
+  
+  const tempSessionId = metadata.temp_session_id;
+  console.log('🔑 Temp Session ID:', tempSessionId || 'NESSUNO');
+  
+  // Dati base dai metadata
+  const datiPrenotazione = {
+    dataCheckin: metadata.dataCheckin,
+    appartamento: metadata.appartamento,
+    numeroOspiti: parseInt(metadata.numeroOspiti) || 0,
+    numeroNotti: parseInt(metadata.numeroNotti) || 0,
+    tipoGruppo: metadata.tipoGruppo || null,
+    totale: parseFloat(metadata.totale) || 0,
+    timestamp: metadata.timestamp,
+    ospiti: [],
+    documenti: [] // ⭐ Verranno recuperati da Redis
+  };
+
+  // Responsabile dai metadata
+  datiPrenotazione.ospiti.push({
+    numero: 1,
+    cognome: metadata.resp_cognome,
+    nome: metadata.resp_nome,
+    genere: metadata.resp_genere,
+    nascita: metadata.resp_nascita,
+    eta: parseInt(metadata.resp_eta) || 0,
+    cittadinanza: metadata.resp_cittadinanza,
+    luogoNascita: metadata.resp_luogoNascita,
+    isResponsabile: true
+  });
+
+  // ⭐ RECUPERA DATI COMPLETI DA REDIS
+  if (tempSessionId) {
+    try {
+      const baseUrl = process.env.VERCEL_URL 
+        ? `https://${process.env.VERCEL_URL}` 
+        : 'https://checkin-six-coral.vercel.app';
+      
+      console.log('🔍 Recupero dati da Redis...');
+      console.log('📡 URL:', `${baseUrl}/api/salva-dati-temporanei?sessionId=${tempSessionId}`);
+      
+      const redisResponse = await fetch(
+        `${baseUrl}/api/salva-dati-temporanei?sessionId=${tempSessionId}`,
+        {
+          method: 'GET',
+          headers: { 
+            'Accept': 'application/json',
+            'User-Agent': 'StripeWebhook/1.0'
+          }
+        }
+      );
+      
+      console.log('📡 Redis response status:', redisResponse.status);
+      
+      if (redisResponse.ok) {
+        const redisData = await redisResponse.json();
+        console.log('✅ Risposta Redis ricevuta:', {
+          success: redisData.success,
+          hasOspiti: !!redisData.datiPrenotazione?.ospiti,
+          numOspiti: redisData.datiPrenotazione?.ospiti?.length || 0,
+          hasDocumenti: !!redisData.datiPrenotazione?.documenti,
+          numDocumenti: redisData.datiPrenotazione?.documenti?.length || 0
+        });
+        
+        if (redisData.success && redisData.datiPrenotazione) {
+          // ⭐ SOVRASCRIVI con dati completi da Redis
+          if (redisData.datiPrenotazione.ospiti) {
+            datiPrenotazione.ospiti = redisData.datiPrenotazione.ospiti;
+            console.log(`✅ Recuperati ${datiPrenotazione.ospiti.length} ospiti da Redis`);
+          }
+          
+          if (redisData.datiPrenotazione.documenti) {
+            datiPrenotazione.documenti = redisData.datiPrenotazione.documenti;
+            console.log(`✅ Recuperati ${datiPrenotazione.documenti.length} documenti da Redis`);
+          }
+        } else {
+          console.warn('⚠️ Redis: dati non trovati nella risposta');
+        }
+      } else {
+        const errorText = await redisResponse.text();
+        console.warn('⚠️ Redis response non OK:', redisResponse.status, errorText);
+      }
+    } catch (redisError) {
+      console.warn('⚠️ Errore recupero da Redis:', redisError.message);
+      console.warn('📋 Proseguo con dati parziali dai metadata');
+    }
+  } else {
+    console.warn('⚠️ Nessun temp_session_id disponibile - solo dati metadata');
+  }
+  
+  console.log('📊 Dati finali ricostruiti:', {
+    ospiti: datiPrenotazione.ospiti.length,
+    documenti: datiPrenotazione.documenti.length,
+    totale: datiPrenotazione.totale
+  });
+  console.log('🔄 === FINE RICOSTRUZIONE ===');
+  
+  return datiPrenotazione;
+}
+
+// ✅ MODIFICA LA FUNZIONE generaPDFEInviaEmailConDebug
+async function generaPDFEInviaEmailConDebug(session) {
+  console.log('📧 === INIZIO INVIO EMAIL PROPRIETARIO (da webhook) ===');
+  
+  const metadata = session.metadata;
+  
+  // ⭐ USA LA NUOVA FUNZIONE
+  const datiPrenotazione = await ricostruisciDatiPrenotazioneCompleti(metadata);
+  
+  const emailProprietario = process.env.EMAIL_PROPRIETARIO;
+  
+  if (!emailProprietario) {
+    throw new Error('EMAIL_PROPRIETARIO non configurato');
+  }
+  
+  console.log('📬 Destinatario proprietario:', emailProprietario);
+  console.log('📊 Dati da inviare:', {
+    ospiti: datiPrenotazione.ospiti.length,
+    documenti: datiPrenotazione.documenti.length,
+    totale: datiPrenotazione.totale,
+    tipoTotale: typeof datiPrenotazione.totale
+  });
+  
+  const baseUrl = process.env.VERCEL_URL 
+    ? `https://${process.env.VERCEL_URL}` 
+    : 'https://checkin-six-coral.vercel.app';
+  
+  const apiUrl = `${baseUrl}/api/genera-pdf-email`;
+  console.log('🌐 Chiamata API email proprietario:', apiUrl);
+  
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 25000);
+    
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'CheckinWebhook/1.0',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
+        datiPrenotazione: datiPrenotazione,
+        emailDestinatario: emailProprietario
+      }),
+      signal: controller.signal
+    });
+    
+    clearTimeout(timeoutId);
+    
+    console.log('📡 Status risposta API email proprietario:', response.status);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ Errore API email proprietario:', errorText);
+      throw new Error(`Errore API (${response.status}): ${errorText}`);
+    }
+    
+    const result = await response.json();
+    console.log('✅ Risposta API email proprietario:', result);
+    console.log('📧 === FINE INVIO EMAIL PROPRIETARIO (SUCCESSO) ===');
+    
+  } catch (error) {
+    console.error('❌ Errore invio email proprietario:', error.message);
+    console.log('📧 === FINE INVIO EMAIL PROPRIETARIO (ERRORE) ===');
+    throw error;
+  }
+}
+
+// ✅ MODIFICA ANCHE inviaEmailOspite
+async function inviaEmailOspite(session, emailCliente) {
+  console.log('📧 === INIZIO INVIO EMAIL OSPITE (da webhook) ===');
+  
+  const metadata = session.metadata;
+  
+  // ⭐ USA LA NUOVA FUNZIONE
+  const datiPrenotazione = await ricostruisciDatiPrenotazioneCompleti(metadata);
+  
+  console.log('📊 Dati per email ospite:', {
+    email: emailCliente,
+    totale: datiPrenotazione.totale,
+    tipoTotale: typeof datiPrenotazione.totale,
+    appartamento: datiPrenotazione.appartamento
+  });
+  
+  const baseUrl = process.env.VERCEL_URL 
+    ? `https://${process.env.VERCEL_URL}` 
+    : 'https://checkin-six-coral.vercel.app';
+  
+  const apiUrl = `${baseUrl}/api/invia-email-ospite`;
+  console.log('🌐 Chiamata API email ospite:', apiUrl);
+  
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'CheckinWebhook/1.0',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
+        emailOspite: emailCliente,
+        datiPrenotazione: datiPrenotazione
+      }),
+      signal: controller.signal
+    });
+    
+    clearTimeout(timeoutId);
+    
+    console.log('📡 Status risposta API email ospite:', response.status);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ Errore API email ospite:', errorText);
+      throw new Error(`Errore API (${response.status}): ${errorText}`);
+    }
+    
+    const result = await response.json();
+    console.log('✅ Risposta API email ospite:', result);
+    console.log('📧 === FINE INVIO EMAIL OSPITE (SUCCESSO) ===');
+    
+  } catch (error) {
+    console.error('❌ Errore invio email ospite:', error.message);
+    console.log('📧 === FINE INVIO EMAIL OSPITE (ERRORE) ===');
+    throw error;
+  }
+}
 }
