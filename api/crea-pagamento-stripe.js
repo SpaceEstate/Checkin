@@ -58,14 +58,14 @@ export default async function handler(req, res) {
     // ✅ SOLUZIONE: Metadata MINIMI (solo info essenziali)
     const metadata = {
       dataCheckin,
-      appartamento: appartamento.substring(0, 490),
+      appartamento: appartamento.substring(0, 490), // Max 490 per sicurezza
       numeroOspiti: numeroOspiti.toString(),
       numeroNotti: numeroNotti.toString(),
       tipoGruppo: tipoGruppo || '',
       totale: totale.toString(),
       timestamp: timestamp || new Date().toISOString(),
       
-      // ⭐ CHIAVE: Salva solo il temp_session_id
+      // ⭐ CHIAVE: Salva solo il temp_session_id (circa 30 caratteri)
       temp_session_id: tempSessionId || '',
       
       // Dati responsabile (compatti)
@@ -77,11 +77,11 @@ export default async function handler(req, res) {
       resp_cittadinanza: responsabile.cittadinanza || '',
       resp_luogoNascita: responsabile.luogoNascita || '',
       
-      // ❌ RIMOSSO: altri_ospiti (troppo grande)
+      // ❌ RIMOSSO: altri_ospiti (troppo grande - causa errore 672 caratteri)
       // Verranno recuperati da Redis nel webhook usando temp_session_id
     };
 
-    // Rimuovi campi vuoti
+    // Rimuovi campi vuoti per risparmiare spazio
     Object.keys(metadata).forEach(key => {
       if (!metadata[key] || metadata[key] === 'undefined') {
         delete metadata[key];
@@ -96,6 +96,12 @@ export default async function handler(req, res) {
     const finalCancelUrl = cancelUrl || "https://spaceestate.github.io/checkin/index.html?canceled=true";
 
     const session = await stripe.checkout.sessions.create({
+      payment_method_types: ["card"],
+      mode: "payment",
+      customer_email: responsabile.email || undefined,
+      locale: 'it',
+      billing_address_collection: 'auto',
+      
       payment_intent_data: {
         description: `Tassa soggiorno - ${appartamento.substring(0, 100)}`,
         metadata: {
@@ -122,7 +128,7 @@ export default async function handler(req, res) {
       
       success_url: finalSuccessUrl,
       cancel_url: finalCancelUrl,
-      metadata: metadata,
+      metadata: metadata, // ✅ Metadata compatti (< 500 caratteri)
       
       expires_at: Math.floor(Date.now() / 1000) + (30 * 60), // 30 minuti
     });
@@ -141,10 +147,4 @@ export default async function handler(req, res) {
       message: error.message 
     });
   }
-}_method_types: ["card"],
-      mode: "payment",
-      customer_email: responsabile.email || undefined,
-      locale: 'it',
-      billing_address_collection: 'auto',
-      
-      payment
+}
