@@ -208,11 +208,13 @@ function generaHTMLRiepilogo(dati) {
       d && d.ospiteNumero && d.ospiteNumero === ospite.numero
     );
     
-    // ✅ CORREZIONE: Ospite 1 da solo in pag 1, poi 2 ospiti per pagina
-    // Pag 1: Dettagli + Ospite 1
-    // Pag 2: Ospite 2 e 3 (break prima del 2)
-    // Pag 3: Ospite 4 e 5 (break prima del 4)
-    const needsPageBreak = index === 1 || index === 4;
+    // ✅ CORREZIONE: Ospite 1 da solo in pag 1, poi 3 ospiti per pagina
+// Pag 1: Dettagli + Ospite 1
+// Pag 2: Ospite 2 e 3 (break prima del 2)
+// Pag 3: Ospite 4 e 5 (break prima del 4)
+// Pag 4: Ospite 6 e 7 (break prima del 6)
+// Pag 5: Ospite 8 e 9 (break prima del 8)
+const needsPageBreak = index === 1 || index === 4 || index === 7;
     
     return `
       <div class="ospite ${ospite.isResponsabile ? 'responsabile' : ''}" ${needsPageBreak ? 'style="page-break-before: always;"' : ''}>
