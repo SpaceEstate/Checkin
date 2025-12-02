@@ -8,6 +8,181 @@ window.datiPrecompilati = false; // Flag globale per dati pre-compilati
  
 const API_BASE_URL = 'https://checkin-six-coral.vercel.app/api';
 
+// === FUNZIONE: Aggiorna appartamenti selezionati ===
+window.aggiornaAppartamentiSelezionati = function() {
+  const checkboxes = document.querySelectorAll('input[name="appartamento[]"]:checked');
+  const hiddenInput = document.getElementById('appartamento');
+  
+  const selezionati = Array.from(checkboxes).map(cb => cb.value);
+  
+  if (selezionati.length === 0) {
+    hiddenInput.value = '';
+  } else if (selezionati.length === 1) {
+    hiddenInput.value = selezionati[0];
+  } else {
+    // Entrambi selezionati - formato speciale
+    hiddenInput.value = selezionati.join(' + ');
+  }
+  
+  console.log('📍 Appartamenti selezionati:', hiddenInput.value);
+}
+
+// === MODIFICA: validaStep1 ===
+function validaStep1() {
+  const dataCheckinInput = document.getElementById("data-checkin");
+  const hiddenAppartamento = document.getElementById("appartamento");
+  const numOspitiSelect = document.getElementById("numero-ospiti");
+  const numNottiInput = document.getElementById("numero-notti");
+  
+  if (!dataCheckinInput?.value) {
+    showNotification("Seleziona la data di check-in", "error");
+    dataCheckinInput?.focus();
+    return false;
+  }
+
+  const dataScelta = new Date(dataCheckinInput.value);
+  const oggi = new Date();
+  oggi.setHours(0, 0, 0, 0);
+  
+  if (!window.datiPrecompilati && dataScelta < oggi) {
+    showNotification("La data di check-in non può essere nel passato", "error");
+    dataCheckinInput?.focus();
+    return false;
+  }
+
+  // ✅ VALIDAZIONE APPARTAMENTI
+  if (!hiddenAppartamento?.value) {
+    showNotification("Seleziona almeno un appartamento", "error");
+    return false;
+  }
+
+  if (!numOspitiSelect?.value) {
+    showNotification("Seleziona il numero di ospiti", "error");
+    numOspitiSelect?.focus();
+    return false;
+  }
+
+  const notti = parseInt(numNottiInput?.value) || 0;
+  if (notti < 1) {
+    showNotification("Inserisci un numero di notti valido (minimo 1)", "error");
+    numNottiInput?.focus();
+    return false;
+  }
+
+  dataCheckin = dataCheckinInput.value;
+  numeroOspiti = parseInt(numOspitiSelect.value);
+  numeroNotti = notti;
+
+  if (numeroOspiti > 1) {
+    const tipoGruppoSelect = document.getElementById("tipo-gruppo");
+    if (!tipoGruppoSelect?.value) {
+      showNotification("Seleziona il tipo di gruppo", "error");
+      tipoGruppoSelect?.focus();
+      return false;
+    }
+  }
+
+  return true;
+}
+
+// === MODIFICA: precompilaDatiPrenotazione ===
+function precompilaDatiPrenotazione(dati) {
+  console.log('📝 Pre-compilazione dati:', dati);
+  
+  // Data check-in
+  const dataInput = document.getElementById('data-checkin');
+  if (dataInput && dati.dataCheckin) {
+    dataInput.value = dati.dataCheckin;
+    dataInput.readOnly = true;
+    dataInput.style.backgroundColor = '#f5f2e9';
+    dataInput.style.cursor = 'not-allowed';
+  }
+  
+  // ✅ APPARTAMENTI - Gestisce sia singolo che multiplo
+  const appartamenti = dati.appartamento || '';
+  const checkboxes = document.querySelectorAll('input[name="appartamento[]"]');
+  
+  checkboxes.forEach(checkbox => {
+    checkbox.disabled = true;
+    checkbox.style.cursor = 'not-allowed';
+    
+    // Se l'appartamento contiene il valore del checkbox, selezionalo
+    if (appartamenti.includes(checkbox.value)) {
+      checkbox.checked = true;
+    }
+  });
+  
+  // Aggiorna il campo hidden
+  aggiornaAppartamentiSelezionati();
+  
+  // Numero ospiti
+  const ospitiSelect = document.getElementById('numero-ospiti');
+  if (ospitiSelect && dati.numeroOspiti) {
+    ospitiSelect.value = dati.numeroOspiti.toString();
+    ospitiSelect.disabled = true;
+    ospitiSelect.style.backgroundColor = '#f5f2e9';
+    ospitiSelect.style.cursor = 'not-allowed';
+    ospitiSelect.dispatchEvent(new Event('change'));
+  }
+  
+  // Numero notti
+  const nottiInput = document.getElementById('numero-notti');
+  if (nottiInput && dati.numeroNotti) {
+    nottiInput.value = dati.numeroNotti;
+    nottiInput.readOnly = true;
+    nottiInput.style.backgroundColor = '#f5f2e9';
+    nottiInput.style.cursor = 'not-allowed';
+  }
+  
+  // Tipo gruppo rimane modificabile
+  const tipoGruppoSelect = document.getElementById('tipo-gruppo');
+  if (tipoGruppoSelect) {
+    tipoGruppoSelect.value = '';
+    tipoGruppoSelect.disabled = false;
+    tipoGruppoSelect.style.backgroundColor = 'white';
+    tipoGruppoSelect.style.cursor = 'pointer';
+  }
+  
+  const stepHeader = document.querySelector('#step-1 .step-subtitle');
+  if (stepHeader) {
+    stepHeader.innerHTML = `
+      <span style="color: #27ae60; font-weight: 600;">✓ Dati prenotazione verificati</span><br>
+      <span style="font-size: 0.9rem; color: #a0927f;">
+        ${dati.numeroOspiti > 1 ? 'Seleziona il tipo di gruppo' : 'Verifica i dati e prosegui'}
+      </span>
+    `;
+  }
+  
+  console.log('✅ Dati pre-compilati con successo');
+}
+
+// === FUNZIONE: Determina codici cassetta (MULTIPLI) ===
+function determinaCodiciCassetta(appartamento) {
+  if (!appartamento) {
+    console.warn('⚠️ Appartamento non specificato');
+    return ['0000'];
+  }
+
+  const appartamentoLower = appartamento.toLowerCase();
+  const codici = [];
+
+  // Verifica entrambi gli appartamenti
+  if (appartamentoLower.includes('corte')) {
+    codici.push('1933');
+  }
+  
+  if (appartamentoLower.includes('torre')) {
+    codici.push('1935');
+  }
+
+  if (codici.length === 0) {
+    console.warn('⚠️ Appartamento non riconosciuto:', appartamento);
+    return ['0000'];
+  }
+
+  console.log(`🔑 Codici cassetta per "${appartamento}":`, codici);
+  return codici;
+}
 // === ARRAY DATI ===
 const stati = ["Afghanistan", "Albania", "Algeria", "Andorra", "Angola", "Antigua e Barbuda", "Arabia Saudita", "Argentina", "Armenia", "Australia", "Austria", "Azerbaigian", "Bahamas", "Bahrain", "Bangladesh", "Barbados", "Belgio", "Belize", "Benin", "Bhutan", "Bielorussia", "Birmania", "Bolivia", "Bosnia ed Erzegovina", "Botswana", "Brasile", "Brunei", "Bulgaria", "Burkina Faso", "Burundi", "Cambogia", "Camerun", "Canada", "Capo Verde", "Ciad", "Cile", "Cina", "Cipro", "Comore", "Corea del Nord", "Corea del Sud", "Costa d'Avorio", "Costa Rica", "Croazia", "Cuba", "Danimarca", "Dominica", "Ecuador", "Egitto", "El Salvador", "Emirati Arabi Uniti", "Eritrea", "Estonia", "Etiopia", "Figi", "Filippine", "Finlandia", "Francia", "Gabon", "Gambia", "Georgia", "Germania", "Ghana", "Giamaica", "Giappone", "Gibuti", "Giordania", "Grecia", "Grenada", "Guatemala", "Guinea", "Guinea-Bissau", "Guinea Equatoriale", "Guyana", "Haiti", "Honduras", "India", "Indonesia", "Iran", "Iraq", "Irlanda", "Islanda", "Israele", "Italia", "Kazakistan", "Kenya", "Kirghizistan", "Kiribati", "Kuwait", "Laos", "Lesotho", "Lettonia", "Libano", "Liberia", "Libia", "Liechtenstein", "Lituania", "Lussemburgo", "Macedonia del Nord", "Madagascar", "Malawi", "Malaysia", "Maldive", "Mali", "Malta", "Marocco", "Isole Marshall", "Mauritania", "Mauritius", "Messico", "Micronesia", "Moldavia", "Monaco", "Mongolia", "Montenegro", "Mozambico", "Namibia", "Nauru", "Nepal", "Nicaragua", "Niger", "Nigeria", "Norvegia", "Nuova Zelanda", "Oman", "Paesi Bassi", "Pakistan", "Palau", "Panama", "Papua Nuova Guinea", "Paraguay", "Peru", "Polonia", "Portogallo", "Qatar", "Regno Unito", "Repubblica Ceca", "Repubblica Centrafricana", "Repubblica del Congo", "Repubblica Democratica del Congo", "Repubblica Dominicana", "Romania", "Ruanda", "Russia", "Saint Kitts e Nevis", "Saint Lucia", "Saint Vincent e Grenadine", "Samoa", "San Marino", "São Tomé e Príncipe", "Senegal", "Serbia", "Seychelles", "Sierra Leone", "Singapore", "Siria", "Slovacchia", "Slovenia", "Somalia", "Spagna", "Sri Lanka", "Stati Uniti", "Sudafrica", "Sudan", "Sudan del Sud", "Suriname", "Svezia", "Svizzera", "Swaziland", "Tagikistan", "Tanzania", "Thailandia", "Timor Est", "Togo", "Tonga", "Trinidad e Tobago", "Tunisia", "Turchia", "Turkmenistan", "Tuvalu", "Ucraina", "Uganda", "Ungheria", "Uruguay", "Uzbekistan", "Vanuatu", "Vaticano", "Venezuela", "Vietnam", "Yemen", "Zambia", "Zimbabwe"];
 
