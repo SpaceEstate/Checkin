@@ -79,113 +79,116 @@ export default async function handler(req, res) {
   }
 }
 
-// ===== FUNZIONI SUPPORTO =====
-
-function determinaCodiceCassetta(appartamento) {
+// ===== FUNZIONE AGGIORNATA: determinaCodiceCassetta =====
+function determinaCodiciCassetta(appartamento) {
   if (!appartamento) {
     console.warn('⚠️ Appartamento non specificato, uso codice generico');
-    return '0000';
+    return ['0000'];
   }
 
   const appartamentoLower = appartamento.toLowerCase();
+  const codici = [];
 
+  // Verifica entrambi gli appartamenti
   if (appartamentoLower.includes('corte')) {
-    return '1933';
-  } else if (appartamentoLower.includes('torre')) {
-    return '1935';
-  } else {
+    codici.push({
+      codice: '1933',
+      nome: 'Corte',
+      descrizione: 'Appartamento con 1 camera da letto'
+    });
+  }
+
+  if (appartamentoLower.includes('torre')) {
+    codici.push({
+      codice: '1935',
+      nome: 'Torre',
+      descrizione: 'Appartamento con 2 camere da letto'
+    });
+  }
+
+  if (codici.length === 0) {
     console.warn('⚠️ Appartamento non riconosciuto:', appartamento);
-    return '0000';
+    return [{
+      codice: '0000',
+      nome: 'Generico',
+      descrizione: 'Appartamento non specificato'
+    }];
   }
+
+  return codici;
 }
 
-// NUOVA FUNZIONE: Carica le foto dalla cartella public/images/cassetta
-async function caricaAllegatiFoto() {
-  const allegati = [];
+// ===== HANDLER PRINCIPALE AGGIORNATO =====
+export default async function handler(req, res) {
+  // CORS Headers
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   
-  // Definisci i nomi dei file delle foto
-  const fotoCassetta = [
-    { 
-      filename: '1_ingresso_proprieta.jpg', 
-      cid: 'ingresso_proprieta',
-      nome: 'Ingresso Proprietà'
-    },
-    { 
-      filename: '2_cassetta_sicurezza.jpg', 
-      cid: 'cassetta_sicurezza',
-      nome: 'Cassetta di Sicurezza'
-    },
-    { 
-      filename: '3_ubicazione_cassetta.jpg', 
-      cid: 'ubicazione_cassetta',
-      nome: 'Ubicazione Cassetta'
-    }
-  ];
-
-  for (const foto of fotoCassetta) {
-    try {
-      // IMPORTANTE: Il percorso deve essere relativo alla root del progetto
-      // In Vercel, /var/task è la root, quindi usiamo percorso relativo
-      const filePath = join(process.cwd(), 'public', 'images', 'cassetta', foto.filename);
-      
-      console.log(`📷 Caricamento foto: ${foto.filename}`);
-      console.log(`📁 Percorso: ${filePath}`);
-      
-      const imageBuffer = await readFile(filePath);
-      
-      allegati.push({
-        filename: foto.filename,
-        content: imageBuffer,
-        contentType: 'image/jpeg',
-        cid: foto.cid, // Content ID per riferimento nell'HTML
-        encoding: 'base64'
-      });
-      
-      console.log(`✅ Foto caricata: ${foto.filename} (${(imageBuffer.length / 1024).toFixed(2)} KB)`);
-      
-    } catch (error) {
-      console.error(`❌ Errore caricamento foto ${foto.filename}:`, error.message);
-      // Continua anche se una foto fallisce
-    }
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
   }
 
-  return allegati;
-}
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Metodo non consentito' });
+  }
 
-async function inviaEmailConNodemailer(emailOspite, datiPrenotazione, htmlContent, allegati) {
-  const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASSWORD
+  console.log('📧 === INIZIO INVIO EMAIL OSPITE ===');
+
+  try {
+    const { emailOspite, datiPrenotazione } = req.body;
+
+    if (!emailOspite || !datiPrenotazione) {
+      return res.status(400).json({ 
+        error: 'Email ospite e dati prenotazione sono obbligatori' 
+      });
     }
-  });
 
-  const dataFormattata = new Date(datiPrenotazione.dataCheckin).toLocaleDateString('it-IT', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  });
+    console.log('📬 Destinatario:', emailOspite);
+    console.log('📊 Appartamento:', datiPrenotazione.appartamento);
 
-  const oggetto = `🏠 Benvenuto a Space Estate - Check-in ${dataFormattata}`;
+    // ✅ Genera codici cassetta (può essere array)
+    const codiciCassetta = determinaCodiciCassetta(datiPrenotazione.appartamento);
+    console.log('🔑 Codici cassetta generati:', codiciCassetta);
 
-  const mailOptions = {
-    from: {
-      name: 'Space Estate',
-      address: process.env.EMAIL_USER
-    },
-    to: emailOspite,
-    subject: oggetto,
-    html: htmlContent,
-    attachments: allegati // ⭐ AGGIUNTO: Allega le foto
-  };
+    // Converti totale in numero se necessario
+    if (typeof datiPrenotazione.totale === 'string') {
+      datiPrenotazione.totale = parseFloat(datiPrenotazione.totale);
+    }
 
-  await transporter.sendMail(mailOptions);
-  console.log('✅ Email inviata a:', emailOspite);
+    // Genera HTML email con codici multipli
+    const htmlContent = generaHTMLEmailOspite(datiPrenotazione, codiciCassetta);
+
+    // Carica allegati foto
+    const allegati = await caricaAllegatiFoto();
+    console.log(`📎 Foto caricate: ${allegati.length}`);
+
+    // Invia email con foto allegate
+    await inviaEmailConNodemailer(emailOspite, datiPrenotazione, htmlContent, allegati);
+
+    console.log('✅ Email ospite inviata con successo');
+    console.log('📧 === FINE INVIO EMAIL OSPITE ===');
+
+    return res.status(200).json({
+      success: true,
+      message: 'Email inviata con successo',
+      codiciCassetta: codiciCassetta.map(c => c.codice),
+      emailDestinatario: emailOspite,
+      numeroAllegati: allegati.length
+    });
+
+  } catch (error) {
+    console.error('❌ Errore invio email ospite:', error);
+    console.error('Stack:', error.stack);
+    return res.status(500).json({
+      error: 'Errore invio email',
+      message: error.message
+    });
+  }
 }
 
-// ===== FUNZIONE GENERAZIONE HTML (MODIFICATA per includere foto inline) =====
-function generaHTMLEmailOspite(dati, codiceCassetta) {
+// ===== FUNZIONE HTML AGGIORNATA =====
+function generaHTMLEmailOspite(dati, codiciCassetta) {
   const dataFormattata = new Date(dati.dataCheckin).toLocaleDateString('it-IT', {
     weekday: 'long',
     year: 'numeric',
@@ -195,10 +198,42 @@ function generaHTMLEmailOspite(dati, codiceCassetta) {
 
   const totale = typeof dati.totale === 'string' ? parseFloat(dati.totale) : (dati.totale || 0);
 
-  // Determina gli orari in base alla data di check-in
   const CHECKIN_OPEN_TIME = "16:00";
   const CHECKIN_CLOSE_TIME = "00:00";
   const CHECKOUT_CLOSE_TIME = "10:00";
+
+  // ✅ Genera HTML per codici (singolo o multipli)
+  let codiciHTML = '';
+  
+  if (codiciCassetta.length === 1) {
+    // Un solo appartamento
+    codiciHTML = `
+      <div class="code-section">
+        <div class="code-title">🔑 Codice Cassetta Sicurezza</div>
+        <div class="code-subtitle">${codiciCassetta[0].nome}</div>
+        <div class="code-box">${codiciCassetta[0].codice}</div>
+        <div class="code-note">Conserva questo codice con cura</div>
+      </div>
+    `;
+  } else {
+    // Entrambi gli appartamenti
+    codiciHTML = `
+      <div class="code-section">
+        <div class="code-title">🔑 Codici Cassette Sicurezza</div>
+        <div class="code-note" style="margin-bottom: 20px;">Hai prenotato entrambi gli appartamenti</div>
+        
+        ${codiciCassetta.map(cassetta => `
+          <div class="code-sub-section">
+            <div class="code-subtitle">🏠 ${cassetta.nome}</div>
+            <div class="code-box">${cassetta.codice}</div>
+            <small style="display: block; margin-top: 5px; opacity: 0.9; font-size: 14px;">
+              ${cassetta.descrizione}
+            </small>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
 
   return `
     <!DOCTYPE html>
@@ -270,6 +305,12 @@ function generaHTMLEmailOspite(dati, codiceCassetta) {
           margin-bottom: 15px;
         }
         
+        .code-subtitle {
+          font-size: 16px;
+          margin-bottom: 10px;
+          font-weight: 500;
+        }
+        
         .code-box {
           background: rgba(255, 255, 255, 0.2);
           padding: 20px;
@@ -278,6 +319,20 @@ function generaHTMLEmailOspite(dati, codiceCassetta) {
           font-weight: bold;
           letter-spacing: 8px;
           margin: 15px 0;
+        }
+        
+        /* ✅ NUOVO: Stili per sezioni multiple */
+        .code-sub-section {
+          background: rgba(255, 255, 255, 0.1);
+          padding: 20px;
+          border-radius: 8px;
+          margin: 15px 0;
+        }
+        
+        .code-sub-section .code-box {
+          font-size: 40px;
+          padding: 15px;
+          background: rgba(255, 255, 255, 0.2);
         }
         
         .code-note {
@@ -358,7 +413,6 @@ function generaHTMLEmailOspite(dati, codiceCassetta) {
           border-left: 3px solid #b89968;
         }
 
-        /* NUOVA SEZIONE: Galleria foto */
         .photo-gallery {
           margin: 30px 0;
         }
@@ -426,11 +480,7 @@ function generaHTMLEmailOspite(dati, codiceCassetta) {
             Siamo felici di accoglierti nella nostra struttura!
           </p>
           
-          <div class="code-section">
-            <div class="code-title">🔑 Codice Cassetta Sicurezza</div>
-            <div class="code-box">${codiceCassetta}</div>
-            <div class="code-note">Conserva questo codice con cura</div>
-          </div>
+          ${codiciHTML}
           
           <div class="info-section">
             <div class="info-title">📋 Dettagli della tua prenotazione</div>
@@ -484,7 +534,7 @@ function generaHTMLEmailOspite(dati, codiceCassetta) {
             </div>
 
             <p style="margin-top: 20px;">
-              • Quando arrivi alla proprietà, la cassetta di sicurezza è situata in una nicchia dietro allo scuro dell'appartamento al piano terra (vedi foto sotto).
+              • Quando arrivi alla proprietà, ${codiciCassetta.length > 1 ? 'le cassette di sicurezza sono situate' : 'la cassetta di sicurezza è situata'} in una nicchia dietro allo scuro ${codiciCassetta.length > 1 ? 'degli appartamenti al' : 'dell\'appartamento al'} piano terra (vedi foto sotto).
             </p>
 
             <p>
@@ -492,7 +542,6 @@ function generaHTMLEmailOspite(dati, codiceCassetta) {
             </p>
           </div>
 
-          <!-- ⭐ NUOVA SEZIONE: Galleria foto inline -->
           <div class="photo-gallery">
             <h3>📸 Foto di riferimento per l'accesso</h3>
             
@@ -503,12 +552,12 @@ function generaHTMLEmailOspite(dati, codiceCassetta) {
 
             <div class="photo-item">
               <img src="cid:cassetta_sicurezza" alt="Cassetta di Sicurezza">
-              <p class="photo-caption">2. Cassetta di sicurezza con codice ${codiceCassetta}</p>
+              <p class="photo-caption">2. Cassetta di sicurezza con ${codiciCassetta.length > 1 ? 'codici' : 'codice'} ${codiciCassetta.map(c => c.codice).join(' e ')}</p>
             </div>
 
             <div class="photo-item">
               <img src="cid:ubicazione_cassetta" alt="Ubicazione Cassetta">
-              <p class="photo-caption">3. Ubicazione esatta della cassetta</p>
+              <p class="photo-caption">3. Ubicazione esatta ${codiciCassetta.length > 1 ? 'delle cassette' : 'della cassetta'}</p>
             </div>
           </div>
           
