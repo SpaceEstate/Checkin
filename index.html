@@ -132,14 +132,44 @@
           </div>
 
           <div class="form-grid">
-            <div class="form-group">
-              <label class="form-label" for="appartamento">Appartamento</label>
-              <select id="appartamento" name="appartamento" class="form-select" required>
-                <option value="">Seleziona appartamento</option>
-                <option value="La Columbera - Torre, Appartamento con 2 camere da letto">La Columbera - Torre, Appartamento con 2 camere da letto</option>
-                <option value="La Columbera - Corte, Appartamento con 1 camere da letto">La Columbera - Corte, Appartamento con 1 camere da letto</option>
-              </select>
-            </div>
+            <!-- Sostituisci la sezione appartamento nello step-1 con questo -->
+
+<div class="form-group full-width">
+  <label class="form-label">Appartamento/i *</label>
+  <p style="font-size: 0.9rem; color: #a0927f; margin-bottom: 10px;">
+    Seleziona uno o entrambi gli appartamenti
+  </p>
+  
+  <div class="appartamenti-checkbox-group">
+    <label class="appartamento-checkbox-item">
+      <input 
+        type="checkbox" 
+        name="appartamento[]" 
+        value="La Columbera - Torre, Appartamento con 2 camere da letto"
+        onchange="aggiornaAppartamentiSelezionati()">
+      <span class="checkbox-custom-app"></span>
+      <span class="appartamento-label">
+        <strong>🏰 Torre</strong>
+        <small>Appartamento con 2 camere da letto</small>
+      </span>
+    </label>
+    
+    <label class="appartamento-checkbox-item">
+      <input 
+        type="checkbox" 
+        name="appartamento[]" 
+        value="La Columbera - Corte, Appartamento con 1 camere da letto"
+        onchange="aggiornaAppartamentiSelezionati()">
+      <span class="checkbox-custom-app"></span>
+      <span class="appartamento-label">
+        <strong>🏡 Corte</strong>
+        <small>Appartamento con 1 camera da letto</small>
+      </span>
+    </label>
+  </div>
+  
+  <input type="hidden" id="appartamento" name="appartamento" value="">
+</div>
 
             <div class="form-group">
               <label class="form-label" for="numero-ospiti">Numero ospiti</label>
