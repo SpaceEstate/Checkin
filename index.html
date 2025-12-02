@@ -134,42 +134,75 @@
           <div class="form-grid">
             <!-- Sostituisci la sezione appartamento nello step-1 con questo -->
 
+<!-- SOSTITUISCI la sezione appartamento in index.html (dentro step-1) con questo codice -->
+
 <div class="form-group full-width">
-  <label class="form-label">Appartamento/i *</label>
-  <p style="font-size: 0.9rem; color: #a0927f; margin-bottom: 10px;">
-    Seleziona uno o entrambi gli appartamenti
-  </p>
-  
-  <div class="appartamenti-checkbox-group">
-    <label class="appartamento-checkbox-item">
-      <input 
-        type="checkbox" 
-        name="appartamento[]" 
-        value="La Columbera - Torre, Appartamento con 2 camere da letto"
-        onchange="aggiornaAppartamentiSelezionati()">
-      <span class="checkbox-custom-app"></span>
-      <span class="appartamento-label">
-        <strong>🏰 Torre</strong>
-        <small>Appartamento con 2 camere da letto</small>
-      </span>
-    </label>
-    
-    <label class="appartamento-checkbox-item">
-      <input 
-        type="checkbox" 
-        name="appartamento[]" 
-        value="La Columbera - Corte, Appartamento con 1 camere da letto"
-        onchange="aggiornaAppartamentiSelezionati()">
-      <span class="checkbox-custom-app"></span>
-      <span class="appartamento-label">
-        <strong>🏡 Corte</strong>
-        <small>Appartamento con 1 camera da letto</small>
-      </span>
-    </label>
-  </div>
-  
-  <input type="hidden" id="appartamento" name="appartamento" value="">
+  <label class="form-label" for="appartamento">Appartamento/i *</label>
+  <select 
+    id="appartamento" 
+    name="appartamento" 
+    class="form-select" 
+    multiple 
+    size="3"
+    required
+    onchange="aggiornaAppartamentiSelezionati()">
+    <option value="La Columbera - Torre, Appartamento con 2 camere da letto">
+      🏰 Torre - Appartamento con 2 camere da letto
+    </option>
+    <option value="La Columbera - Corte, Appartamento con 1 camere da letto">
+      🏡 Corte - Appartamento con 1 camera da letto
+    </option>
+  </select>
+  <small style="display: block; color: #a0927f; font-size: 0.85rem; margin-top: 8px; font-style: italic;">
+    💡 Tieni premuto <strong>Ctrl</strong> (Windows/Linux) o <strong>Cmd</strong> (Mac) per selezionare più appartamenti
+  </small>
 </div>
+
+<style>
+/* Stili per il select multiplo */
+select[multiple].form-select {
+  min-height: 120px;
+  padding: 8px;
+  line-height: 1.6;
+}
+
+select[multiple].form-select option {
+  padding: 12px 15px;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background: white;
+}
+
+select[multiple].form-select option:hover {
+  background: linear-gradient(135deg, rgba(184, 153, 104, 0.1) 0%, rgba(166, 124, 82, 0.1) 100%);
+}
+
+select[multiple].form-select option:checked {
+  background: linear-gradient(135deg, #b89968 0%, #a67c52 100%);
+  color: white;
+  font-weight: 600;
+}
+
+/* Mobile: aggiungi bordi più evidenti */
+@media (max-width: 768px) {
+  select[multiple].form-select {
+    min-height: 140px;
+    font-size: 16px;
+  }
+  
+  select[multiple].form-select option {
+    padding: 15px;
+    margin-bottom: 10px;
+    border: 2px solid #e8dcc0;
+  }
+  
+  select[multiple].form-select option:checked {
+    border-color: #a67c52;
+  }
+}
+</style>
 
             <div class="form-group">
               <label class="form-label" for="numero-ospiti">Numero ospiti</label>
