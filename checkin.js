@@ -10,27 +10,37 @@ const API_BASE_URL = 'https://checkin-six-coral.vercel.app/api';
 
 // === FUNZIONE: Aggiorna appartamenti selezionati ===
 window.aggiornaAppartamentiSelezionati = function() {
-  const checkboxes = document.querySelectorAll('input[name="appartamento[]"]:checked');
-  const hiddenInput = document.getElementById('appartamento');
+  const selectElement = document.getElementById('appartamento');
   
-  const selezionati = Array.from(checkboxes).map(cb => cb.value);
-  
-  if (selezionati.length === 0) {
-    hiddenInput.value = '';
-  } else if (selezionati.length === 1) {
-    hiddenInput.value = selezionati[0];
-  } else {
-    // Entrambi selezionati - formato speciale
-    hiddenInput.value = selezionati.join(' + ');
+  if (!selectElement) {
+    console.warn('⚠️ Select appartamento non trovato');
+    return;
   }
+
+  // Ottieni tutti i valori selezionati
+  const selectedOptions = Array.from(selectElement.selectedOptions);
+  const valoriSelezionati = selectedOptions.map(option => option.value);
   
-  console.log('📍 Appartamenti selezionati:', hiddenInput.value);
+  console.log('📍 Appartamenti selezionati:', valoriSelezionati);
+  
+  // Aggiorna il valore del select in base alla selezione
+  if (valoriSelezionati.length === 0) {
+    selectElement.value = '';
+  } else if (valoriSelezionati.length === 1) {
+    // Un solo appartamento
+    selectElement.setAttribute('data-selected', valoriSelezionati[0]);
+  } else {
+    // Entrambi gli appartamenti - formato speciale per lo script Google Apps
+    const valoreComposto = valoriSelezionati.join(' + ');
+    selectElement.setAttribute('data-selected', valoreComposto);
+  }
 }
+
 
 // === MODIFICA: validaStep1 ===
 function validaStep1() {
   const dataCheckinInput = document.getElementById("data-checkin");
-  const hiddenAppartamento = document.getElementById("appartamento");
+  const appartamentoSelect = document.getElementById("appartamento");
   const numOspitiSelect = document.getElementById("numero-ospiti");
   const numNottiInput = document.getElementById("numero-notti");
   
@@ -50,9 +60,11 @@ function validaStep1() {
     return false;
   }
 
-  // ✅ VALIDAZIONE APPARTAMENTI
-  if (!hiddenAppartamento?.value) {
+  // ✅ VALIDAZIONE SELECT MULTIPLO
+  const selectedOptions = Array.from(appartamentoSelect?.selectedOptions || []);
+  if (selectedOptions.length === 0) {
     showNotification("Seleziona almeno un appartamento", "error");
+    appartamentoSelect?.focus();
     return false;
   }
 
@@ -98,22 +110,23 @@ function precompilaDatiPrenotazione(dati) {
     dataInput.style.cursor = 'not-allowed';
   }
   
-  // ✅ APPARTAMENTI - Gestisce sia singolo che multiplo
-  const appartamenti = dati.appartamento || '';
-  const checkboxes = document.querySelectorAll('input[name="appartamento[]"]');
-  
-  checkboxes.forEach(checkbox => {
-    checkbox.disabled = true;
-    checkbox.style.cursor = 'not-allowed';
+  // ✅ APPARTAMENTI - Gestisce select multiplo
+  const appartamentoSelect = document.getElementById('appartamento');
+  if (appartamentoSelect && dati.appartamento) {
+    const appartamenti = dati.appartamento.includes(' + ') 
+      ? dati.appartamento.split(' + ')
+      : [dati.appartamento];
     
-    // Se l'appartamento contiene il valore del checkbox, selezionalo
-    if (appartamenti.includes(checkbox.value)) {
-      checkbox.checked = true;
-    }
-  });
-  
-  // Aggiorna il campo hidden
-  aggiornaAppartamentiSelezionati();
+    // Seleziona le opzioni corrispondenti
+    Array.from(appartamentoSelect.options).forEach(option => {
+      const shouldSelect = appartamenti.some(app => option.value.includes(app.trim()));
+      option.selected = shouldSelect;
+    });
+    
+    appartamentoSelect.disabled = true;
+    appartamentoSelect.style.backgroundColor = '#f5f2e9';
+    appartamentoSelect.style.cursor = 'not-allowed';
+  }
   
   // Numero ospiti
   const ospitiSelect = document.getElementById('numero-ospiti');
@@ -797,20 +810,25 @@ function preparaRiepilogo() {
   console.log('✅ Container riepilogo trovato');
   console.log(`💰 Totale calcolato: €${totale.toFixed(2)}`);
   
-  // ✅ Pulisci contenitore
   summaryContent.innerHTML = '';
   
-  // ✅ Crea fragment per performance
   const fragment = document.createDocumentFragment();
   
   // === SEZIONE DETTAGLI SOGGIORNO ===
   const dettagliSection = document.createElement('div');
   dettagliSection.className = 'summary-section';
   
-  const appartamento = document.getElementById('appartamento')?.value || 'N/A';
+  // ✅ Gestisci select multiplo
+  const appartamentoSelect = document.getElementById('appartamento');
+  const selectedOptions = Array.from(appartamentoSelect?.selectedOptions || []);
+  const appartamenti = selectedOptions.map(opt => opt.value);
+  const appartamentoDisplay = appartamenti.length === 1 
+    ? appartamenti[0]
+    : appartamenti.join('<br>➕ ');
+  
   const dataFormatted = formatDataItaliana(dataCheckin);
   
-  console.log('📍 Dettagli:', { dataCheckin, appartamento, numeroOspiti, numeroNotti });
+  console.log('📍 Dettagli:', { dataCheckin, appartamenti, numeroOspiti, numeroNotti });
   
   dettagliSection.innerHTML = `
     <h3 style="font-size: 1.5rem; color: #8b7d6b; margin-bottom: 20px;">📍 Dettagli soggiorno</h3>
@@ -819,8 +837,8 @@ function preparaRiepilogo() {
       <span><strong>${dataFormatted}</strong></span>
     </div>
     <div class="summary-item">
-      <span>Appartamento:</span>
-      <span><strong>${appartamento}</strong></span>
+      <span>Appartamento/i:</span>
+      <span><strong>${appartamentoDisplay}</strong></span>
     </div>
     <div class="summary-item">
       <span>Numero ospiti:</span>
@@ -877,16 +895,13 @@ function preparaRiepilogo() {
   `;
   fragment.appendChild(totaleSection);
   
-  // ✅ Inserisci tutto in una volta
   summaryContent.appendChild(fragment);
   
   console.log('✅ Riepilogo inserito nel DOM');
   console.log('📋 === FINE PREPARAZIONE RIEPILOGO ===');
   
-  // Aggiorna bottoni
   aggiornaBottonePagamento(totale);
   
-  // Forza scroll verso il riepilogo
   setTimeout(() => {
     const finalStep = document.getElementById('step-final');
     if (finalStep) {
@@ -894,6 +909,7 @@ function preparaRiepilogo() {
     }
   }, 100);
 }
+
 
 // === FUNZIONE DI DEBUG ===
 // Aggiungi questa funzione per testare il riepilogo
@@ -1119,9 +1135,19 @@ function validaPrenotazioneCompleta() {
 }
 
 async function raccogliDatiPrenotazione() {
+  // Ottieni appartamenti selezionati dal select multiplo
+  const appartamentoSelect = document.getElementById('appartamento');
+  const selectedOptions = Array.from(appartamentoSelect?.selectedOptions || []);
+  const appartamenti = selectedOptions.map(opt => opt.value);
+  
+  // Formato: se 1 solo app, usa il valore; se entrambi, uniscili con " + "
+  const appartamentoValore = appartamenti.length === 1 
+    ? appartamenti[0] 
+    : appartamenti.join(' + ');
+
   const datiPrenotazione = {
     dataCheckin: dataCheckin,
-    appartamento: document.getElementById('appartamento')?.value,
+    appartamento: appartamentoValore,
     numeroOspiti: numeroOspiti,
     numeroNotti: numeroNotti,
     tipoGruppo: document.getElementById('tipo-gruppo')?.value || null,
