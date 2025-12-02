@@ -236,75 +236,66 @@
 
     <script>
         async function caricaDatiPagamento() {
-            const urlParams = new URLSearchParams(window.location.search);
-            const sessionId = urlParams.get("session_id");
-            
-            console.log("🔍 Session ID:", sessionId);
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionId = urlParams.get("session_id");
+    
+    console.log("🔍 Session ID:", sessionId);
 
-            if (!sessionId) {
-                mostraErrore("Sessione non trovata nell'URL");
-                return;
+    if (!sessionId) {
+        mostraErrore("Sessione non trovata nell'URL");
+        return;
+    }
+
+    try {
+        console.log("📡 Caricamento dati sessione...");
+        
+        const response = await fetch(`https://checkin-six-coral.vercel.app/api/get-session?session_id=${sessionId}`, {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json'
             }
+        });
 
-            try {
-                // CORREZIONE: URL API corretta
-                console.log("📡 Caricamento dati sessione...");
-                
-                const response = await fetch(`https://checkin-six-coral.vercel.app/api/get-session?session_id=${sessionId}`, {
-                    method: 'GET',
-                    headers: {
-                        'Accept': 'application/json'
-                    }
-                });
-
-                if (!response.ok) {
-                    throw new Error(`Errore HTTP: ${response.status}`);
-                }
-
-                const sessionData = await response.json();
-                console.log("✅ Dati sessione ricevuti:", sessionData);
-
-                // Mostra i dettagli della prenotazione
-                mostraDettagliPrenotazione(sessionData);
-
-                // Determina il codice della cassetta
-                mostraCodiceCassetta(sessionData.appartamento);
-
-                // Pulizia dati sensibili
-                sessionStorage.removeItem('datiPrenotazione');
-                sessionStorage.removeItem('paymentTimestamp');
-
-            } catch (error) {
-                console.error("❌ Errore nel caricamento:", error);
-                
-                // FALLBACK: Prova a recuperare dati da sessionStorage
-                console.log("🔄 Tentativo recupero da sessionStorage...");
-                tentaRecuperoDaSessionStorage();
-            }
+        if (!response.ok) {
+            throw new Error(`Errore HTTP: ${response.status}`);
         }
+
+        const sessionData = await response.json();
+        console.log("✅ Dati sessione ricevuti:", sessionData);
+
+        mostraDettagliPrenotazione(sessionData);
+        mostraCodiciCassetta(sessionData.appartamento); // ✅ USA LA NUOVA FUNZIONE
+
+        sessionStorage.removeItem('datiPrenotazione');
+        sessionStorage.removeItem('paymentTimestamp');
+
+    } catch (error) {
+        console.error("❌ Errore nel caricamento:", error);
+        tentaRecuperoDaSessionStorage();
+    }
+}
 
         function tentaRecuperoDaSessionStorage() {
-            try {
-                const datiSalvati = sessionStorage.getItem('datiPrenotazione');
-                
-                if (datiSalvati) {
-                    const datiPrenotazione = JSON.parse(datiSalvati);
-                    console.log("✅ Dati recuperati da sessionStorage:", datiPrenotazione);
-                    
-                    mostraDettagliPrenotazione(datiPrenotazione);
-                    mostraCodiceCassetta(datiPrenotazione.appartamento);
-                    
-                    // Pulizia dopo uso
-                    sessionStorage.removeItem('datiPrenotazione');
-                    sessionStorage.removeItem('paymentTimestamp');
-                } else {
-                    mostraErrore("Nessun dato disponibile per questa sessione");
-                }
-            } catch (error) {
-                console.error("❌ Errore nel recupero da sessionStorage:", error);
-                mostraErrore("Errore nel caricamento dei dati salvati");
-            }
+    try {
+        const datiSalvati = sessionStorage.getItem('datiPrenotazione');
+        
+        if (datiSalvati) {
+            const datiPrenotazione = JSON.parse(datiSalvati);
+            console.log("✅ Dati recuperati da sessionStorage:", datiPrenotazione);
+            
+            mostraDettagliPrenotazione(datiPrenotazione);
+            mostraCodiciCassetta(datiPrenotazione.appartamento); // ✅ USA LA NUOVA FUNZIONE
+            
+            sessionStorage.removeItem('datiPrenotazione');
+            sessionStorage.removeItem('paymentTimestamp');
+        } else {
+            mostraErrore("Nessun dato disponibile per questa sessione");
         }
+    } catch (error) {
+        console.error("❌ Errore nel recupero da sessionStorage:", error);
+        mostraErrore("Errore nel caricamento dei dati salvati");
+    }
+}
 
         function mostraDettagliPrenotazione(sessionData) {
             const container = document.getElementById('booking-details');
@@ -359,36 +350,63 @@
             `;
         }
 
-        function mostraCodiceCassetta(appartamento) {
-            const codiceElement = document.getElementById('codice-cassetta');
-            
-            if (!appartamento) {
-                codiceElement.textContent = "N/A";
-                codiceElement.classList.add('error');
-                codiceElement.classList.remove('loading');
-                return;
-            }
+        function mostraCodiciCassetta(appartamento) {
+    const codiceElement = document.getElementById('codice-cassetta');
+    
+    if (!appartamento) {
+        codiceElement.innerHTML = '<div class="error">N/A</div>';
+        return;
+    }
 
-            let codice = "N/A";
-            
-            // Determina il codice basandosi sul nome dell'appartamento
-            const appartamentoLower = appartamento.toLowerCase();
-            
-            if (appartamentoLower.includes("corte")) {
-                codice = "1933";
-            } else if (appartamentoLower.includes("torre")) {
-                codice = "1935";
-            }
+    const appartamentoLower = appartamento.toLowerCase();
+    const codici = [];
 
-            codiceElement.textContent = codice;
-            codiceElement.classList.remove('loading');
-            
-            if (codice === "N/A") {
-                codiceElement.classList.add('error');
-            }
+    // Determina quali appartamenti sono stati prenotati
+    if (appartamentoLower.includes('corte')) {
+        codici.push({
+            codice: '1933',
+            nome: 'Corte',
+            descrizione: 'Appartamento con 1 camera da letto'
+        });
+    }
 
-            console.log(`🔑 Codice cassetta per "${appartamento}": ${codice}`);
-        }
+    if (appartamentoLower.includes('torre')) {
+        codici.push({
+            codice: '1935',
+            nome: 'Torre',
+            descrizione: 'Appartamento con 2 camere da letto'
+        });
+    }
+
+    if (codici.length === 0) {
+        codiceElement.innerHTML = '<div class="error">Codice non disponibile</div>';
+        return;
+    }
+
+    // ✅ Genera HTML in base al numero di appartamenti
+    if (codici.length === 1) {
+        // Un solo appartamento
+        codiceElement.innerHTML = codici[0].codice;
+        codiceElement.classList.remove('loading');
+    } else {
+        // Entrambi gli appartamenti
+        codiceElement.innerHTML = `
+            <div class="multi-codes">
+                ${codici.map(cassetta => `
+                    <div class="code-item">
+                        <div class="code-label">🏠 ${cassetta.nome}</div>
+                        <div class="code-number">${cassetta.codice}</div>
+                        <small class="code-desc">${cassetta.descrizione}</small>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+        codiceElement.classList.remove('loading');
+        codiceElement.style.fontSize = '1.2rem'; // Riduci font per contenere entrambi
+    }
+
+    console.log(`🔑 Codici cassetta per "${appartamento}":`, codici.map(c => c.codice).join(', '));
+}
 
         function mostraErrore(messaggio) {
             // Aggiorna dettagli prenotazione
