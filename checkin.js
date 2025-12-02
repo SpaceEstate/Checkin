@@ -113,6 +113,9 @@ function precompilaDatiPrenotazione(dati) {
   // ✅ APPARTAMENTI - CORRETTA SELEZIONE
   const appartamentoSelect = document.getElementById('appartamento');
   if (appartamentoSelect && dati.appartamento) {
+   console.log("VALORE GREZZO ARRIVATO DAL SERVER →", dati.appartamento);
+console.log("TIPO →", typeof dati.appartamento);
+
     // Gestione formati multipli: " + " oppure ","
 let appartamenti;
 
