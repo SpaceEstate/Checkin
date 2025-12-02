@@ -113,9 +113,20 @@ function precompilaDatiPrenotazione(dati) {
   // ✅ APPARTAMENTI - CORRETTA SELEZIONE
   const appartamentoSelect = document.getElementById('appartamento');
   if (appartamentoSelect && dati.appartamento) {
-    const appartamenti = dati.appartamento.includes(' + ') 
-      ? dati.appartamento.split(' + ')
-      : [dati.appartamento];
+    // Gestione formati multipli: " + " oppure ","
+let appartamenti;
+
+if (dati.appartamento.includes(' + ')) {
+  appartamenti = dati.appartamento.split(' + ');
+} else if (dati.appartamento.includes(',')) {
+  appartamenti = dati.appartamento.split(',');
+} else {
+  appartamenti = [dati.appartamento];
+}
+
+// Pulisci spazi
+appartamenti = appartamenti.map(a => a.trim());
+
     
     console.log('🏠 Appartamenti da selezionare:', appartamenti);
     
