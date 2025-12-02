@@ -1519,15 +1519,18 @@ function gestisciKeyboardVirtuale() {
 }
 
 // === INIZIALIZZAZIONE ===
+// ✅ VERSIONE CORRETTA - Tutto il codice è DENTRO l'event listener
 document.addEventListener('DOMContentLoaded', function() {
   console.log('🚀 Check-in form inizializzato');
   console.log(`📱 Dispositivo: ${isMobile ? 'Mobile' : 'Desktop'}, Android: ${isAndroid}, Vecchio Android: ${isOldAndroid}`);
   
+  // Imposta data minima per check-in
   const dataCheckinInput = document.getElementById('data-checkin');
   if (dataCheckinInput) {
     const oggi = new Date().toISOString().split('T')[0];
     dataCheckinInput.min = oggi;
   }
+  
   // ✅ FIX: Click semplice per selezione multipla
   const appartamentoSelect = document.getElementById('appartamento');
   if (appartamentoSelect) {
@@ -1544,7 +1547,7 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     });
   }
-});
+
   // Inizializza mostrando lo step 0 (verifica prenotazione)
   document.querySelectorAll('.step').forEach(step => step.classList.remove('active'));
   const firstStep = document.getElementById('step-0');
@@ -1561,6 +1564,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
   
+  // Gestisci ritorno da Stripe
   gestisciRitornoStripe();
   
   // Event listener per numero ospiti
@@ -1605,11 +1609,13 @@ document.addEventListener('DOMContentLoaded', function() {
     }, 100);
   }
   
+  // Cleanup fotocamera prima di chiudere
   window.addEventListener('beforeunload', function() {
     if (currentStream) currentStream.getTracks().forEach(track => track.stop());
   });
 
- setTimeout(() => {
+  // Verifica che summary-content esista
+  setTimeout(() => {
     const summaryContent = document.getElementById('summary-content');
     if (!summaryContent) {
       console.error('⚠️ ATTENZIONE: #summary-content non trovato nel DOM al caricamento!');
@@ -1618,9 +1624,10 @@ document.addEventListener('DOMContentLoaded', function() {
       console.log('✅ #summary-content presente nel DOM');
     }
   }, 500);
-});
+  
+}); // ⬅️ FINE DOMContentLoaded - CHIUSURA CORRETTA
 
-// Stili aggiuntivi per input errore
+// Stili aggiuntivi per input errore (FUORI dall'event listener è OK)
 const dateErrorStyle = document.createElement('style');
 dateErrorStyle.textContent = `
   .date-text-input.error {
