@@ -1620,4 +1620,158 @@ body {
   flex-shrink: 0;
   margin: 0;
 }
+    /* ===== STILI CHECKBOX APPARTAMENTI ===== */
+.appartamenti-checkbox-group {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.appartamento-checkbox-item {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 15px;
+  background: white;
+  border: 2px solid #e8dcc0;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.appartamento-checkbox-item:hover {
+  border-color: #b89968;
+  box-shadow: 0 2px 8px rgba(184, 153, 104, 0.15);
+}
+
+.appartamento-checkbox-item input[type="checkbox"] {
+  display: none;
+}
+
+.checkbox-custom-app {
+  width: 24px;
+  height: 24px;
+  border: 2px solid #d4c7b5;
+  border-radius: 6px;
+  background: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.checkbox-custom-app::after {
+  content: '✓';
+  color: white;
+  font-size: 16px;
+  font-weight: bold;
+  opacity: 0;
+  transform: scale(0.7);
+  transition: all 0.2s ease;
+}
+
+.appartamento-checkbox-item input[type="checkbox"]:checked + .checkbox-custom-app {
+  background: linear-gradient(135deg, #b89968 0%, #a67c52 100%);
+  border-color: #a67c52;
+  box-shadow: 0 2px 8px rgba(184, 153, 104, 0.3);
+}
+
+.appartamento-checkbox-item input[type="checkbox"]:checked + .checkbox-custom-app::after {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.appartamento-checkbox-item input[type="checkbox"]:checked ~ .appartamento-label {
+  color: #a67c52;
+}
+
+.appartamento-label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex: 1;
+}
+
+.appartamento-label strong {
+  font-size: 1.1rem;
+  color: #8b7d6b;
+}
+
+.appartamento-label small {
+  font-size: 0.9rem;
+  color: #a0927f;
+}
+
+/* ===== STILI CODICI MULTIPLI (successo-pagamento.html) ===== */
+.multi-codes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px;
+  width: 100%;
+}
+
+.code-item {
+  background: rgba(255, 255, 255, 0.15);
+  padding: 20px;
+  border-radius: 12px;
+  text-align: center;
+}
+
+.code-label {
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin-bottom: 10px;
+  color: #fff;
+  opacity: 0.95;
+}
+
+.code-number {
+  font-size: 2.2rem;
+  font-weight: bold;
+  letter-spacing: 0.15em;
+  margin: 15px 0;
+  background: rgba(255, 255, 255, 0.2);
+  padding: 15px;
+  border-radius: 8px;
+}
+
+.code-desc {
+  display: block;
+  font-size: 0.85rem;
+  opacity: 0.8;
+  margin-top: 8px;
+}
+
+/* Responsive Mobile */
+@media (max-width: 768px) {
+  .appartamento-checkbox-item {
+    padding: 12px;
+  }
+  
+  .appartamento-label strong {
+    font-size: 1rem;
+  }
+  
+  .appartamento-label small {
+    font-size: 0.85rem;
+  }
+}
+
+@media (max-width: 600px) {
+  .multi-codes {
+    grid-template-columns: 1fr;
+    gap: 15px;
+  }
+  
+  .code-number {
+    font-size: 1.8rem;
+    padding: 12px;
+  }
+  
+  .code-label {
+    font-size: 1rem;
+  }
+}
 }
