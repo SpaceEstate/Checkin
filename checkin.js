@@ -110,17 +110,37 @@ function precompilaDatiPrenotazione(dati) {
     dataInput.style.cursor = 'not-allowed';
   }
   
-  // ✅ APPARTAMENTI - Gestisce select multiplo
+  // ✅ APPARTAMENTI - CORRETTA SELEZIONE
   const appartamentoSelect = document.getElementById('appartamento');
   if (appartamentoSelect && dati.appartamento) {
     const appartamenti = dati.appartamento.includes(' + ') 
       ? dati.appartamento.split(' + ')
       : [dati.appartamento];
     
-    // Seleziona le opzioni corrispondenti
+    console.log('🏠 Appartamenti da selezionare:', appartamenti);
+    
+    // Deseleziona tutto prima
     Array.from(appartamentoSelect.options).forEach(option => {
-      const shouldSelect = appartamenti.some(app => option.value.includes(app.trim()));
-      option.selected = shouldSelect;
+      option.selected = false;
+    });
+    
+    // Seleziona le opzioni corrispondenti
+    appartamenti.forEach(app => {
+      const appLower = app.trim().toLowerCase();
+      
+      Array.from(appartamentoSelect.options).forEach(option => {
+        const optionLower = option.value.toLowerCase();
+        
+        // Match flessibile: cerca "corte" o "torre" nel nome
+        if (appLower.includes('corte') && optionLower.includes('corte')) {
+          option.selected = true;
+          console.log('✓ Selezionato Corte');
+        }
+        if (appLower.includes('torre') && optionLower.includes('torre')) {
+          option.selected = true;
+          console.log('✓ Selezionato Torre');
+        }
+      });
     });
     
     appartamentoSelect.disabled = true;
@@ -152,8 +172,6 @@ function precompilaDatiPrenotazione(dati) {
   if (tipoGruppoSelect) {
     tipoGruppoSelect.value = '';
     tipoGruppoSelect.disabled = false;
-    tipoGruppoSelect.style.backgroundColor = 'white';
-    tipoGruppoSelect.style.cursor = 'pointer';
   }
   
   const stepHeader = document.querySelector('#step-1 .step-subtitle');
@@ -168,7 +186,6 @@ function precompilaDatiPrenotazione(dati) {
   
   console.log('✅ Dati pre-compilati con successo');
 }
-
 // === FUNZIONE: Determina codici cassetta (MULTIPLI) ===
 function determinaCodiciCassetta(appartamento) {
   if (!appartamento) {
@@ -570,15 +587,16 @@ function validaStep1() {
   const oggi = new Date();
   oggi.setHours(0, 0, 0, 0);
   
-  // MODIFICATO: Non bloccare se i dati sono pre-compilati
   if (!window.datiPrecompilati && dataScelta < oggi) {
     showNotification("La data di check-in non può essere nel passato", "error");
     dataCheckinInput?.focus();
     return false;
   }
 
-  if (!appartamentoSelect?.value) {
-    showNotification("Seleziona un appartamento", "error");
+  // ✅ VALIDAZIONE SELECT MULTIPLO
+  const selectedOptions = Array.from(appartamentoSelect?.selectedOptions || []);
+  if (selectedOptions.length === 0) {
+    showNotification("Seleziona almeno un appartamento", "error");
     appartamentoSelect?.focus();
     return false;
   }
@@ -611,6 +629,7 @@ function validaStep1() {
 
   return true;
 }
+
 
 function validaStepOspite(numOspite) {
   const requiredFields = [
@@ -864,8 +883,6 @@ function preparaRiepilogo() {
     const nascita = document.querySelector(`input[name="ospite${i}_nascita"]`)?.value || '';
     const eta = nascita ? calcolaEta(nascita) : 0;
     
-    console.log(`👤 Ospite ${i}:`, { cognome, nome, eta });
-    
     ospitiHTML += `
       <div class="guest-summary" style="background: white; padding: 15px; border-radius: 10px; margin-bottom: 12px; border: 1px solid #e8dcc0;">
         <strong style="color: #8b7d6b; font-size: 1.05rem; display: block;">${cognome} ${nome}</strong>
@@ -909,7 +926,6 @@ function preparaRiepilogo() {
     }
   }, 100);
 }
-
 
 // === FUNZIONE DI DEBUG ===
 // Aggiungi questa funzione per testare il riepilogo
@@ -1512,7 +1528,23 @@ document.addEventListener('DOMContentLoaded', function() {
     const oggi = new Date().toISOString().split('T')[0];
     dataCheckinInput.min = oggi;
   }
-  
+  // ✅ FIX: Click semplice per selezione multipla
+  const appartamentoSelect = document.getElementById('appartamento');
+  if (appartamentoSelect) {
+    appartamentoSelect.addEventListener('mousedown', function(e) {
+      e.preventDefault();
+      const option = e.target;
+      
+      if (option.tagName === 'OPTION') {
+        // Toggle selezione senza Ctrl/Cmd
+        option.selected = !option.selected;
+        
+        // Trigger change event
+        this.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    });
+  }
+});
   // Inizializza mostrando lo step 0 (verifica prenotazione)
   document.querySelectorAll('.step').forEach(step => step.classList.remove('active'));
   const firstStep = document.getElementById('step-0');
