@@ -1,5 +1,5 @@
 // api/salva-dati-temporanei.js
-// VERSIONE CORRETTA per Redis con gestione CORS
+// VERSIONE CORRETTA per Redis con gestione CORS e validazione dimensioni
 
 import { createClient } from 'redis';
 
@@ -97,38 +97,94 @@ export default async function handler(req, res) {
       console.log(`📊 Ospiti: ${datiPrenotazione.ospiti?.length || 0}`);
       console.log(`📄 Documenti: ${datiPrenotazione.documenti?.length || 0}`);
 
-      // Calcola dimensione documenti
-      let totalSize = 0;
-      if (datiPrenotazione.documenti) {
-        totalSize = datiPrenotazione.documenti.reduce((acc, doc) => acc + (doc.dimensione || 0), 0);
-        console.log(`💾 Dimensione totale: ${(totalSize / 1024).toFixed(2)} KB`);
+      // ✅ NUOVO: Calcola dimensione e valida
+      const jsonString = JSON.stringify(datiPrenotazione);
+      const totalSize = jsonString.length;
+      const totalSizeMB = (totalSize / 1024 / 1024).toFixed(2);
+      
+      console.log(`💾 Dimensione payload: ${totalSizeMB} MB (${totalSize} bytes)`);
+
+      // ✅ NUOVO: Limite Redis ~10MB, ma attenzione a limiti Vercel (4.5MB body)
+      const MAX_REDIS_SIZE = 8 * 1024 * 1024; // 8MB per sicurezza
+      
+      if (totalSize > MAX_REDIS_SIZE) {
+        console.error(`❌ Payload troppo grande: ${totalSizeMB} MB (max 8 MB)`);
+        return res.status(413).json({
+          error: "Payload too large",
+          message: `I dati sono troppo grandi (${totalSizeMB} MB). Riduci la dimensione delle immagini dei documenti.`,
+          size: totalSize,
+          maxSize: MAX_REDIS_SIZE
+        });
       }
 
-      const ttlSeconds = 3600; // 1 ora
+      // Calcola dimensione documenti
+      let documentiSize = 0;
+      if (datiPrenotazione.documenti) {
+        documentiSize = datiPrenotazione.documenti.reduce((acc, doc) => {
+          return acc + (doc.base64 ? doc.base64.length : 0);
+        }, 0);
+        console.log(`📎 Dimensione documenti: ${(documentiSize / 1024 / 1024).toFixed(2)} MB`);
+      }
+
+      // ✅ NUOVO: TTL aumentato a 2 ore per dare tempo
+      const ttlSeconds = 7200; // 2 ore
       const dataToStore = {
         dati: datiPrenotazione,
         timestamp: Date.now(),
         expiresAt: new Date(Date.now() + ttlSeconds * 1000).toISOString()
       };
 
-      // Salva su Redis con TTL
-      await client.setEx(sessionId, ttlSeconds, JSON.stringify(dataToStore));
-
-      console.log(`✅ Dati salvati su Redis`);
-      console.log(`⏰ Scadenza: ${dataToStore.expiresAt}`);
-
-      return res.status(200).json({
-        success: true,
-        message: "Dati salvati temporaneamente su Redis",
-        sessionId: sessionId,
-        details: {
-          numeroOspiti: datiPrenotazione.ospiti?.length || 0,
-          numeroDocumenti: datiPrenotazione.documenti?.length || 0,
-          documentiSizeKB: (totalSize / 1024).toFixed(2),
-          expiresAt: dataToStore.expiresAt,
-          storage: 'Redis'
+      try {
+        // ✅ NUOVO: Salva con retry logic
+        let retries = 3;
+        let saved = false;
+        
+        while (retries > 0 && !saved) {
+          try {
+            await client.setEx(sessionId, ttlSeconds, jsonString);
+            saved = true;
+            console.log(`✅ Dati salvati su Redis (tentativo ${4 - retries})`);
+          } catch (redisError) {
+            retries--;
+            console.warn(`⚠️ Errore Redis, retry... (${retries} tentativi rimasti)`, redisError.message);
+            
+            if (retries === 0) {
+              throw redisError;
+            }
+            
+            // Attendi 1 secondo prima di riprovare
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
         }
-      });
+
+        console.log(`⏰ Scadenza: ${dataToStore.expiresAt}`);
+
+        return res.status(200).json({
+          success: true,
+          message: "Dati salvati temporaneamente su Redis",
+          sessionId: sessionId,
+          details: {
+            numeroOspiti: datiPrenotazione.ospiti?.length || 0,
+            numeroDocumenti: datiPrenotazione.documenti?.length || 0,
+            documentiSizeKB: (documentiSize / 1024).toFixed(2),
+            totalSizeKB: (totalSize / 1024).toFixed(2),
+            totalSizeMB: totalSizeMB,
+            expiresAt: dataToStore.expiresAt,
+            storage: 'Redis',
+            ttlSeconds: ttlSeconds
+          }
+        });
+        
+      } catch (error) {
+        console.error('❌ Errore Redis:', error);
+        console.error('Stack:', error.stack);
+        
+        return res.status(500).json({
+          error: "Errore Redis",
+          message: error.message,
+          hint: "Il server di storage potrebbe essere sovraccarico. Riprova tra qualche secondo."
+        });
+      }
     }
 
     // === GET: Recupera dati ===
