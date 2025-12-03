@@ -1,13 +1,11 @@
 // api/salva-dati-temporanei.js
-// VERSIONE CORRETTA per Redis con gestione CORS e validazione dimensioni
+// FIX: Parsing corretto dei dati Redis
 
 import { createClient } from 'redis';
 
-// Client Redis globale (riutilizzato tra invocazioni)
 let redisClient = null;
 
 async function getRedisClient() {
-  // Se il client esiste ed è connesso, riutilizzalo
   if (redisClient && redisClient.isOpen) {
     return redisClient;
   }
@@ -18,9 +16,7 @@ async function getRedisClient() {
   }
 
   console.log('🔌 Creazione nuovo client Redis...');
-  console.log('📋 URL format:', redisUrl.split('@')[0]); // Log senza password
   
-  // Determina se usare TLS in base all'URL
   const useTLS = redisUrl.startsWith('rediss://');
   
   redisClient = createClient({
@@ -56,11 +52,7 @@ async function getRedisClient() {
 
 export default async function handler(req, res) {
   console.log(`📥 ${req.method} /api/salva-dati-temporanei`);
-  console.log('📋 Origin:', req.headers.origin);
-  console.log('📋 Headers:', Object.keys(req.headers));
 
-  // ✅ CORS headers - SEMPRE per tutte le richieste
-  // IMPORTANTE: Questi devono essere impostati PRIMA di qualsiasi altra operazione
   const origin = req.headers.origin || req.headers.referer || 'https://spaceestate.github.io';
   
   res.setHeader("Access-Control-Allow-Origin", "https://spaceestate.github.io");
@@ -69,7 +61,6 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Headers", "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization");
   res.setHeader("Access-Control-Max-Age", "86400");
 
-  // ✅ Gestione OPTIONS (preflight) - DEVE tornare 200
   if (req.method === "OPTIONS") {
     console.log('✅ Preflight OPTIONS - Risposta 200 OK');
     res.status(200).end();
@@ -77,7 +68,6 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Connetti a Redis
     const client = await getRedisClient();
 
     // === POST: Salva dati ===
@@ -97,15 +87,13 @@ export default async function handler(req, res) {
       console.log(`📊 Ospiti: ${datiPrenotazione.ospiti?.length || 0}`);
       console.log(`📄 Documenti: ${datiPrenotazione.documenti?.length || 0}`);
 
-      // ✅ NUOVO: Calcola dimensione e valida
       const jsonString = JSON.stringify(datiPrenotazione);
       const totalSize = jsonString.length;
       const totalSizeMB = (totalSize / 1024 / 1024).toFixed(2);
       
       console.log(`💾 Dimensione payload: ${totalSizeMB} MB (${totalSize} bytes)`);
 
-      // ✅ NUOVO: Limite Redis ~10MB, ma attenzione a limiti Vercel (4.5MB body)
-      const MAX_REDIS_SIZE = 8 * 1024 * 1024; // 8MB per sicurezza
+      const MAX_REDIS_SIZE = 8 * 1024 * 1024;
       
       if (totalSize > MAX_REDIS_SIZE) {
         console.error(`❌ Payload troppo grande: ${totalSizeMB} MB (max 8 MB)`);
@@ -117,7 +105,6 @@ export default async function handler(req, res) {
         });
       }
 
-      // Calcola dimensione documenti
       let documentiSize = 0;
       if (datiPrenotazione.documenti) {
         documentiSize = datiPrenotazione.documenti.reduce((acc, doc) => {
@@ -126,16 +113,9 @@ export default async function handler(req, res) {
         console.log(`📎 Dimensione documenti: ${(documentiSize / 1024 / 1024).toFixed(2)} MB`);
       }
 
-      // ✅ NUOVO: TTL aumentato a 2 ore per dare tempo
       const ttlSeconds = 7200; // 2 ore
-      const dataToStore = {
-        dati: datiPrenotazione,
-        timestamp: Date.now(),
-        expiresAt: new Date(Date.now() + ttlSeconds * 1000).toISOString()
-      };
 
       try {
-        // ✅ NUOVO: Salva con retry logic
         let retries = 3;
         let saved = false;
         
@@ -152,12 +132,12 @@ export default async function handler(req, res) {
               throw redisError;
             }
             
-            // Attendi 1 secondo prima di riprovare
             await new Promise(resolve => setTimeout(resolve, 1000));
           }
         }
 
-        console.log(`⏰ Scadenza: ${dataToStore.expiresAt}`);
+        const expiresAt = new Date(Date.now() + ttlSeconds * 1000).toISOString();
+        console.log(`⏰ Scadenza: ${expiresAt}`);
 
         return res.status(200).json({
           success: true,
@@ -169,7 +149,7 @@ export default async function handler(req, res) {
             documentiSizeKB: (documentiSize / 1024).toFixed(2),
             totalSizeKB: (totalSize / 1024).toFixed(2),
             totalSizeMB: totalSizeMB,
-            expiresAt: dataToStore.expiresAt,
+            expiresAt: expiresAt,
             storage: 'Redis',
             ttlSeconds: ttlSeconds
           }
@@ -213,12 +193,29 @@ export default async function handler(req, res) {
         });
       }
 
-      const datiSalvati = JSON.parse(dataString);
-      const eta = Date.now() - datiSalvati.timestamp;
+      // ✅ FIX: Parsing diretto - i dati sono già l'oggetto completo
+      let datiPrenotazione;
+      try {
+        datiPrenotazione = JSON.parse(dataString);
+      } catch (parseError) {
+        console.error('❌ Errore parsing JSON:', parseError);
+        return res.status(500).json({
+          error: "Dati corrotti",
+          message: "Impossibile leggere i dati salvati"
+        });
+      }
 
-      console.log(`✅ Dati recuperati (età: ${(eta / 1000).toFixed(0)}s)`);
-      console.log(`📊 Ospiti: ${datiSalvati.dati.ospiti?.length || 0}`);
-      console.log(`📄 Documenti: ${datiSalvati.dati.documenti?.length || 0}`);
+      // ✅ VERIFICA: Controlla che i dati abbiano i campi essenziali
+      if (!datiPrenotazione || typeof datiPrenotazione !== 'object') {
+        console.error('❌ Struttura dati non valida');
+        return res.status(500).json({
+          error: "Struttura dati non valida",
+          message: "I dati recuperati non hanno il formato corretto"
+        });
+      }
+
+      console.log(`✅ Dati recuperati con successo`);
+      console.log(`📊 Struttura: ospiti=${datiPrenotazione.ospiti?.length || 0}, documenti=${datiPrenotazione.documenti?.length || 0}`);
 
       // Elimina dopo recupero (uso singolo)
       await client.del(sessionId);
@@ -226,16 +223,14 @@ export default async function handler(req, res) {
 
       return res.status(200).json({
         success: true,
-        datiPrenotazione: datiSalvati.dati,
+        datiPrenotazione: datiPrenotazione, // ✅ Ritorna direttamente l'oggetto
         metadata: {
-          salvataAlle: new Date(datiSalvati.timestamp).toISOString(),
-          etaSecondi: (eta / 1000).toFixed(0),
+          salvataAlle: new Date().toISOString(),
           storage: 'Redis'
         }
       });
     }
 
-    // Metodo non supportato
     return res.status(405).json({ 
       error: "Metodo non consentito",
       allowed: ["GET", "POST", "OPTIONS"]
@@ -245,7 +240,6 @@ export default async function handler(req, res) {
     console.error('❌ Errore:', error);
     console.error('Stack:', error.stack);
 
-    // Gestione errori Redis specifici
     if (error.message.includes('REDIS_URL')) {
       return res.status(500).json({
         error: "Configurazione Redis mancante",
