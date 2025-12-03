@@ -1,5 +1,5 @@
 // api/invia-email-ospite.js
-// VERSIONE CON ALLEGATI FOTO dalla cartella public/images/cassetta
+// VERSIONE CORRETTA - Rimossi duplicati export default handler
 
 import nodemailer from 'nodemailer';
 import { readFile } from 'fs/promises';
@@ -10,7 +10,7 @@ import { dirname } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// ===== HANDLER PRINCIPALE (EXPORT DEFAULT) =====
+// ===== HANDLER PRINCIPALE (UNICO) =====
 export default async function handler(req, res) {
   // CORS Headers
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -39,115 +39,7 @@ export default async function handler(req, res) {
     console.log('📬 Destinatario:', emailOspite);
     console.log('📊 Appartamento:', datiPrenotazione.appartamento);
 
-    // Genera codice cassetta in base all'appartamento
-    const codiceCassetta = determinaCodiceCassetta(datiPrenotazione.appartamento);
-    console.log('🔑 Codice cassetta generato:', codiceCassetta);
-
-    // Converti totale in numero se necessario
-    if (typeof datiPrenotazione.totale === 'string') {
-      datiPrenotazione.totale = parseFloat(datiPrenotazione.totale);
-    }
-
-    // Genera HTML email
-    const htmlContent = generaHTMLEmailOspite(datiPrenotazione, codiceCassetta);
-
-    // Carica allegati foto
-    const allegati = await caricaAllegatiFoto();
-    console.log(`📎 Foto caricate: ${allegati.length}`);
-
-    // Invia email con foto allegate
-    await inviaEmailConNodemailer(emailOspite, datiPrenotazione, htmlContent, allegati);
-
-    console.log('✅ Email ospite inviata con successo');
-    console.log('📧 === FINE INVIO EMAIL OSPITE ===');
-
-    return res.status(200).json({
-      success: true,
-      message: 'Email inviata con successo',
-      codiceCassetta: codiceCassetta,
-      emailDestinatario: emailOspite,
-      numeroAllegati: allegati.length
-    });
-
-  } catch (error) {
-    console.error('❌ Errore invio email ospite:', error);
-    console.error('Stack:', error.stack);
-    return res.status(500).json({
-      error: 'Errore invio email',
-      message: error.message
-    });
-  }
-}
-
-// ===== FUNZIONE AGGIORNATA: determinaCodiceCassetta =====
-function determinaCodiciCassetta(appartamento) {
-  if (!appartamento) {
-    console.warn('⚠️ Appartamento non specificato, uso codice generico');
-    return ['0000'];
-  }
-
-  const appartamentoLower = appartamento.toLowerCase();
-  const codici = [];
-
-  // Verifica entrambi gli appartamenti
-  if (appartamentoLower.includes('corte')) {
-    codici.push({
-      codice: '1933',
-      nome: 'Corte',
-      descrizione: 'Appartamento con 1 camera da letto'
-    });
-  }
-
-  if (appartamentoLower.includes('torre')) {
-    codici.push({
-      codice: '1935',
-      nome: 'Torre',
-      descrizione: 'Appartamento con 2 camere da letto'
-    });
-  }
-
-  if (codici.length === 0) {
-    console.warn('⚠️ Appartamento non riconosciuto:', appartamento);
-    return [{
-      codice: '0000',
-      nome: 'Generico',
-      descrizione: 'Appartamento non specificato'
-    }];
-  }
-
-  return codici;
-}
-
-// ===== HANDLER PRINCIPALE AGGIORNATO =====
-export default async function handler(req, res) {
-  // CORS Headers
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
-  }
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Metodo non consentito' });
-  }
-
-  console.log('📧 === INIZIO INVIO EMAIL OSPITE ===');
-
-  try {
-    const { emailOspite, datiPrenotazione } = req.body;
-
-    if (!emailOspite || !datiPrenotazione) {
-      return res.status(400).json({ 
-        error: 'Email ospite e dati prenotazione sono obbligatori' 
-      });
-    }
-
-    console.log('📬 Destinatario:', emailOspite);
-    console.log('📊 Appartamento:', datiPrenotazione.appartamento);
-
-    // ✅ Genera codici cassetta (può essere array)
+    // ✅ Genera codici cassetta (array)
     const codiciCassetta = determinaCodiciCassetta(datiPrenotazione.appartamento);
     console.log('🔑 Codici cassetta generati:', codiciCassetta);
 
@@ -187,7 +79,50 @@ export default async function handler(req, res) {
   }
 }
 
-// ===== FUNZIONE HTML AGGIORNATA =====
+// ===== FUNZIONE: determinaCodiciCassetta (MULTIPLI) =====
+function determinaCodiciCassetta(appartamento) {
+  if (!appartamento) {
+    console.warn('⚠️ Appartamento non specificato, uso codice generico');
+    return [{
+      codice: '0000',
+      nome: 'Generico',
+      descrizione: 'Appartamento non specificato'
+    }];
+  }
+
+  const appartamentoLower = appartamento.toLowerCase();
+  const codici = [];
+
+  // Verifica entrambi gli appartamenti
+  if (appartamentoLower.includes('corte')) {
+    codici.push({
+      codice: '1933',
+      nome: 'Corte',
+      descrizione: 'Appartamento con 1 camera da letto'
+    });
+  }
+
+  if (appartamentoLower.includes('torre')) {
+    codici.push({
+      codice: '1935',
+      nome: 'Torre',
+      descrizione: 'Appartamento con 2 camere da letto'
+    });
+  }
+
+  if (codici.length === 0) {
+    console.warn('⚠️ Appartamento non riconosciuto:', appartamento);
+    return [{
+      codice: '0000',
+      nome: 'Generico',
+      descrizione: 'Appartamento non specificato'
+    }];
+  }
+
+  return codici;
+}
+
+// ===== FUNZIONE: generaHTMLEmailOspite =====
 function generaHTMLEmailOspite(dati, codiciCassetta) {
   const dataFormattata = new Date(dati.dataCheckin).toLocaleDateString('it-IT', {
     weekday: 'long',
@@ -321,7 +256,6 @@ function generaHTMLEmailOspite(dati, codiciCassetta) {
           margin: 15px 0;
         }
         
-        /* ✅ NUOVO: Stili per sezioni multiple */
         .code-sub-section {
           background: rgba(255, 255, 255, 0.1);
           padding: 20px;
@@ -581,4 +515,67 @@ function generaHTMLEmailOspite(dati, codiciCassetta) {
     </body>
     </html>
   `;
+}
+
+// ===== FUNZIONE: caricaAllegatiFoto =====
+async function caricaAllegatiFoto() {
+  const allegati = [];
+  
+  try {
+    const imagePath = join(__dirname, '..', 'public', 'images', 'cassetta');
+    
+    const files = [
+      { name: 'ingresso_proprieta.jpg', cid: 'ingresso_proprieta' },
+      { name: 'cassetta_sicurezza.jpg', cid: 'cassetta_sicurezza' },
+      { name: 'ubicazione_cassetta.jpg', cid: 'ubicazione_cassetta' }
+    ];
+    
+    for (const file of files) {
+      try {
+        const filePath = join(imagePath, file.name);
+        const content = await readFile(filePath);
+        
+        allegati.push({
+          filename: file.name,
+          content: content,
+          cid: file.cid,
+          contentType: 'image/jpeg'
+        });
+        
+        console.log(`✅ Foto caricata: ${file.name}`);
+      } catch (error) {
+        console.warn(`⚠️ Impossibile caricare ${file.name}:`, error.message);
+      }
+    }
+  } catch (error) {
+    console.error('❌ Errore caricamento foto:', error.message);
+  }
+  
+  return allegati;
+}
+
+// ===== FUNZIONE: inviaEmailConNodemailer =====
+async function inviaEmailConNodemailer(emailDestinatario, dati, htmlContent, allegati) {
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASSWORD
+    }
+  });
+
+  const totale = typeof dati.totale === 'string' ? parseFloat(dati.totale) : (dati.totale || 0);
+
+  const oggetto = `Benvenuto a Space Estate - ${dati.appartamento || 'Appartamento'} - Check-in ${new Date(dati.dataCheckin).toLocaleDateString('it-IT')}`;
+
+  const mailOptions = {
+    from: process.env.EMAIL_USER,
+    to: emailDestinatario,
+    subject: oggetto,
+    html: htmlContent,
+    attachments: allegati
+  };
+
+  await transporter.sendMail(mailOptions);
+  console.log(`✅ Email inviata a ${emailDestinatario}`);
 }
