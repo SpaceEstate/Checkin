@@ -637,6 +637,100 @@ function validaStepOspite(numOspite) {
   return true;
 }
 
+/**
+ * Valida che tutti i dati della prenotazione siano completi
+ */
+function validaPrenotazioneCompleta() {
+  console.log('🔍 Validazione prenotazione completa...');
+  
+  // Verifica dati base prenotazione
+  if (!dataCheckin) {
+    showNotification('Data di check-in mancante', 'error');
+    return false;
+  }
+  
+  const appartamentoSelect = document.getElementById('appartamento');
+  const selectedOptions = Array.from(appartamentoSelect?.selectedOptions || []);
+  if (selectedOptions.length === 0) {
+    showNotification('Nessun appartamento selezionato', 'error');
+    return false;
+  }
+  
+  // Verifica ospiti
+  if (!numeroOspiti || numeroOspiti < 1) {
+    showNotification('Numero ospiti non valido', 'error');
+    return false;
+  }
+  
+  // Verifica che tutti gli ospiti abbiano i dati obbligatori
+  for (let i = 1; i <= numeroOspiti; i++) {
+    const cognome = document.querySelector(`input[name="ospite${i}_cognome"]`)?.value?.trim();
+    const nome = document.querySelector(`input[name="ospite${i}_nome"]`)?.value?.trim();
+    const nascita = document.querySelector(`input[name="ospite${i}_nascita"]`)?.value;
+    const genere = document.querySelector(`select[name="ospite${i}_genere"]`)?.value;
+    const cittadinanza = document.querySelector(`select[name="ospite${i}_cittadinanza"]`)?.value;
+    const luogoNascita = document.querySelector(`select[name="ospite${i}_luogo_nascita"]`)?.value;
+    
+    if (!cognome || !nome) {
+      showNotification(`Nome/cognome mancante per ospite ${i}`, 'error');
+      return false;
+    }
+    
+    if (!nascita) {
+      showNotification(`Data di nascita mancante per ${nome} ${cognome}`, 'error');
+      return false;
+    }
+    
+    if (!genere) {
+      showNotification(`Genere mancante per ${nome} ${cognome}`, 'error');
+      return false;
+    }
+    
+    if (!cittadinanza) {
+      showNotification(`Cittadinanza mancante per ${nome} ${cognome}`, 'error');
+      return false;
+    }
+    
+    if (!luogoNascita) {
+      showNotification(`Luogo di nascita mancante per ${nome} ${cognome}`, 'error');
+      return false;
+    }
+    
+    // Verifica comune/provincia se nato in Italia
+    if (luogoNascita === 'Italia') {
+      const comune = document.querySelector(`input[name="ospite${i}_comune"]`)?.value?.trim();
+      const provincia = document.querySelector(`select[name="ospite${i}_provincia"]`)?.value;
+      
+      if (!comune || !provincia) {
+        showNotification(`Comune e provincia mancanti per ${nome} ${cognome} (nato in Italia)`, 'error');
+        return false;
+      }
+    }
+    
+    // Verifica documenti aggiuntivi per responsabile
+    if (i === 1) {
+      const tipoDocumento = document.querySelector(`select[name="ospite1_tipo_documento"]`)?.value;
+      const numeroDocumento = document.querySelector(`input[name="ospite1_numero_documento"]`)?.value?.trim();
+      const luogoRilascio = document.querySelector(`select[name="ospite1_luogo_rilascio"]`)?.value;
+      
+      if (!tipoDocumento || !numeroDocumento || !luogoRilascio) {
+        showNotification('Dati documento del responsabile incompleti', 'error');
+        return false;
+      }
+    }
+    
+    // Verifica documento caricato
+    const fileInput = document.querySelector(`input[name="ospite${i}_documento_file"]`);
+    if (!fileInput?.files?.length) {
+      showNotification(`Documento mancante per ospite ${i}`, 'error');
+      return false;
+    }
+  }
+  
+  console.log('✅ Validazione completata con successo');
+  return true;
+}
+
 // === GENERAZIONE STEP OSPITI ===
 function generaStepOspiti() {
   const form = document.getElementById('checkin-form');
