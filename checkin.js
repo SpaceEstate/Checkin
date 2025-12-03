@@ -1031,12 +1031,13 @@ window.closeCamera = function(ospiteNum) {
 
 // === PAGAMENTO ===
 window.procediAlPagamento = async function() {
- const privacyCheckbox = document.getElementById('privacy-consent');
+  const privacyCheckbox = document.getElementById('privacy-consent');
   if (!privacyCheckbox?.checked) {
     showNotification('⚠️ Devi accettare l\'informativa privacy per procedere', 'error');
     privacyCheckbox?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return;
   }
+  
   if (!validaPrenotazioneCompleta()) return;
   
   const payButton = document.querySelector('.btn-payment');
@@ -1047,29 +1048,70 @@ window.procediAlPagamento = async function() {
   
   try {
     showNotification('📦 Raccolta documenti in corso...', 'info');
-    const datiCompleti = await raccogliDatiPrenotazione();
     
+    // ✅ NUOVO: Raccogli dati con compressione
+    const datiCompleti = await raccogliDatiPrenotazioneConCompressione();
+    
+    // ✅ NUOVO: Calcola dimensione payload
+    const payloadSize = JSON.stringify(datiCompleti).length;
+    const payloadSizeMB = (payloadSize / 1024 / 1024).toFixed(2);
+    
+    console.log(`📊 Dimensione payload: ${payloadSizeMB} MB (${payloadSize} bytes)`);
     console.log(`✅ Dati raccolti: ${datiCompleti.ospiti.length} ospiti, ${datiCompleti.documenti.length} documenti`);
+    
+    // ✅ NUOVO: Avvisa se payload è grande
+    if (payloadSize > 4 * 1024 * 1024) { // > 4MB
+      showNotification('⚠️ Documenti molto grandi, il salvataggio potrebbe richiedere più tempo...', 'info');
+    }
     
     const tempSessionId = 'temp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
     console.log('🔑 Session ID temporaneo:', tempSessionId);
     
-    if (payButton) payButton.innerHTML = '⏳ Salvataggio dati...';
+    if (payButton) payButton.innerHTML = '⏳ Salvataggio dati (questo può richiedere fino a 30 secondi)...';
     
-    const salvataggioResponse = await fetch(`${API_BASE_URL}/salva-dati-temporanei`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        sessionId: tempSessionId,
-        datiPrenotazione: datiCompleti
-      })
-    });
+    // ✅ NUOVO: Timeout aumentato a 45 secondi
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 secondi
     
-    if (!salvataggioResponse.ok) {
-      throw new Error('Errore nel salvataggio dei dati');
+    try {
+      const salvataggioResponse = await fetch(`${API_BASE_URL}/salva-dati-temporanei`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          sessionId: tempSessionId,
+          datiPrenotazione: datiCompleti
+        }),
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      
+      if (!salvataggioResponse.ok) {
+        const errorText = await salvataggioResponse.text();
+        console.error('❌ Errore HTTP salvataggio:', salvataggioResponse.status, errorText);
+        throw new Error(`Errore nel salvataggio (${salvataggioResponse.status}): ${errorText}`);
+      }
+      
+      const result = await salvataggioResponse.json();
+      console.log('💾 Risposta salvataggio:', result);
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Salvataggio fallito');
+      }
+      
+      console.log('✅ Dati salvati temporaneamente sul server');
+      
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      
+      if (fetchError.name === 'AbortError') {
+        throw new Error('Timeout nel salvataggio dati (45s). I documenti potrebbero essere troppo grandi. Riprova con foto più piccole.');
+      }
+      throw fetchError;
     }
-    
-    console.log('💾 Dati salvati temporaneamente sul server');
     
     if (payButton) payButton.innerHTML = '⏳ Creazione pagamento...';
     
@@ -1077,35 +1119,119 @@ window.procediAlPagamento = async function() {
     
   } catch (error) {
     console.error('💥 Errore nel processo di pagamento:', error);
+    console.error('Stack:', error.stack);
+    
     if (payButton) {
       payButton.disabled = false;
       payButton.innerHTML = `💳 Paga €${calcolaTotale().toFixed(2)} con Stripe`;
     }
-    showNotification('Errore: ' + error.message, 'error');
-  }
-}
-
-function validaPrenotazioneCompleta() {
-  if (!validaStep1()) {
-    showNotification('Errore nei dati generali della prenotazione', 'error');
-    return false;
-  }
-  for (let i = 1; i <= numeroOspiti; i++) {
-    if (!validaStepOspite(i)) {
-      showNotification(`Errore nei dati dell'ospite ${i}`, 'error');
-      return false;
+    
+    // ✅ NUOVO: Messaggio di errore più specifico
+    let errorMessage = 'Errore: ' + error.message;
+    
+    if (error.message.includes('Timeout') || error.message.includes('timeout')) {
+      errorMessage = '⏱️ Il salvataggio dei documenti sta richiedendo troppo tempo. Prova a:\n' +
+                     '1. Ridurre la qualità delle foto dei documenti\n' +
+                     '2. Scattare foto più piccole\n' +
+                     '3. Ricaricare la pagina e riprovare';
+    } else if (error.message.includes('Too large') || error.message.includes('troppo grande')) {
+      errorMessage = '📦 I documenti caricati sono troppo grandi. Prova a:\n' +
+                     '1. Comprimere le immagini\n' +
+                     '2. Usare foto con risoluzione inferiore\n' +
+                     '3. Caricare solo i documenti essenziali';
     }
+    
+    showNotification(errorMessage, 'error');
   }
-  return true;
 }
 
-async function raccogliDatiPrenotazione() {
-  // Ottieni appartamenti selezionati dal select multiplo
+// ✅ NUOVA FUNZIONE: Compressione immagini
+async function comprimiImmagineBase64(base64String, maxSizeKB = 500) {
+  return new Promise((resolve, reject) => {
+    // Estrai il tipo MIME e i dati
+    const matches = base64String.match(/^data:([^;]+);base64,(.+)$/);
+    if (!matches) {
+      resolve(base64String); // Non è un base64 valido, ritorna originale
+      return;
+    }
+    
+    const mimeType = matches[1];
+    const base64Data = matches[2];
+    
+    // Solo immagini
+    if (!mimeType.startsWith('image/')) {
+      resolve(base64String);
+      return;
+    }
+    
+    // Calcola dimensione attuale
+    const currentSizeKB = (base64Data.length * 0.75) / 1024; // Stima dimensione KB
+    
+    if (currentSizeKB <= maxSizeKB) {
+      console.log(`✅ Immagine già sotto ${maxSizeKB}KB (${currentSizeKB.toFixed(2)}KB), nessuna compressione necessaria`);
+      resolve(base64String);
+      return;
+    }
+    
+    console.log(`🔄 Compressione immagine: ${currentSizeKB.toFixed(2)}KB → target ${maxSizeKB}KB`);
+    
+    // Crea immagine
+    const img = new Image();
+    img.onload = function() {
+      // Crea canvas
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      
+      // Calcola nuove dimensioni mantenendo aspect ratio
+      let width = img.width;
+      let height = img.height;
+      const maxDimension = 1920; // Max larghezza/altezza
+      
+      if (width > maxDimension || height > maxDimension) {
+        if (width > height) {
+          height = (height / width) * maxDimension;
+          width = maxDimension;
+        } else {
+          width = (width / height) * maxDimension;
+          height = maxDimension;
+        }
+      }
+      
+      canvas.width = width;
+      canvas.height = height;
+      
+      // Disegna immagine ridimensionata
+      ctx.drawImage(img, 0, 0, width, height);
+      
+      // Prova diverse qualità fino a raggiungere target
+      let quality = 0.8;
+      let compressed = canvas.toDataURL('image/jpeg', quality);
+      let compressedSizeKB = (compressed.split(',')[1].length * 0.75) / 1024;
+      
+      while (compressedSizeKB > maxSizeKB && quality > 0.1) {
+        quality -= 0.1;
+        compressed = canvas.toDataURL('image/jpeg', quality);
+        compressedSizeKB = (compressed.split(',')[1].length * 0.75) / 1024;
+      }
+      
+      console.log(`✅ Immagine compressa: ${currentSizeKB.toFixed(2)}KB → ${compressedSizeKB.toFixed(2)}KB (qualità ${(quality * 100).toFixed(0)}%)`);
+      resolve(compressed);
+    };
+    
+    img.onerror = () => {
+      console.warn('⚠️ Errore caricamento immagine per compressione, uso originale');
+      resolve(base64String);
+    };
+    
+    img.src = base64String;
+  });
+}
+
+// ✅ NUOVA FUNZIONE: Raccogli dati con compressione
+async function raccogliDatiPrenotazioneConCompressione() {
   const appartamentoSelect = document.getElementById('appartamento');
   const selectedOptions = Array.from(appartamentoSelect?.selectedOptions || []);
   const appartamenti = selectedOptions.map(opt => opt.value);
-  
-  // Formato: se 1 solo app, usa il valore; se entrambi, uniscili con " + "
   const appartamentoValore = appartamenti.length === 1 
     ? appartamenti[0] 
     : appartamenti.join(' + ');
@@ -1121,6 +1247,7 @@ async function raccogliDatiPrenotazione() {
     timestamp: new Date().toISOString()
   };
 
+  // Raccogli ospiti (invariato)
   for (let i = 1; i <= numeroOspiti; i++) {
     const ospite = {
       numero: i,
@@ -1150,7 +1277,42 @@ async function raccogliDatiPrenotazione() {
     datiPrenotazione.ospiti.push(ospite);
   }
   
-  datiPrenotazione.documenti = await raccogliDocumenti();
+  // ✅ NUOVO: Raccogli e comprimi documenti
+  showNotification('🗜️ Compressione documenti in corso...', 'info');
+  
+  const documenti = [];
+  for (let i = 1; i <= numeroOspiti; i++) {
+    const fileInput = document.querySelector(`input[name="ospite${i}_documento_file"]`);
+    if (fileInput?.files?.[0]) {
+      try {
+        const file = fileInput.files[0];
+        const base64 = await fileToBase64(file);
+        
+        // ✅ Comprimi se è un'immagine
+        const base64Compresso = await comprimiImmagineBase64(base64, 400); // Max 400KB per immagine
+        
+        documenti.push({
+          ospiteNumero: i,
+          nomeFile: file.name,
+          tipo: file.type,
+          dimensione: base64Compresso.split(',')[1].length, // Dimensione dopo compressione
+          base64: base64Compresso
+        });
+        
+        console.log(`📎 Documento ospite ${i}: ${file.name} (${(base64Compresso.split(',')[1].length / 1024).toFixed(2)} KB dopo compressione)`);
+      } catch (error) {
+        console.error(`❌ Errore conversione documento ospite ${i}:`, error);
+        throw new Error(`Impossibile processare il documento dell'ospite ${i}. Riprova con un'immagine più piccola.`);
+      }
+    }
+  }
+  
+  datiPrenotazione.documenti = documenti;
+  
+  // Log dimensione totale
+  const totalSize = JSON.stringify(datiPrenotazione).length;
+  console.log(`📦 Dimensione totale dati: ${(totalSize / 1024).toFixed(2)} KB`);
+  
   return datiPrenotazione;
 }
 
