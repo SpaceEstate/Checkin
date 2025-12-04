@@ -1,5 +1,5 @@
 // api/stripeWebhook.js
-// CORREZIONE: Conversione corretta dei tipi numerici
+// VERSIONE CORRETTA - Recupera TUTTI i dati da Redis
 import Stripe from 'stripe';
 import { GoogleSpreadsheet } from 'google-spreadsheet';
 import { JWT } from 'google-auth-library';
@@ -41,13 +41,16 @@ export default async function handler(req, res) {
       const emailCliente = session.customer_details?.email || null;
       console.log('📧 Email cliente da Stripe:', emailCliente || 'NESSUNA');
       
-      // 1. Scrivi dati su Google Sheets (priorità)
-      await scriviDatiSuGoogleSheets(session);
+      // ✅ CRITICO: Recupera dati completi da Redis PRIMA di tutto
+      const datiCompleti = await recuperaDatiCompletiDaRedis(session);
+      
+      // 1. Scrivi dati su Google Sheets
+      await scriviDatiSuGoogleSheets(datiCompleti);
       console.log('✅ Dati scritti su Google Sheets');
       
       // 2. Genera PDF e invia email al proprietario
       try {
-        await generaPDFEInviaEmailConDebug(session);
+        await generaPDFEInviaEmail(datiCompleti);
         console.log('✅ PDF e email proprietario processati');
       } catch (pdfError) {
         console.error('⚠️ Errore PDF/Email proprietario:', pdfError.message);
@@ -56,7 +59,7 @@ export default async function handler(req, res) {
       // 3. Invia email ospite con codice accesso
       if (emailCliente) {
         try {
-          await inviaEmailOspite(session, emailCliente);
+          await inviaEmailOspite(datiCompleti, emailCliente);
           console.log('✅ Email ospite inviata con successo');
         } catch (emailError) {
           console.error('⚠️ Errore invio email ospite:', emailError.message);
@@ -84,109 +87,30 @@ async function buffer(req) {
   return Buffer.concat(chunks);
 }
 
-// FUNZIONE: Scrivi dati su Google Sheets
-async function scriviDatiSuGoogleSheets(session) {
-  console.log('📊 === INIZIO SCRITTURA GOOGLE SHEETS ===');
+// ✅ NUOVA FUNZIONE PRINCIPALE: Recupera dati completi da Redis + Metadata
+async function recuperaDatiCompletiDaRedis(session) {
+  console.log('🔄 === RECUPERO DATI COMPLETI DA REDIS ===');
   
   const metadata = session.metadata;
+  const tempSessionId = metadata.temp_session_id;
   
-  try {
-    const serviceAccountAuth = new JWT({
-      email: process.env.GOOGLE_CLIENT_EMAIL,
-      key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-      scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-    });
-
-    const doc = new GoogleSpreadsheet(process.env.SHEET_ID, serviceAccountAuth);
-    await doc.loadInfo();
-    
-    const sheet = doc.sheetsByIndex[0];
-    
-    // Riga responsabile
-    const rigaResponsabile = {
-      'Data Check-in': metadata.dataCheckin || '',
-      'Appartamento': metadata.appartamento || '',
-      'Numero Ospiti': metadata.numeroOspiti || '',
-      'Numero Notti': metadata.numeroNotti || '',
-      'Tipo Gruppo': metadata.tipoGruppo || '',
-      'Totale': metadata.totale || '',
-      'Numero Ospite': '1',
-      'Cognome': metadata.resp_cognome || '',
-      'Nome': metadata.resp_nome || '',
-      'Genere': metadata.resp_genere || '',
-      'Data Nascita': metadata.resp_nascita || '',
-      'Età': metadata.resp_eta || '',
-      'Cittadinanza': metadata.resp_cittadinanza || '',
-      'Luogo Nascita': metadata.resp_luogoNascita || '',
-      'Comune': metadata.resp_comune || '',
-      'Provincia': metadata.resp_provincia || '',
-      'Tipo Documento': metadata.resp_tipoDocumento || '',
-      'Numero Documento': metadata.resp_numeroDocumento || '',
-      'Luogo Rilascio': metadata.resp_luogoRilascio || '',
-      'Timestamp': metadata.timestamp || new Date().toISOString(),
-      'Stripe Session ID': session.id,
-    };
-    
-    await sheet.addRow(rigaResponsabile);
-    console.log('✅ Responsabile aggiunto a Google Sheets');
-    
-    // Altri ospiti
-    if (metadata.altri_ospiti) {
-      try {
-        const altriOspiti = JSON.parse(metadata.altri_ospiti);
-        for (const ospite of altriOspiti) {
-          const rigaOspite = {
-            'Data Check-in': metadata.dataCheckin || '',
-            'Appartamento': metadata.appartamento || '',
-            'Numero Ospiti': metadata.numeroOspiti || '',
-            'Numero Notti': metadata.numeroNotti || '',
-            'Tipo Gruppo': metadata.tipoGruppo || '',
-            'Totale': metadata.totale || '',
-            'Numero Ospite': ospite.n.toString(),
-            'Cognome': ospite.c || '',
-            'Nome': ospite.no || '',
-            'Genere': ospite.g || '',
-            'Data Nascita': ospite.na || '',
-            'Età': ospite.e ? ospite.e.toString() : '',
-            'Cittadinanza': ospite.ci || '',
-            'Luogo Nascita': ospite.ln || '',
-            'Comune': ospite.co || '',
-            'Provincia': ospite.p || '',
-            'Timestamp': metadata.timestamp || new Date().toISOString(),
-            'Stripe Session ID': session.id,
-          };
-          await sheet.addRow(rigaOspite);
-        }
-        console.log(`✅ ${altriOspiti.length} altri ospiti aggiunti a Google Sheets`);
-      } catch (e) {
-        console.warn('⚠️ Errore nel parsing altri_ospiti:', e);
-      }
-    }
-    
-    console.log('📊 === FINE SCRITTURA GOOGLE SHEETS ===');
-  } catch (error) {
-    console.error('❌ Errore Google Sheets:', error);
-    throw error;
-  }
-}
-
-// FUNZIONE: Ricostruisci dati prenotazione da metadata
-function ricostruisciDatiPrenotazione(metadata) {
-  // ✅ CORREZIONE: Converti tutti i valori numerici da stringhe
-  const datiPrenotazione = {
+  console.log('🔑 Temp Session ID:', tempSessionId || 'NESSUNO');
+  
+  // Dati base dai metadata Stripe (sempre disponibili)
+  let datiCompleti = {
     dataCheckin: metadata.dataCheckin,
     appartamento: metadata.appartamento,
     numeroOspiti: parseInt(metadata.numeroOspiti) || 0,
     numeroNotti: parseInt(metadata.numeroNotti) || 0,
     tipoGruppo: metadata.tipoGruppo || null,
     totale: parseFloat(metadata.totale) || 0,
-    timestamp: metadata.timestamp,
+    timestamp: metadata.timestamp || new Date().toISOString(),
     ospiti: [],
-    documenti: [] // Documenti recuperati da Redis
+    documenti: []
   };
 
-  // Responsabile con conversione età
-  datiPrenotazione.ospiti.push({
+  // Responsabile dai metadata (sempre disponibile)
+  const responsabile = {
     numero: 1,
     cognome: metadata.resp_cognome,
     nome: metadata.resp_nome,
@@ -201,14 +125,76 @@ function ricostruisciDatiPrenotazione(metadata) {
     numeroDocumento: metadata.resp_numeroDocumento,
     luogoRilascio: metadata.resp_luogoRilascio,
     isResponsabile: true
-  });
-
-  // Altri ospiti
-  if (metadata.altri_ospiti) {
+  };
+  
+  datiCompleti.ospiti.push(responsabile);
+  
+  // ✅ RECUPERA DATI COMPLETI DA REDIS (se disponibile)
+  if (tempSessionId) {
+    try {
+      const baseUrl = process.env.VERCEL_URL 
+        ? `https://${process.env.VERCEL_URL}` 
+        : 'https://checkin-six-coral.vercel.app';
+      
+      console.log('🔍 Recupero dati completi da Redis...');
+      console.log('📡 URL:', `${baseUrl}/api/salva-dati-temporanei?sessionId=${tempSessionId}`);
+      
+      const redisResponse = await fetch(
+        `${baseUrl}/api/salva-dati-temporanei?sessionId=${tempSessionId}`,
+        {
+          method: 'GET',
+          headers: { 
+            'Accept': 'application/json',
+            'User-Agent': 'StripeWebhook/1.0'
+          }
+        }
+      );
+      
+      console.log('📡 Redis response status:', redisResponse.status);
+      
+      if (redisResponse.ok) {
+        const redisData = await redisResponse.json();
+        
+        console.log('✅ Risposta Redis ricevuta:', {
+          success: redisData.success,
+          hasOspiti: !!redisData.datiPrenotazione?.ospiti,
+          numOspiti: redisData.datiPrenotazione?.ospiti?.length || 0,
+          hasDocumenti: !!redisData.datiPrenotazione?.documenti,
+          numDocumenti: redisData.datiPrenotazione?.documenti?.length || 0
+        });
+        
+        if (redisData.success && redisData.datiPrenotazione) {
+          // ✅ SOVRASCRIVI con dati completi da Redis
+          if (redisData.datiPrenotazione.ospiti && redisData.datiPrenotazione.ospiti.length > 0) {
+            datiCompleti.ospiti = redisData.datiPrenotazione.ospiti;
+            console.log(`✅ Recuperati ${datiCompleti.ospiti.length} ospiti da Redis`);
+          }
+          
+          if (redisData.datiPrenotazione.documenti && redisData.datiPrenotazione.documenti.length > 0) {
+            datiCompleti.documenti = redisData.datiPrenotazione.documenti;
+            console.log(`✅ Recuperati ${datiCompleti.documenti.length} documenti da Redis`);
+          }
+        } else {
+          console.warn('⚠️ Redis: dati non trovati nella risposta');
+        }
+      } else {
+        const errorText = await redisResponse.text();
+        console.warn('⚠️ Redis response non OK:', redisResponse.status, errorText);
+      }
+    } catch (redisError) {
+      console.warn('⚠️ Errore recupero da Redis:', redisError.message);
+      console.warn('📋 Proseguo con dati parziali dai metadata');
+    }
+  } else {
+    console.warn('⚠️ Nessun temp_session_id disponibile - solo dati metadata');
+  }
+  
+  // Se non abbiamo recuperato altri ospiti da Redis, prova dai metadata
+  if (datiCompleti.ospiti.length === 1 && metadata.altri_ospiti) {
     try {
       const altriOspiti = JSON.parse(metadata.altri_ospiti);
       altriOspiti.forEach(o => {
-        datiPrenotazione.ospiti.push({
+        datiCompleti.ospiti.push({
           numero: o.n,
           cognome: o.c,
           nome: o.no,
@@ -221,59 +207,79 @@ function ricostruisciDatiPrenotazione(metadata) {
           provincia: o.p
         });
       });
+      console.log(`✅ Recuperati ${altriOspiti.length} altri ospiti da metadata`);
     } catch (e) {
-      console.warn('⚠️ Errore parsing altri_ospiti:', e);
+      console.warn('⚠️ Errore parsing altri_ospiti dai metadata:', e);
     }
   }
+  
+  console.log('📊 Dati finali ricostruiti:', {
+    ospiti: datiCompleti.ospiti.length,
+    documenti: datiCompleti.documenti.length,
+    totale: datiCompleti.totale
+  });
+  console.log('🔄 === FINE RECUPERO ===');
+  
+  return datiCompleti;
+}
 
-  return datiPrenotazione;
+// FUNZIONE: Scrivi dati su Google Sheets
+async function scriviDatiSuGoogleSheets(datiCompleti) {
+  console.log('📊 === INIZIO SCRITTURA GOOGLE SHEETS ===');
+  
+  try {
+    const serviceAccountAuth = new JWT({
+      email: process.env.GOOGLE_CLIENT_EMAIL,
+      key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+      scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+    });
+
+    const doc = new GoogleSpreadsheet(process.env.SHEET_ID, serviceAccountAuth);
+    await doc.loadInfo();
+    
+    const sheet = doc.sheetsByIndex[0];
+    
+    console.log(`📝 Scrivendo ${datiCompleti.ospiti.length} ospiti su Google Sheets`);
+    
+    // Scrivi tutti gli ospiti
+    for (const ospite of datiCompleti.ospiti) {
+      const riga = {
+        'Data Check-in': datiCompleti.dataCheckin || '',
+        'Appartamento': datiCompleti.appartamento || '',
+        'Numero Ospiti': datiCompleti.numeroOspiti.toString() || '',
+        'Numero Notti': datiCompleti.numeroNotti.toString() || '',
+        'Tipo Gruppo': datiCompleti.tipoGruppo || '',
+        'Totale': datiCompleti.totale.toString() || '',
+        'Numero Ospite': ospite.numero.toString(),
+        'Cognome': ospite.cognome || '',
+        'Nome': ospite.nome || '',
+        'Genere': ospite.genere || '',
+        'Data Nascita': ospite.nascita || '',
+        'Età': ospite.eta ? ospite.eta.toString() : '',
+        'Cittadinanza': ospite.cittadinanza || '',
+        'Luogo Nascita': ospite.luogoNascita || '',
+        'Comune': ospite.comune || '',
+        'Provincia': ospite.provincia || '',
+        'Tipo Documento': ospite.tipoDocumento || '',
+        'Numero Documento': ospite.numeroDocumento || '',
+        'Luogo Rilascio': ospite.luogoRilascio || '',
+        'Timestamp': datiCompleti.timestamp || new Date().toISOString()
+      };
+      
+      await sheet.addRow(riga);
+      console.log(`✅ Ospite ${ospite.numero} (${ospite.nome} ${ospite.cognome}) aggiunto a Google Sheets`);
+    }
+    
+    console.log('📊 === FINE SCRITTURA GOOGLE SHEETS ===');
+  } catch (error) {
+    console.error('❌ Errore Google Sheets:', error);
+    throw error;
+  }
 }
 
 // FUNZIONE: Genera PDF e invia email proprietario
-async function generaPDFEInviaEmailConDebug(session) {
-  console.log('📧 === INIZIO INVIO EMAIL PROPRIETARIO (da webhook) ===');
-  
-  const metadata = session.metadata;
-  const tempSessionId = metadata.temp_session_id;
-  
-  console.log('🔑 Temp Session ID:', tempSessionId || 'NESSUNO');
-  
-  let datiPrenotazione = ricostruisciDatiPrenotazione(metadata);
-  
-  // Recupera documenti da Redis se disponibile
-  if (tempSessionId) {
-    try {
-      const baseUrl = process.env.VERCEL_URL 
-        ? `https://${process.env.VERCEL_URL}` 
-        : 'https://checkin-six-coral.vercel.app';
-      
-      console.log('🔍 Tentativo recupero documenti da Redis...');
-      const redisResponse = await fetch(
-        `${baseUrl}/api/salva-dati-temporanei?sessionId=${tempSessionId}`,
-        {
-          method: 'GET',
-          headers: { 'Accept': 'application/json' }
-        }
-      );
-      
-      if (redisResponse.ok) {
-        const redisData = await redisResponse.json();
-        if (redisData.success && redisData.datiPrenotazione?.documenti) {
-          datiPrenotazione.documenti = redisData.datiPrenotazione.documenti;
-          console.log(`✅ Recuperati ${datiPrenotazione.documenti.length} documenti da Redis`);
-        } else {
-          console.warn('⚠️ Nessun documento trovato nella risposta Redis');
-        }
-      } else {
-        const errorText = await redisResponse.text();
-        console.warn('⚠️ Risposta Redis non OK:', redisResponse.status, errorText);
-      }
-    } catch (redisError) {
-      console.warn('⚠️ Errore recupero documenti da Redis:', redisError.message);
-    }
-  } else {
-    console.warn('⚠️ Nessun temp_session_id disponibile per recuperare documenti');
-  }
+async function generaPDFEInviaEmail(datiCompleti) {
+  console.log('📧 === INIZIO INVIO EMAIL PROPRIETARIO ===');
   
   const emailProprietario = process.env.EMAIL_PROPRIETARIO;
   
@@ -283,10 +289,10 @@ async function generaPDFEInviaEmailConDebug(session) {
   
   console.log('📬 Destinatario proprietario:', emailProprietario);
   console.log('📊 Dati da inviare:', {
-    ospiti: datiPrenotazione.ospiti.length,
-    documenti: datiPrenotazione.documenti.length,
-    totale: datiPrenotazione.totale,
-    tipoTotale: typeof datiPrenotazione.totale
+    ospiti: datiCompleti.ospiti.length,
+    documenti: datiCompleti.documenti.length,
+    totale: datiCompleti.totale,
+    tipoTotale: typeof datiCompleti.totale
   });
   
   const baseUrl = process.env.VERCEL_URL 
@@ -308,7 +314,7 @@ async function generaPDFEInviaEmailConDebug(session) {
         'Accept': 'application/json'
       },
       body: JSON.stringify({
-        datiPrenotazione: datiPrenotazione,
+        datiPrenotazione: datiCompleti,
         emailDestinatario: emailProprietario
       }),
       signal: controller.signal
@@ -336,17 +342,14 @@ async function generaPDFEInviaEmailConDebug(session) {
 }
 
 // FUNZIONE: Invia email all'ospite con codice accesso
-async function inviaEmailOspite(session, emailCliente) {
-  console.log('📧 === INIZIO INVIO EMAIL OSPITE (da webhook) ===');
-  
-  const metadata = session.metadata;
-  const datiPrenotazione = ricostruisciDatiPrenotazione(metadata);
+async function inviaEmailOspite(datiCompleti, emailCliente) {
+  console.log('📧 === INIZIO INVIO EMAIL OSPITE ===');
   
   console.log('📊 Dati per email ospite:', {
     email: emailCliente,
-    totale: datiPrenotazione.totale,
-    tipoTotale: typeof datiPrenotazione.totale,
-    appartamento: datiPrenotazione.appartamento
+    totale: datiCompleti.totale,
+    tipoTotale: typeof datiCompleti.totale,
+    appartamento: datiCompleti.appartamento
   });
   
   const baseUrl = process.env.VERCEL_URL 
@@ -369,7 +372,7 @@ async function inviaEmailOspite(session, emailCliente) {
       },
       body: JSON.stringify({
         emailOspite: emailCliente,
-        datiPrenotazione: datiPrenotazione
+        datiPrenotazione: datiCompleti
       }),
       signal: controller.signal
     });
@@ -393,238 +396,4 @@ async function inviaEmailOspite(session, emailCliente) {
     console.log('📧 === FINE INVIO EMAIL OSPITE (ERRORE) ===');
     throw error;
   }
-  // AGGIUNGI QUESTA FUNZIONE in api/stripeWebhook.js
-
-// ✅ NUOVA FUNZIONE: Ricostruisci dati completi da Redis + Metadata
-async function ricostruisciDatiPrenotazioneCompleti(metadata) {
-  console.log('🔄 === RICOSTRUZIONE DATI COMPLETI ===');
-  
-  const tempSessionId = metadata.temp_session_id;
-  console.log('🔑 Temp Session ID:', tempSessionId || 'NESSUNO');
-  
-  // Dati base dai metadata
-  const datiPrenotazione = {
-    dataCheckin: metadata.dataCheckin,
-    appartamento: metadata.appartamento,
-    numeroOspiti: parseInt(metadata.numeroOspiti) || 0,
-    numeroNotti: parseInt(metadata.numeroNotti) || 0,
-    tipoGruppo: metadata.tipoGruppo || null,
-    totale: parseFloat(metadata.totale) || 0,
-    timestamp: metadata.timestamp,
-    ospiti: [],
-    documenti: [] // ⭐ Verranno recuperati da Redis
-  };
-
-  // Responsabile dai metadata
-  datiPrenotazione.ospiti.push({
-    numero: 1,
-    cognome: metadata.resp_cognome,
-    nome: metadata.resp_nome,
-    genere: metadata.resp_genere,
-    nascita: metadata.resp_nascita,
-    eta: parseInt(metadata.resp_eta) || 0,
-    cittadinanza: metadata.resp_cittadinanza,
-    luogoNascita: metadata.resp_luogoNascita,
-    isResponsabile: true
-  });
-
-  // ⭐ RECUPERA DATI COMPLETI DA REDIS
-  if (tempSessionId) {
-    try {
-      const baseUrl = process.env.VERCEL_URL 
-        ? `https://${process.env.VERCEL_URL}` 
-        : 'https://checkin-six-coral.vercel.app';
-      
-      console.log('🔍 Recupero dati da Redis...');
-      console.log('📡 URL:', `${baseUrl}/api/salva-dati-temporanei?sessionId=${tempSessionId}`);
-      
-      const redisResponse = await fetch(
-        `${baseUrl}/api/salva-dati-temporanei?sessionId=${tempSessionId}`,
-        {
-          method: 'GET',
-          headers: { 
-            'Accept': 'application/json',
-            'User-Agent': 'StripeWebhook/1.0'
-          }
-        }
-      );
-      
-      console.log('📡 Redis response status:', redisResponse.status);
-      
-      if (redisResponse.ok) {
-        const redisData = await redisResponse.json();
-        console.log('✅ Risposta Redis ricevuta:', {
-          success: redisData.success,
-          hasOspiti: !!redisData.datiPrenotazione?.ospiti,
-          numOspiti: redisData.datiPrenotazione?.ospiti?.length || 0,
-          hasDocumenti: !!redisData.datiPrenotazione?.documenti,
-          numDocumenti: redisData.datiPrenotazione?.documenti?.length || 0
-        });
-        
-        if (redisData.success && redisData.datiPrenotazione) {
-          // ⭐ SOVRASCRIVI con dati completi da Redis
-          if (redisData.datiPrenotazione.ospiti) {
-            datiPrenotazione.ospiti = redisData.datiPrenotazione.ospiti;
-            console.log(`✅ Recuperati ${datiPrenotazione.ospiti.length} ospiti da Redis`);
-          }
-          
-          if (redisData.datiPrenotazione.documenti) {
-            datiPrenotazione.documenti = redisData.datiPrenotazione.documenti;
-            console.log(`✅ Recuperati ${datiPrenotazione.documenti.length} documenti da Redis`);
-          }
-        } else {
-          console.warn('⚠️ Redis: dati non trovati nella risposta');
-        }
-      } else {
-        const errorText = await redisResponse.text();
-        console.warn('⚠️ Redis response non OK:', redisResponse.status, errorText);
-      }
-    } catch (redisError) {
-      console.warn('⚠️ Errore recupero da Redis:', redisError.message);
-      console.warn('📋 Proseguo con dati parziali dai metadata');
-    }
-  } else {
-    console.warn('⚠️ Nessun temp_session_id disponibile - solo dati metadata');
-  }
-  
-  console.log('📊 Dati finali ricostruiti:', {
-    ospiti: datiPrenotazione.ospiti.length,
-    documenti: datiPrenotazione.documenti.length,
-    totale: datiPrenotazione.totale
-  });
-  console.log('🔄 === FINE RICOSTRUZIONE ===');
-  
-  return datiPrenotazione;
-}
-
-// ✅ MODIFICA LA FUNZIONE generaPDFEInviaEmailConDebug
-async function generaPDFEInviaEmailConDebug(session) {
-  console.log('📧 === INIZIO INVIO EMAIL PROPRIETARIO (da webhook) ===');
-  
-  const metadata = session.metadata;
-  
-  // ⭐ USA LA NUOVA FUNZIONE
-  const datiPrenotazione = await ricostruisciDatiPrenotazioneCompleti(metadata);
-  
-  const emailProprietario = process.env.EMAIL_PROPRIETARIO;
-  
-  if (!emailProprietario) {
-    throw new Error('EMAIL_PROPRIETARIO non configurato');
-  }
-  
-  console.log('📬 Destinatario proprietario:', emailProprietario);
-  console.log('📊 Dati da inviare:', {
-    ospiti: datiPrenotazione.ospiti.length,
-    documenti: datiPrenotazione.documenti.length,
-    totale: datiPrenotazione.totale,
-    tipoTotale: typeof datiPrenotazione.totale
-  });
-  
-  const baseUrl = process.env.VERCEL_URL 
-    ? `https://${process.env.VERCEL_URL}` 
-    : 'https://checkin-six-coral.vercel.app';
-  
-  const apiUrl = `${baseUrl}/api/genera-pdf-email`;
-  console.log('🌐 Chiamata API email proprietario:', apiUrl);
-  
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 25000);
-    
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': 'CheckinWebhook/1.0',
-        'Accept': 'application/json'
-      },
-      body: JSON.stringify({
-        datiPrenotazione: datiPrenotazione,
-        emailDestinatario: emailProprietario
-      }),
-      signal: controller.signal
-    });
-    
-    clearTimeout(timeoutId);
-    
-    console.log('📡 Status risposta API email proprietario:', response.status);
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ Errore API email proprietario:', errorText);
-      throw new Error(`Errore API (${response.status}): ${errorText}`);
-    }
-    
-    const result = await response.json();
-    console.log('✅ Risposta API email proprietario:', result);
-    console.log('📧 === FINE INVIO EMAIL PROPRIETARIO (SUCCESSO) ===');
-    
-  } catch (error) {
-    console.error('❌ Errore invio email proprietario:', error.message);
-    console.log('📧 === FINE INVIO EMAIL PROPRIETARIO (ERRORE) ===');
-    throw error;
-  }
-}
-
-// ✅ MODIFICA ANCHE inviaEmailOspite
-async function inviaEmailOspite(session, emailCliente) {
-  console.log('📧 === INIZIO INVIO EMAIL OSPITE (da webhook) ===');
-  
-  const metadata = session.metadata;
-  
-  // ⭐ USA LA NUOVA FUNZIONE
-  const datiPrenotazione = await ricostruisciDatiPrenotazioneCompleti(metadata);
-  
-  console.log('📊 Dati per email ospite:', {
-    email: emailCliente,
-    totale: datiPrenotazione.totale,
-    tipoTotale: typeof datiPrenotazione.totale,
-    appartamento: datiPrenotazione.appartamento
-  });
-  
-  const baseUrl = process.env.VERCEL_URL 
-    ? `https://${process.env.VERCEL_URL}` 
-    : 'https://checkin-six-coral.vercel.app';
-  
-  const apiUrl = `${baseUrl}/api/invia-email-ospite`;
-  console.log('🌐 Chiamata API email ospite:', apiUrl);
-  
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
-    
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': 'CheckinWebhook/1.0',
-        'Accept': 'application/json'
-      },
-      body: JSON.stringify({
-        emailOspite: emailCliente,
-        datiPrenotazione: datiPrenotazione
-      }),
-      signal: controller.signal
-    });
-    
-    clearTimeout(timeoutId);
-    
-    console.log('📡 Status risposta API email ospite:', response.status);
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ Errore API email ospite:', errorText);
-      throw new Error(`Errore API (${response.status}): ${errorText}`);
-    }
-    
-    const result = await response.json();
-    console.log('✅ Risposta API email ospite:', result);
-    console.log('📧 === FINE INVIO EMAIL OSPITE (SUCCESSO) ===');
-    
-  } catch (error) {
-    console.error('❌ Errore invio email ospite:', error.message);
-    console.log('📧 === FINE INVIO EMAIL OSPITE (ERRORE) ===');
-    throw error;
-  }
-}
 }
