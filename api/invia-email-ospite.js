@@ -1,5 +1,5 @@
 // api/invia-email-ospite.js
-// VERSIONE CORRETTA - Rimossi duplicati export default handler
+// VERSIONE CORRETTA - Fix percorsi immagini Vercel
 
 import nodemailer from 'nodemailer';
 import { readFile } from 'fs/promises';
@@ -10,7 +10,7 @@ import { dirname } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// ===== HANDLER PRINCIPALE (UNICO) =====
+// ===== HANDLER PRINCIPALE =====
 export default async function handler(req, res) {
   // CORS Headers
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -39,7 +39,7 @@ export default async function handler(req, res) {
     console.log('📬 Destinatario:', emailOspite);
     console.log('📊 Appartamento:', datiPrenotazione.appartamento);
 
-    // ✅ Genera codici cassetta (array)
+    // Genera codici cassetta (array)
     const codiciCassetta = determinaCodiciCassetta(datiPrenotazione.appartamento);
     console.log('🔑 Codici cassetta generati:', codiciCassetta);
 
@@ -51,7 +51,7 @@ export default async function handler(req, res) {
     // Genera HTML email con codici multipli
     const htmlContent = generaHTMLEmailOspite(datiPrenotazione, codiciCassetta);
 
-    // Carica allegati foto
+    // ✅ FIX: Carica allegati foto con percorsi corretti Vercel
     const allegati = await caricaAllegatiFoto();
     console.log(`📎 Foto caricate: ${allegati.length}`);
 
@@ -66,7 +66,8 @@ export default async function handler(req, res) {
       message: 'Email inviata con successo',
       codiciCassetta: codiciCassetta.map(c => c.codice),
       emailDestinatario: emailOspite,
-      numeroAllegati: allegati.length
+      numeroAllegati: allegati.length,
+      warning: allegati.length === 0 ? 'Foto cassetta non trovate' : null
     });
 
   } catch (error) {
@@ -517,12 +518,18 @@ function generaHTMLEmailOspite(dati, codiciCassetta) {
   `;
 }
 
-// ===== FUNZIONE: caricaAllegatiFoto =====
+// ===== FUNZIONE: caricaAllegatiFoto - FIX PERCORSI VERCEL =====
 async function caricaAllegatiFoto() {
   const allegati = [];
   
   try {
-    const imagePath = join(__dirname, '..', 'public', 'images', 'cassetta');
+    // ✅ PERCORSI MULTIPLI per compatibilità Vercel/locale
+    const possibiliPercorsi = [
+      join(__dirname, '..', 'public', 'images', 'cassetta'),  // Locale
+      join(process.cwd(), 'public', 'images', 'cassetta'),     // Vercel build
+      join('/var/task', 'public', 'images', 'cassetta'),       // Vercel runtime
+      join(__dirname, 'images', 'cassetta'),                    // Alternativo
+    ];
     
     const files = [
       { name: 'ingresso_proprieta.jpg', cid: 'ingresso_proprieta' },
@@ -531,24 +538,42 @@ async function caricaAllegatiFoto() {
     ];
     
     for (const file of files) {
-      try {
-        const filePath = join(imagePath, file.name);
-        const content = await readFile(filePath);
-        
-        allegati.push({
-          filename: file.name,
-          content: content,
-          cid: file.cid,
-          contentType: 'image/jpeg'
-        });
-        
-        console.log(`✅ Foto caricata: ${file.name}`);
-      } catch (error) {
-        console.warn(`⚠️ Impossibile caricare ${file.name}:`, error.message);
+      let caricato = false;
+      
+      // ✅ Prova tutti i percorsi possibili
+      for (const basePath of possibiliPercorsi) {
+        try {
+          const filePath = join(basePath, file.name);
+          const content = await readFile(filePath);
+          
+          allegati.push({
+            filename: file.name,
+            content: content,
+            cid: file.cid,
+            contentType: 'image/jpeg'
+          });
+          
+          console.log(`✅ Foto caricata: ${file.name} da ${basePath}`);
+          caricato = true;
+          break; // Trovato, esci dal loop
+        } catch (error) {
+          // Continua con il prossimo percorso
+          continue;
+        }
+      }
+      
+      if (!caricato) {
+        console.warn(`⚠️ Impossibile caricare ${file.name} da nessun percorso`);
       }
     }
+    
+    if (allegati.length === 0) {
+      console.warn('⚠️ NESSUNA foto trovata. Percorsi provati:', possibiliPercorsi);
+      console.warn('📂 Contenuto directory corrente:', process.cwd());
+    }
+    
   } catch (error) {
-    console.error('❌ Errore caricamento foto:', error.message);
+    console.error('❌ Errore generale caricamento foto:', error.message);
   }
   
   return allegati;
@@ -573,9 +598,9 @@ async function inviaEmailConNodemailer(emailDestinatario, dati, htmlContent, all
     to: emailDestinatario,
     subject: oggetto,
     html: htmlContent,
-    attachments: allegati
+    attachments: allegati.length > 0 ? allegati : undefined
   };
 
   await transporter.sendMail(mailOptions);
-  console.log(`✅ Email inviata a ${emailDestinatario}`);
+  console.log(`✅ Email inviata a ${emailDestinatario}${allegati.length > 0 ? ' con ' + allegati.length + ' foto allegate' : ' senza foto'}`);
 }
