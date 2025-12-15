@@ -158,11 +158,32 @@
 </div>
 
 <style>
+/* Wrapper cliccabile per mobile */
+.select-wrapper-mobile {
+  cursor: pointer;
+  position: relative;
+}
+
+.select-wrapper-mobile::after {
+  content: '👆 Tocca per selezionare';
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.85rem;
+  color: #a0927f;
+  pointer-events: none;
+  opacity: 0.7;
+  text-align: center;
+  width: 100%;
+}
+
 /* Stili per il select multiplo */
 select[multiple].form-select {
   min-height: 120px;
   padding: 8px;
   line-height: 1.6;
+  pointer-events: none; /* Lascia che il wrapper gestisca il click */
 }
 
 select[multiple].form-select option {
@@ -172,6 +193,7 @@ select[multiple].form-select option {
   cursor: pointer;
   transition: all 0.3s ease;
   background: white;
+  pointer-events: auto; /* Le opzioni devono essere cliccabili */
 }
 
 select[multiple].form-select option:hover {
@@ -189,6 +211,7 @@ select[multiple].form-select option:checked {
   select[multiple].form-select {
     min-height: 140px;
     font-size: 16px;
+    padding-bottom: 40px; /* Spazio per il testo "Tocca per selezionare" */
   }
   
   select[multiple].form-select option {
@@ -199,6 +222,36 @@ select[multiple].form-select option:checked {
   
   select[multiple].form-select option:checked {
     border-color: #a67c52;
+  }
+  
+  .select-wrapper-mobile {
+    border: 2px dashed #d4c7b5;
+    border-radius: 12px;
+    padding: 5px;
+    background: #faf9f6;
+  }
+  
+  .select-wrapper-mobile:active {
+    background: #f5f2e9;
+  }
+}
+
+/* Desktop: nascondi il messaggio e il wrapper */
+@media (min-width: 769px) {
+  .select-wrapper-mobile::after {
+    display: none;
+  }
+  
+  .select-wrapper-mobile {
+    cursor: default;
+    border: none;
+    padding: 0;
+    background: transparent;
+  }
+  
+  select[multiple].form-select {
+    pointer-events: auto;
+    padding-bottom: 8px;
   }
 }
 </style>
