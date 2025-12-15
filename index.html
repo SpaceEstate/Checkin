@@ -138,22 +138,23 @@
 
 <div class="form-group full-width">
   <label class="form-label" for="appartamento">Appartamento/i *</label>
-  <select 
-    id="appartamento" 
-    name="appartamento" 
-    class="form-select" 
-    multiple 
-    size="3"
-    required
-    onchange="aggiornaAppartamentiSelezionati()">
-    <option value="La Columbera - Torre, Appartamento con 2 camere da letto">
-      🏰 Torre - Appartamento con 2 camere da letto
-    </option>
-    <option value="La Columbera - Corte, Appartamento con 1 camere da letto">
-      🏡 Corte - Appartamento con 1 camera da letto
-    </option>
-  </select>
-  
+  <div class="select-wrapper-mobile" onclick="this.querySelector('select').focus(); this.querySelector('select').click();">
+    <select 
+      id="appartamento" 
+      name="appartamento" 
+      class="form-select" 
+      multiple 
+      size="3"
+      required
+      onchange="aggiornaAppartamentiSelezionati()">
+      <option value="La Columbera - Torre, Appartamento con 2 camere da letto">
+        🏰 Torre - Appartamento con 2 camere da letto
+      </option>
+      <option value="La Columbera - Corte, Appartamento con 1 camere da letto">
+        🏡 Corte - Appartamento con 1 camera da letto
+      </option>
+    </select>
+  </div>
 </div>
 
 <style>
