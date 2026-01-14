@@ -1038,21 +1038,52 @@ window.handleFileUpload = function(input, ospiteNum) {
   const file = input.files?.[0];
   const label = input.previousElementSibling;
   if (!label) return;
+  
   if (file) {
-    if (file.size > 5 * 1024 * 1024) {
-      showNotification('Il file è troppo grande. Dimensione massima: 5MB', 'error');
+    // ✅ LIMITE MASSIMO: 1 MB per singolo file
+    const MAX_FILE_SIZE = 1 * 1024 * 1024; // 1 MB
+    
+    if (file.size > MAX_FILE_SIZE) {
+      const fileSizeMB = (file.size / 1024 / 1024).toFixed(2);
+      showNotification(
+        `📦 File troppo grande: ${fileSizeMB} MB\n` +
+        `Limite massimo: 1 MB\n\n` +
+        `💡 Suggerimenti:\n` +
+        `• Usa la fotocamera con risoluzione "Media" o "Bassa"\n` +
+        `• Se hai già la foto, comprimila prima (ci sono app gratuite)\n` +
+        `• Scatta una nuova foto con qualità inferiore`,
+        'error'
+      );
       input.value = '';
       return;
     }
+    
+    // ✅ AVVISO per file sopra 500 KB
+    if (file.size > 500 * 1024) {
+      const fileSizeKB = (file.size / 1024).toFixed(0);
+      showNotification(
+        `⚠️ File ${fileSizeKB} KB\n` +
+        `Sarà compresso automaticamente durante l'invio.`,
+        'info'
+      );
+    }
+    
     const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
     if (!allowedTypes.includes(file.type)) {
       showNotification('Formato file non supportato. Usa: JPG, PNG, WebP o PDF', 'error');
       input.value = '';
       return;
     }
-    label.textContent = `✅ ${file.name}`;
+    
+    // ✅ Mostra dimensione file
+    const fileSizeKB = (file.size / 1024).toFixed(0);
+    const sizeText = file.size > 1024 * 1024 
+      ? `${(file.size / 1024 / 1024).toFixed(1)} MB`
+      : `${fileSizeKB} KB`;
+    
+    label.textContent = `✅ ${file.name} (${sizeText})`;
     label.classList.add('has-file');
-    showNotification('Documento caricato con successo', 'success');
+    showNotification(`Documento caricato: ${sizeText}`, 'success');
   } else {
     label.textContent = '📎 Scegli file';
     label.classList.remove('has-file');
@@ -1086,31 +1117,69 @@ window.capturePhoto = function(ospiteNum) {
   const video = document.getElementById(`camera-video-${ospiteNum}`);
   const canvas = document.getElementById(`camera-canvas-${ospiteNum}`);
   if (!video || !canvas) return;
+  
   const ctx = canvas.getContext('2d');
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-  ctx.drawImage(video, 0, 0);
+  
+  // ✅ RIDUZIONE RISOLUZIONE AUTOMATICA per rispettare limite 1 MB
+  const maxWidth = 1280;
+  const maxHeight = 720;
+  
+  let width = video.videoWidth;
+  let height = video.videoHeight;
+  
+  if (width > maxWidth || height > maxHeight) {
+    if (width > height) {
+      height = (height / width) * maxWidth;
+      width = maxWidth;
+    } else {
+      width = (width / height) * maxHeight;
+      height = maxHeight;
+    }
+  }
+  
+  canvas.width = width;
+  canvas.height = height;
+  ctx.drawImage(video, 0, 0, width, height);
+  
+  // ✅ COMPRESSIONE AGGRESSIVA: qualità 0.7
   canvas.toBlob((blob) => {
     if (!blob) {
       showNotification('Errore nella cattura della foto', 'error');
       return;
     }
+    
+    const blobSizeKB = (blob.size / 1024).toFixed(0);
+    
+    if (blob.size > 1 * 1024 * 1024) {
+      showNotification(
+        `⚠️ Foto troppo grande (${blobSizeKB} KB)\n` +
+        `Prova a scattare da più lontano o con meno luce`,
+        'error'
+      );
+      return;
+    }
+    
     const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
     const fileName = `documento_ospite_${ospiteNum}_${timestamp}.jpg`;
     const file = new File([blob], fileName, { type: 'image/jpeg' });
     const fileInput = document.getElementById(`ospite${ospiteNum}_documento_file`);
+    
     if (fileInput) {
       const dt = new DataTransfer();
       dt.items.add(file);
       fileInput.files = dt.files;
+      
       const label = fileInput.previousElementSibling;
       if (label) {
-        label.textContent = `📷 ${fileName}`;
+        const sizeKB = (blob.size / 1024).toFixed(0);
+        label.textContent = `📷 ${fileName} (${sizeKB} KB)`;
         label.classList.add('has-file');
       }
     }
-    showNotification('Foto acquisita con successo!', 'success');
-  }, 'image/jpeg', 0.85);
+    
+    showNotification(`✅ Foto acquisita: ${blobSizeKB} KB`, 'success');
+  }, 'image/jpeg', 0.7);
+  
   closeCamera(ospiteNum);
 }
 
@@ -1240,46 +1309,41 @@ window.procediAlPagamento = async function() {
 }
 
 // ✅ NUOVA FUNZIONE: Compressione immagini
-async function comprimiImmagineBase64(base64String, maxSizeKB = 500) {
+async function comprimiImmagineBase64(base64String, maxSizeKB = 200) { // ⬅️ Ridotto a 200KB
   return new Promise((resolve, reject) => {
-    // Estrai il tipo MIME e i dati
     const matches = base64String.match(/^data:([^;]+);base64,(.+)$/);
     if (!matches) {
-      resolve(base64String); // Non è un base64 valido, ritorna originale
+      resolve(base64String);
       return;
     }
     
     const mimeType = matches[1];
     const base64Data = matches[2];
     
-    // Solo immagini
     if (!mimeType.startsWith('image/')) {
       resolve(base64String);
       return;
     }
     
-    // Calcola dimensione attuale
-    const currentSizeKB = (base64Data.length * 0.75) / 1024; // Stima dimensione KB
+    const currentSizeKB = (base64Data.length * 0.75) / 1024;
     
     if (currentSizeKB <= maxSizeKB) {
-      console.log(`✅ Immagine già sotto ${maxSizeKB}KB (${currentSizeKB.toFixed(2)}KB), nessuna compressione necessaria`);
+      console.log(`✅ Immagine già sotto ${maxSizeKB}KB (${currentSizeKB.toFixed(2)}KB)`);
       resolve(base64String);
       return;
     }
     
     console.log(`🔄 Compressione immagine: ${currentSizeKB.toFixed(2)}KB → target ${maxSizeKB}KB`);
     
-    // Crea immagine
     const img = new Image();
     img.onload = function() {
-      // Crea canvas
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
       
-      // Calcola nuove dimensioni mantenendo aspect ratio
+      // ✅ RIDUZIONE PIÙ AGGRESSIVA
       let width = img.width;
       let height = img.height;
-      const maxDimension = 1920; // Max larghezza/altezza
+      const maxDimension = 1280; // ⬅️ Ridotto da 1920
       
       if (width > maxDimension || height > maxDimension) {
         if (width > height) {
@@ -1293,17 +1357,15 @@ async function comprimiImmagineBase64(base64String, maxSizeKB = 500) {
       
       canvas.width = width;
       canvas.height = height;
-      
-      // Disegna immagine ridimensionata
       ctx.drawImage(img, 0, 0, width, height);
       
-      // Prova diverse qualità fino a raggiungere target
-      let quality = 0.8;
+      // ✅ COMPRESSIONE PIÙ AGGRESSIVA
+      let quality = 0.7; // ⬅️ Inizia da 0.7
       let compressed = canvas.toDataURL('image/jpeg', quality);
       let compressedSizeKB = (compressed.split(',')[1].length * 0.75) / 1024;
       
       while (compressedSizeKB > maxSizeKB && quality > 0.1) {
-        quality -= 0.1;
+        quality -= 0.05; // ⬅️ Step più piccoli
         compressed = canvas.toDataURL('image/jpeg', quality);
         compressedSizeKB = (compressed.split(',')[1].length * 0.75) / 1024;
       }
@@ -1313,7 +1375,7 @@ async function comprimiImmagineBase64(base64String, maxSizeKB = 500) {
     };
     
     img.onerror = () => {
-      console.warn('⚠️ Errore caricamento immagine per compressione, uso originale');
+      console.warn('⚠️ Errore caricamento immagine, uso originale');
       resolve(base64String);
     };
     
