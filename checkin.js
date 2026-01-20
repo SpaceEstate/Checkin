@@ -1040,42 +1040,44 @@ window.handleFileUpload = function(input, ospiteNum) {
   if (!label) return;
   
   if (file) {
-    // ✅ LIMITE MASSIMO: 1 MB per singolo file
-    const MAX_FILE_SIZE = 1 * 1024 * 1024; // 1 MB
+    // ✅ LIMITE DINAMICO: più ospiti = file più piccoli
+    const MAX_FILE_SIZE_PER_GUEST = {
+      1: 2 * 1024 * 1024,   // 2 MB per 1 ospite
+      2: 1.5 * 1024 * 1024, // 1.5 MB per 2 ospiti
+      3: 1 * 1024 * 1024,   // 1 MB per 3 ospiti
+      4: 800 * 1024,        // 800 KB per 4 ospiti
+      5: 600 * 1024,        // 600 KB per 5 ospiti
+      6: 500 * 1024,        // 500 KB per 6+ ospiti
+      7: 500 * 1024,
+      8: 400 * 1024,
+      9: 400 * 1024
+    };
     
-    if (file.size > MAX_FILE_SIZE) {
+    const maxSize = MAX_FILE_SIZE_PER_GUEST[numeroOspiti] || 400 * 1024;
+    const maxSizeMB = (maxSize / 1024 / 1024).toFixed(1);
+    
+    if (file.size > maxSize) {
       const fileSizeMB = (file.size / 1024 / 1024).toFixed(2);
       showNotification(
         `📦 File troppo grande: ${fileSizeMB} MB\n` +
-        `Limite massimo: 1 MB\n\n` +
+        `Limite per ${numeroOspiti} ospiti: ${maxSizeMB} MB\n\n` +
         `💡 Suggerimenti:\n` +
-        `• Usa la fotocamera con risoluzione "Media" o "Bassa"\n` +
-        `• Se hai già la foto, comprimila prima (ci sono app gratuite)\n` +
-        `• Scatta una nuova foto con qualità inferiore`,
+        `• Usa la fotocamera con risoluzione "Bassa"\n` +
+        `• Scatta da più lontano\n` +
+        `• Comprimi la foto prima di caricarla`,
         'error'
       );
       input.value = '';
       return;
     }
     
-    // ✅ AVVISO per file sopra 500 KB
-    if (file.size > 500 * 1024) {
-      const fileSizeKB = (file.size / 1024).toFixed(0);
-      showNotification(
-        `⚠️ File ${fileSizeKB} KB\n` +
-        `Sarà compresso automaticamente durante l'invio.`,
-        'info'
-      );
-    }
-    
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
     if (!allowedTypes.includes(file.type)) {
-      showNotification('Formato file non supportato. Usa: JPG, PNG, WebP o PDF', 'error');
+      showNotification('Formato file non supportato. Usa: JPG, PNG o WebP', 'error');
       input.value = '';
       return;
     }
     
-    // ✅ Mostra dimensione file
     const fileSizeKB = (file.size / 1024).toFixed(0);
     const sizeText = file.size > 1024 * 1024 
       ? `${(file.size / 1024 / 1024).toFixed(1)} MB`
@@ -1089,6 +1091,8 @@ window.handleFileUpload = function(input, ospiteNum) {
     label.classList.remove('has-file');
   }
 }
+
+console.log('✅ Fix compressione documenti caricato - supporto fino a 9 ospiti');
 
 window.openCamera = async function(ospiteNum) {
   const preview = document.getElementById(`camera-preview-${ospiteNum}`);
@@ -1309,7 +1313,7 @@ window.procediAlPagamento = async function() {
 }
 
 // ✅ NUOVA FUNZIONE: Compressione immagini
-async function comprimiImmagineBase64(base64String, maxSizeKB = 200) { // ⬅️ Ridotto a 200KB
+async function comprimiImmagineBase64(base64String, maxSizeKB = 150) { // ⬅️ RIDOTTO a 150KB
   return new Promise((resolve, reject) => {
     const matches = base64String.match(/^data:([^;]+);base64,(.+)$/);
     if (!matches) {
@@ -1340,10 +1344,10 @@ async function comprimiImmagineBase64(base64String, maxSizeKB = 200) { // ⬅️
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
       
-      // ✅ RIDUZIONE PIÙ AGGRESSIVA
+      // ✅ RIDUZIONE MOLTO AGGRESSIVA
       let width = img.width;
       let height = img.height;
-      const maxDimension = 1280; // ⬅️ Ridotto da 1920
+      const maxDimension = 1024; // ⬅️ Ridotto da 1280
       
       if (width > maxDimension || height > maxDimension) {
         if (width > height) {
@@ -1359,18 +1363,18 @@ async function comprimiImmagineBase64(base64String, maxSizeKB = 200) { // ⬅️
       canvas.height = height;
       ctx.drawImage(img, 0, 0, width, height);
       
-      // ✅ COMPRESSIONE PIÙ AGGRESSIVA
-      let quality = 0.7; // ⬅️ Inizia da 0.7
+      // ✅ COMPRESSIONE MOLTO AGGRESSIVA
+      let quality = 0.6; // ⬅️ Inizia da 0.6 invece di 0.7
       let compressed = canvas.toDataURL('image/jpeg', quality);
       let compressedSizeKB = (compressed.split(',')[1].length * 0.75) / 1024;
       
       while (compressedSizeKB > maxSizeKB && quality > 0.1) {
-        quality -= 0.05; // ⬅️ Step più piccoli
+        quality -= 0.05;
         compressed = canvas.toDataURL('image/jpeg', quality);
         compressedSizeKB = (compressed.split(',')[1].length * 0.75) / 1024;
       }
       
-      console.log(`✅ Immagine compressa: ${currentSizeKB.toFixed(2)}KB → ${compressedSizeKB.toFixed(2)}KB (qualità ${(quality * 100).toFixed(0)}%)`);
+      console.log(`✅ Compresso: ${currentSizeKB.toFixed(2)}KB → ${compressedSizeKB.toFixed(2)}KB (qualità ${(quality * 100).toFixed(0)}%)`);
       resolve(compressed);
     };
     
@@ -1434,26 +1438,16 @@ async function raccogliDatiPrenotazioneConCompressione() {
     datiPrenotazione.ospiti.push(ospite);
   }
   
-  // ✅ COMPRESSIONE DOCUMENTI CON VALIDAZIONE E STATISTICHE
+  // ✅ COMPRESSIONE DOCUMENTI DINAMICA BASATA SUL NUMERO OSPITI
   showNotification('🗜️ Compressione documenti in corso...', 'info');
   
-  // Verifica dimensione totale PRE-compressione
-  let totalPreCompressionMB = 0;
-  for (let i = 1; i <= numeroOspiti; i++) {
-    const fileInput = document.querySelector(`input[name="ospite${i}_documento_file"]`);
-    if (fileInput?.files?.[0]) {
-      totalPreCompressionMB += fileInput.files[0].size / 1024 / 1024;
-    }
-  }
+  // ✅ CALCOLO DINAMICO TARGET PER DOCUMENTO
+  const MAX_TOTAL_SIZE_MB = 5; // ⬅️ Limite totale sicuro: 5 MB
+  const OVERHEAD_JSON_KB = 50; // ⬅️ Spazio per dati JSON
+  const targetPerDocKB = ((MAX_TOTAL_SIZE_MB * 1024) - OVERHEAD_JSON_KB) / numeroOspiti;
+  const finalTargetKB = Math.min(targetPerDocKB, 150); // ⬅️ Max 150KB per doc
   
-  console.log(`📊 Dimensione totale documenti caricati: ${totalPreCompressionMB.toFixed(2)} MB`);
-  
-  // Target dinamico: max 1.5 MB totali / numero documenti
-  const MAX_TOTAL_SIZE_MB = 1.5;
-  const targetPerDocKB = (MAX_TOTAL_SIZE_MB * 1024) / numeroOspiti;
-  const finalTargetKB = Math.min(targetPerDocKB, 250);
-  
-  console.log(`📊 Target compressione: ${finalTargetKB.toFixed(0)}KB per documento (${numeroOspiti} documenti)`);
+  console.log(`📊 Compressione dinamica: ${numeroOspiti} ospiti → ${finalTargetKB.toFixed(0)}KB per documento`);
   
   const documenti = [];
   let totalSizeKB = 0;
@@ -1495,33 +1489,33 @@ async function raccogliDatiPrenotazioneConCompressione() {
   // Log dimensione finale
   const payloadSize = JSON.stringify(datiPrenotazione).length;
   const payloadSizeMB = (payloadSize / 1024 / 1024).toFixed(2);
-  const riduzioneComplessiva = ((1 - payloadSize / (totalPreCompressionMB * 1024 * 1024)) * 100).toFixed(0);
   
   console.log(`📦 Dimensione finale payload: ${payloadSizeMB} MB (${payloadSize} bytes)`);
   console.log(`📎 Dimensione documenti compressi: ${totalSizeKB.toFixed(2)} KB`);
-  console.log(`💾 Riduzione complessiva: ${totalPreCompressionMB.toFixed(2)} MB → ${payloadSizeMB} MB (${riduzioneComplessiva}%)`);
+  console.log(`👥 Media per documento: ${(totalSizeKB / numeroOspiti).toFixed(0)} KB`);
   
   // Verifica dimensione finale
   const MAX_REDIS_SIZE = 7 * 1024 * 1024;
   if (payloadSize > MAX_REDIS_SIZE) {
     throw new Error(
       `📦 Dati troppo grandi (${payloadSizeMB} MB / max 7 MB)\n\n` +
-      `Anche dopo la compressione, i dati superano il limite.\n` +
+      `Anche dopo la compressione aggressiva, i dati superano il limite.\n\n` +
+      `Questo può accadere con ${numeroOspiti} ospiti.\n\n` +
       `Prova a:\n` +
-      `• Scattare foto con risoluzione inferiore\n` +
-      `• Usare la fotocamera con qualità "media" o "bassa"\n` +
-      `• Comprimere le immagini prima di caricarle`
+      `• Scattare foto con risoluzione MOLTO bassa\n` +
+      `• Usare la fotocamera con qualità "bassa"\n` +
+      `• Comprimere le immagini prima di caricarle\n` +
+      `• Ridurre il numero di ospiti per prenotazione`
     );
   }
   
   showNotification(
-    `✅ Documenti compressi: ${totalPreCompressionMB.toFixed(1)} MB → ${totalSizeKB.toFixed(0)} KB`,
+    `✅ ${numeroOspiti} documenti compressi: ${totalSizeKB.toFixed(0)} KB totali (~${(totalSizeKB/numeroOspiti).toFixed(0)} KB/doc)`,
     'success'
   );
   
   return datiPrenotazione;
 }
-
 async function creaLinkPagamentoConSessionId(datiPrenotazione, tempSessionId) {
   console.log("💳 Creazione link pagamento Stripe");
 
