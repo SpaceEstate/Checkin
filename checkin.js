@@ -717,53 +717,51 @@ function generaStepOspiti() {
     stepDiv.className = 'step';
     stepDiv.id = `step-${i + 1}`;
     
-    const campiDocumento = i === 1 ? `
-      <div class="form-group">
-        <label class="form-label" for="ospite1_tipo_documento">Tipo documento *</label>
-        <select id="ospite1_tipo_documento" name="ospite1_tipo_documento" class="form-select" required>
-          <option value="">Seleziona tipo documento</option>
-          ${tipiDocumento.map(tipo => `<option value="${tipo}">${tipo}</option>`).join('')}
-        </select>
+   const campiDocumento = i === 1 ? `
+  <div class="form-group">
+    <label class="form-label" for="ospite1_tipo_documento">Tipo documento *</label>
+    <select id="ospite1_tipo_documento" name="ospite1_tipo_documento" class="form-select" required>
+      <option value="">Seleziona tipo documento</option>
+      ${tipiDocumento.map(tipo => `<option value="${tipo}">${tipo}</option>`).join('')}
+    </select>
+  </div>
+  <div class="form-group">
+    <label class="form-label" for="ospite1_numero_documento">Numero documento *</label>
+    <input type="text" id="ospite1_numero_documento" name="ospite1_numero_documento" 
+           class="form-input" required placeholder="Es. AA1234567" maxlength="20" pattern="[A-Za-z0-9]+">
+  </div>
+  <div class="form-group">
+    <label class="form-label" for="ospite1_luogo_rilascio">Luogo rilascio documento *</label>
+    <select id="ospite1_luogo_rilascio" name="ospite1_luogo_rilascio" class="form-select" required>
+      <option value="">Seleziona luogo rilascio</option>
+      ${stati.map(stato => `<option value="${stato}">${stato}</option>`).join('')}
+    </select>
+  </div>
+  <div class="document-section" style="grid-column: 1 / -1;">
+    <h3 class="document-title">📄 Documento di identità</h3>
+    <p class="document-subtitle">Carica una foto o scansione del documento (max 2 MB)</p>
+    <div class="document-upload">
+      <div class="upload-group">
+        <label for="ospite1_documento_file" class="upload-label">📎 Scegli file</label>
+        <input type="file" id="ospite1_documento_file" name="ospite1_documento_file" 
+               class="upload-input" accept="image/*,.pdf" onchange="handleFileUpload(this, 1)">
       </div>
-      <div class="form-group">
-        <label class="form-label" for="ospite1_numero_documento">Numero documento *</label>
-        <input type="text" id="ospite1_numero_documento" name="ospite1_numero_documento" 
-               class="form-input" required placeholder="Es. AA1234567" maxlength="20" pattern="[A-Za-z0-9]+">
+      <div class="camera-group">
+        <button type="button" class="camera-btn" onclick="openCamera(1)">📷 Fotografa documento</button>
       </div>
-      <div class="form-group">
-        <label class="form-label" for="ospite1_luogo_rilascio">Luogo rilascio documento *</label>
-        <select id="ospite1_luogo_rilascio" name="ospite1_luogo_rilascio" class="form-select" required>
-          <option value="">Seleziona luogo rilascio</option>
-          ${stati.map(stato => `<option value="${stato}">${stato}</option>`).join('')}
-        </select>
+    </div>
+    <div id="camera-preview-1" class="camera-preview" style="display: none;">
+      <video id="camera-video-1" autoplay playsinline></video>
+      <canvas id="camera-canvas-1" style="display: none;"></canvas>
+      <div class="camera-controls">
+        <button type="button" class="capture-btn" onclick="capturePhoto(1)">📸 Scatta</button>
+        <button type="button" class="close-camera-btn" onclick="closeCamera(1)">✕ Chiudi</button>
       </div>
-      <div class="document-section" style="grid-column: 1 / -1;">
-        <h3 class="document-title">📄 Documento di identità</h3>
-        <p class="document-subtitle">Carica una foto o scansione del documento (max 2 MB)</p>
-        <div class="document-upload">
-          <div class="upload-group">
-            <label for="ospite1_documento_file" class="upload-label">📎 Scegli file</label>
-            <input type="file" id="ospite1_documento_file" name="ospite1_documento_file" 
-                   class="upload-input" accept="image/*,.pdf" onchange="handleFileUpload(this, 1)">
-          </div>
-          <div class="camera-group">
-            <button type="button" class="camera-btn" onclick="openCamera(1)">📷 Fotografa documento</button>
-          </div>
-        </div>
-        <div id="camera-preview-1" class="camera-preview" style="display: none;">
-          <video id="camera-video-1" autoplay playsinline></video>
-          <canvas id="camera-canvas-1" style="display: none;"></canvas>
-          <div class="camera-controls">
-            <button type="button" class="capture-btn" onclick="capturePhoto(1)">📸 Scatta</button>
-            <button type="button" class="close-camera-btn" onclick="closeCamera(1)">✕ Chiudi</button>
-          </div>
-        </div>
-      </div>
-    ` : '';
-    
-   
-    
-    stepDiv.innerHTML = `
+    </div>
+  </div>
+` : '';
+
+   stepDiv.innerHTML = `
       <div class="step-header">
         <h2 class="step-title">Ospite ${i}${i === 1 ? ' (Responsabile)' : ''}</h2>
         <p class="step-subtitle">Inserisci i dati dell'ospite</p>
