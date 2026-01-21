@@ -737,11 +737,7 @@ function generaStepOspiti() {
           ${stati.map(stato => `<option value="${stato}">${stato}</option>`).join('')}
         </select>
       </div>
-    ` : '';
-    
-    // ✅ SEZIONE DOCUMENTI SOLO PER OSPITE 1
-    const sezionDocumento = i === 1 ? `
-      <div class="document-section">
+      <div class="document-section" style="grid-column: 1 / -1;">
         <h3 class="document-title">📄 Documento di identità</h3>
         <p class="document-subtitle">Carica una foto o scansione del documento (max 2 MB)</p>
         <div class="document-upload">
@@ -764,6 +760,8 @@ function generaStepOspiti() {
         </div>
       </div>
     ` : '';
+    
+   
     
     stepDiv.innerHTML = `
       <div class="step-header">
@@ -825,7 +823,7 @@ function generaStepOspiti() {
         </div>
         ${campiDocumento}
       </div>
-      ${sezionDocumento}
+      
       <div class="button-group">
         <button type="button" class="btn btn-secondary" onclick="indietroStep()">← Indietro</button>
         <button type="button" class="btn btn-primary" onclick="prossimoStep()">
