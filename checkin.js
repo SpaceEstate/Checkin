@@ -258,31 +258,7 @@ async function fileToBase64(file) {
   });
 }
 
-async function raccogliDocumenti() {
-  const documenti = [];
-  
-  for (let i = 1; i <= numeroOspiti; i++) {
-    const fileInput = document.querySelector(`input[name="ospite${i}_documento_file"]`);
-    if (fileInput?.files?.[0]) {
-      try {
-        const file = fileInput.files[0];
-        const base64 = await fileToBase64(file);
-        
-        documenti.push({
-          ospiteNumero: i,
-          nomeFile: file.name,
-          tipo: file.type,
-          dimensione: file.size,
-          base64: base64
-        });
-      } catch (error) {
-        console.error(`Errore conversione documento ospite ${i}:`, error);
-      }
-    }
-  }
-  
-  return documenti;
-}
+
 
 function calcolaEta(dataNascita) {
   if (!dataNascita) return 0;
@@ -656,7 +632,6 @@ function validaPrenotazioneCompleta() {
     return false;
   }
   
-  // Verifica ospiti
   if (!numeroOspiti || numeroOspiti < 1) {
     showNotification('Numero ospiti non valido', 'error');
     return false;
@@ -707,7 +682,7 @@ function validaPrenotazioneCompleta() {
       }
     }
     
-    // Verifica documenti aggiuntivi per responsabile
+    // ✅ VERIFICA DOCUMENTI AGGIUNTIVI SOLO PER OSPITE 1
     if (i === 1) {
       const tipoDocumento = document.querySelector(`select[name="ospite1_tipo_documento"]`)?.value;
       const numeroDocumento = document.querySelector(`input[name="ospite1_numero_documento"]`)?.value?.trim();
@@ -717,13 +692,13 @@ function validaPrenotazioneCompleta() {
         showNotification('Dati documento del responsabile incompleti', 'error');
         return false;
       }
-    }
-    
-    // Verifica documento caricato
-    const fileInput = document.querySelector(`input[name="ospite${i}_documento_file"]`);
-    if (!fileInput?.files?.length) {
-      showNotification(`Documento mancante per ospite ${i}`, 'error');
-      return false;
+      
+      // ✅ VERIFICA FILE CARICATO SOLO PER OSPITE 1
+      const fileInput = document.querySelector(`input[name="ospite1_documento_file"]`);
+      if (!fileInput?.files?.length) {
+        showNotification(`Documento mancante per il responsabile`, 'error');
+        return false;
+      }
     }
   }
   
@@ -1397,6 +1372,7 @@ async function raccogliDatiPrenotazioneConCompressione() {
     tipoGruppo: document.getElementById('tipo-gruppo')?.value || null,
     totale: calcolaTotale(),
     ospiti: [],
+    documenti: [], // ✅ ARRAY VUOTO, verrà riempito solo con documento ospite 1
     timestamp: new Date().toISOString()
   };
 
@@ -1430,10 +1406,9 @@ async function raccogliDatiPrenotazioneConCompressione() {
     datiPrenotazione.ospiti.push(ospite);
   }
   
-  // ✅ RACCOGLI SOLO DOCUMENTO OSPITE 1
+  // ✅ RACCOGLI DOCUMENTO SOLO OSPITE 1
   showNotification('📄 Caricamento documento in corso...', 'info');
   
-  const documenti = [];
   const fileInput = document.querySelector(`input[name="ospite1_documento_file"]`);
   
   if (fileInput?.files?.[0]) {
@@ -1445,16 +1420,19 @@ async function raccogliDatiPrenotazioneConCompressione() {
       
       const base64 = await fileToBase64(file);
       
-      // Compressione leggera (solo se supera 2 MB)
-      let base64Finale = base64;
-      if (file.size > 2 * 1024 * 1024) {
-        base64Finale = await comprimiImmagineBase64(base64, 500); // Target 500 KB
-      }
+      // ✅ COMPRESSIONE AGGRESSIVA a 400KB
+      const base64Finale = await comprimiImmagineBase64(base64, 400);
       
       const sizeKB = (base64Finale.split(',')[1].length * 0.75) / 1024;
-      console.log(`✅ Documento finale: ${sizeKB.toFixed(2)} KB`);
       
-      documenti.push({
+      if (sizeKB > 500) {
+        throw new Error(`Documento troppo grande anche dopo compressione (${sizeKB.toFixed(0)} KB). Usa una foto con risoluzione più bassa.`);
+      }
+      
+      console.log(`✅ Documento compresso: ${sizeKB.toFixed(2)} KB`);
+      
+      // ✅ AGGIUNGI SOLO QUESTO DOCUMENTO
+      datiPrenotazione.documenti.push({
         ospiteNumero: 1,
         nomeFile: file.name,
         tipo: file.type,
@@ -1463,24 +1441,29 @@ async function raccogliDatiPrenotazioneConCompressione() {
       });
       
     } catch (error) {
-      console.error(`❌ Errore conversione documento responsabile:`, error);
-      throw new Error(`Impossibile processare il documento. Riprova con un'immagine diversa.`);
+      console.error(`❌ Errore conversione documento:`, error);
+      throw new Error(error.message || `Impossibile processare il documento. Riprova con un'immagine diversa.`);
     }
   }
   
-  datiPrenotazione.documenti = documenti;
-  
-  // Log dimensione finale
+  // ✅ VERIFICA FINALE
   const payloadSize = JSON.stringify(datiPrenotazione).length;
   const payloadSizeMB = (payloadSize / 1024 / 1024).toFixed(2);
   
   console.log(`📦 Dimensione finale payload: ${payloadSizeMB} MB (${payloadSize} bytes)`);
-  console.log(`📎 Documento incluso: ${documenti.length > 0 ? 'SI' : 'NO'}`);
+  console.log(`📎 Documenti inclusi: ${datiPrenotazione.documenti.length}`);
+  console.log(`👥 Ospiti: ${datiPrenotazione.ospiti.length}`);
   
-  showNotification(`✅ Documento caricato correttamente`, 'success');
+  if (payloadSize > 4 * 1024 * 1024) {
+    throw new Error(`Payload troppo grande (${payloadSizeMB} MB). Riduci la qualità del documento.`);
+  }
+  
+  showNotification(`✅ Documento caricato (${sizeKB.toFixed(0)} KB)`, 'success');
   
   return datiPrenotazione;
 }
+
+
 async function creaLinkPagamentoConSessionId(datiPrenotazione, tempSessionId) {
   console.log("💳 Creazione link pagamento Stripe");
 
