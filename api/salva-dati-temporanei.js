@@ -10,7 +10,7 @@ async function getRedisClient() {
     return redisClient;
   }
 
-  const redisUrl = process.env.REDIS_URL;
+  const redisUrl = process.env.ciao_REDIS_URL;
   if (!redisUrl) {
     throw new Error("REDIS_URL non configurato nelle variabili d'ambiente");
   }
