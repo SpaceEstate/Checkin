@@ -204,9 +204,10 @@ function generaHTMLRiepilogo(dati) {
 
   // Genera HTML ospiti con page-break corretto
   const ospitiHTML = (dati.ospiti || []).map((ospite, index) => {
-    const documento = documentiValidi.find(d => 
-      d && d.ospiteNumero && d.ospiteNumero === ospite.numero
-    );
+    // ✅ Cerca documento SOLO per ospite 1
+    const documento = index === 0 ? documentiValidi.find(d => 
+      d && d.ospiteNumero && d.ospiteNumero === 1
+    ) : null;
     
     // ✅ CORREZIONE: Ospite 1 da solo in pag 1, poi 3 ospiti per pagina
 // Pag 1: Dettagli + Ospite 1
