@@ -495,17 +495,17 @@ body { font-family: 'Arial', sans-serif; line-height: 1.3; color: #333; margin: 
 
       ${ospitiHTML}
 
-${documento ? `
-    <div class="documento-note">
-      <strong>📎 Documento allegato:</strong> ${documento.nomeFile || 'Documento'} 
-      (${Math.round(documento.dimensione / 1024)} KB) - 
-      <em>Vedi allegati email separati</em>
-    </div>
-    ` : (index === 0 ? `
-    <div class="documento-note">
-      <strong>⚠️ Documento non allegato</strong>
-    </div>
-    ` : '')}
+      ${documentiValidi.length > 0 ? `
+      <div class="section">
+        <h2>📎 Documenti Allegati</h2>
+        <p>Il documento di identità del responsabile è allegato separatamente a questa email:</p>
+        <ul>
+          ${documentiValidi.map(doc => `
+            <li><strong>Responsabile:</strong> ${doc.nomeFile} (${Math.round(doc.dimensione / 1024)} KB)</li>
+          `).join('')}
+        </ul>
+      </div>
+      ` : ''}
     </body>
     </html>
   `;
