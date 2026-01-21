@@ -626,17 +626,17 @@ function validaStepOspite(numOspite) {
         return false;
       }
     }
-  }
-
-  const fileInput = document.querySelector(`input[name="ospite${numOspite}_documento_file"]`);
-  if (!fileInput?.files?.length) {
-    showNotification(`È necessario caricare un documento per l'ospite ${numOspite}`, 'error');
-    return false;
+    
+    // ✅ VALIDAZIONE DOCUMENTO SOLO PER OSPITE 1
+    const fileInput = document.querySelector(`input[name="ospite1_documento_file"]`);
+    if (!fileInput?.files?.length) {
+      showNotification(`È necessario caricare un documento per il responsabile`, 'error');
+      return false;
+    }
   }
 
   return true;
 }
-
 /**
  * Valida che tutti i dati della prenotazione siano completi
  */
@@ -764,6 +764,32 @@ function generaStepOspiti() {
       </div>
     ` : '';
     
+    // ✅ SEZIONE DOCUMENTI SOLO PER OSPITE 1
+    const sezionDocumento = i === 1 ? `
+      <div class="document-section">
+        <h3 class="document-title">📄 Documento di identità</h3>
+        <p class="document-subtitle">Carica una foto o scansione del documento (max 2 MB)</p>
+        <div class="document-upload">
+          <div class="upload-group">
+            <label for="ospite1_documento_file" class="upload-label">📎 Scegli file</label>
+            <input type="file" id="ospite1_documento_file" name="ospite1_documento_file" 
+                   class="upload-input" accept="image/*,.pdf" onchange="handleFileUpload(this, 1)">
+          </div>
+          <div class="camera-group">
+            <button type="button" class="camera-btn" onclick="openCamera(1)">📷 Fotografa documento</button>
+          </div>
+        </div>
+        <div id="camera-preview-1" class="camera-preview" style="display: none;">
+          <video id="camera-video-1" autoplay playsinline></video>
+          <canvas id="camera-canvas-1" style="display: none;"></canvas>
+          <div class="camera-controls">
+            <button type="button" class="capture-btn" onclick="capturePhoto(1)">📸 Scatta</button>
+            <button type="button" class="close-camera-btn" onclick="closeCamera(1)">✕ Chiudi</button>
+          </div>
+        </div>
+      </div>
+    ` : '';
+    
     stepDiv.innerHTML = `
       <div class="step-header">
         <h2 class="step-title">Ospite ${i}${i === 1 ? ' (Responsabile)' : ''}</h2>
@@ -824,28 +850,7 @@ function generaStepOspiti() {
         </div>
         ${campiDocumento}
       </div>
-      <div class="document-section">
-        <h3 class="document-title">📄 Documento di identità</h3>
-        <p class="document-subtitle">Carica una foto o scansione del documento</p>
-        <div class="document-upload">
-          <div class="upload-group">
-            <label for="ospite${i}_documento_file" class="upload-label">📎 Scegli file</label>
-            <input type="file" id="ospite${i}_documento_file" name="ospite${i}_documento_file" 
-                   class="upload-input" accept="image/*,.pdf" onchange="handleFileUpload(this, ${i})">
-          </div>
-          <div class="camera-group">
-            <button type="button" class="camera-btn" onclick="openCamera(${i})">📷 Fotografa documento</button>
-          </div>
-        </div>
-        <div id="camera-preview-${i}" class="camera-preview" style="display: none;">
-          <video id="camera-video-${i}" autoplay playsinline></video>
-          <canvas id="camera-canvas-${i}" style="display: none;"></canvas>
-          <div class="camera-controls">
-            <button type="button" class="capture-btn" onclick="capturePhoto(${i})">📸 Scatta</button>
-            <button type="button" class="close-camera-btn" onclick="closeCamera(${i})">✕ Chiudi</button>
-          </div>
-        </div>
-      </div>
+      ${sezionDocumento}
       <div class="button-group">
         <button type="button" class="btn btn-secondary" onclick="indietroStep()">← Indietro</button>
         <button type="button" class="btn btn-primary" onclick="prossimoStep()">
@@ -1040,27 +1045,14 @@ window.handleFileUpload = function(input, ospiteNum) {
   if (!label) return;
   
   if (file) {
-    // ✅ LIMITE DINAMICO: più ospiti = file più piccoli
-    const MAX_FILE_SIZE_PER_GUEST = {
-      1: 2 * 1024 * 1024,   // 2 MB per 1 ospite
-      2: 1.5 * 1024 * 1024, // 1.5 MB per 2 ospiti
-      3: 1 * 1024 * 1024,   // 1 MB per 3 ospiti
-      4: 800 * 1024,        // 800 KB per 4 ospiti
-      5: 600 * 1024,        // 600 KB per 5 ospiti
-      6: 500 * 1024,        // 500 KB per 6+ ospiti
-      7: 500 * 1024,
-      8: 400 * 1024,
-      9: 400 * 1024
-    };
+    // ✅ LIMITE FISSO 2 MB per l'unico documento
+    const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2 MB
     
-    const maxSize = MAX_FILE_SIZE_PER_GUEST[numeroOspiti] || 400 * 1024;
-    const maxSizeMB = (maxSize / 1024 / 1024).toFixed(1);
-    
-    if (file.size > maxSize) {
+    if (file.size > MAX_FILE_SIZE) {
       const fileSizeMB = (file.size / 1024 / 1024).toFixed(2);
       showNotification(
         `📦 File troppo grande: ${fileSizeMB} MB\n` +
-        `Limite per ${numeroOspiti} ospiti: ${maxSizeMB} MB\n\n` +
+        `Limite massimo: 2 MB\n\n` +
         `💡 Suggerimenti:\n` +
         `• Usa la fotocamera con risoluzione "Bassa"\n` +
         `• Scatta da più lontano\n` +
@@ -1438,49 +1430,41 @@ async function raccogliDatiPrenotazioneConCompressione() {
     datiPrenotazione.ospiti.push(ospite);
   }
   
-  // ✅ COMPRESSIONE DOCUMENTI DINAMICA BASATA SUL NUMERO OSPITI
-  showNotification('🗜️ Compressione documenti in corso...', 'info');
-  
-  // ✅ CALCOLO DINAMICO TARGET PER DOCUMENTO
-  const MAX_TOTAL_SIZE_MB = 5; // ⬅️ Limite totale sicuro: 5 MB
-  const OVERHEAD_JSON_KB = 50; // ⬅️ Spazio per dati JSON
-  const targetPerDocKB = ((MAX_TOTAL_SIZE_MB * 1024) - OVERHEAD_JSON_KB) / numeroOspiti;
-  const finalTargetKB = Math.min(targetPerDocKB, 150); // ⬅️ Max 150KB per doc
-  
-  console.log(`📊 Compressione dinamica: ${numeroOspiti} ospiti → ${finalTargetKB.toFixed(0)}KB per documento`);
+  // ✅ RACCOGLI SOLO DOCUMENTO OSPITE 1
+  showNotification('📄 Caricamento documento in corso...', 'info');
   
   const documenti = [];
-  let totalSizeKB = 0;
+  const fileInput = document.querySelector(`input[name="ospite1_documento_file"]`);
   
-  for (let i = 1; i <= numeroOspiti; i++) {
-    const fileInput = document.querySelector(`input[name="ospite${i}_documento_file"]`);
-    if (fileInput?.files?.[0]) {
-      try {
-        const file = fileInput.files[0];
-        const originalSizeMB = (file.size / 1024 / 1024).toFixed(2);
-        
-        console.log(`📸 Documento ${i}: ${file.name} - ${originalSizeMB} MB (originale)`);
-        
-        const base64 = await fileToBase64(file);
-        const base64Compresso = await comprimiImmagineBase64(base64, finalTargetKB);
-        const sizeKB = (base64Compresso.split(',')[1].length * 0.75) / 1024;
-        totalSizeKB += sizeKB;
-        
-        const riduzionePct = ((1 - sizeKB / (file.size / 1024)) * 100).toFixed(0);
-        console.log(`✅ Compresso: ${originalSizeMB} MB → ${sizeKB.toFixed(2)} KB (riduzione ${riduzionePct}%)`);
-        
-        documenti.push({
-          ospiteNumero: i,
-          nomeFile: file.name,
-          tipo: file.type,
-          dimensione: base64Compresso.split(',')[1].length,
-          base64: base64Compresso
-        });
-        
-      } catch (error) {
-        console.error(`❌ Errore conversione documento ospite ${i}:`, error);
-        throw new Error(`Impossibile processare il documento dell'ospite ${i}. Riprova con un'immagine diversa.`);
+  if (fileInput?.files?.[0]) {
+    try {
+      const file = fileInput.files[0];
+      const originalSizeMB = (file.size / 1024 / 1024).toFixed(2);
+      
+      console.log(`📸 Documento responsabile: ${file.name} - ${originalSizeMB} MB (originale)`);
+      
+      const base64 = await fileToBase64(file);
+      
+      // Compressione leggera (solo se supera 2 MB)
+      let base64Finale = base64;
+      if (file.size > 2 * 1024 * 1024) {
+        base64Finale = await comprimiImmagineBase64(base64, 500); // Target 500 KB
       }
+      
+      const sizeKB = (base64Finale.split(',')[1].length * 0.75) / 1024;
+      console.log(`✅ Documento finale: ${sizeKB.toFixed(2)} KB`);
+      
+      documenti.push({
+        ospiteNumero: 1,
+        nomeFile: file.name,
+        tipo: file.type,
+        dimensione: base64Finale.split(',')[1].length,
+        base64: base64Finale
+      });
+      
+    } catch (error) {
+      console.error(`❌ Errore conversione documento responsabile:`, error);
+      throw new Error(`Impossibile processare il documento. Riprova con un'immagine diversa.`);
     }
   }
   
@@ -1491,28 +1475,9 @@ async function raccogliDatiPrenotazioneConCompressione() {
   const payloadSizeMB = (payloadSize / 1024 / 1024).toFixed(2);
   
   console.log(`📦 Dimensione finale payload: ${payloadSizeMB} MB (${payloadSize} bytes)`);
-  console.log(`📎 Dimensione documenti compressi: ${totalSizeKB.toFixed(2)} KB`);
-  console.log(`👥 Media per documento: ${(totalSizeKB / numeroOspiti).toFixed(0)} KB`);
+  console.log(`📎 Documento incluso: ${documenti.length > 0 ? 'SI' : 'NO'}`);
   
-  // Verifica dimensione finale
-  const MAX_REDIS_SIZE = 7 * 1024 * 1024;
-  if (payloadSize > MAX_REDIS_SIZE) {
-    throw new Error(
-      `📦 Dati troppo grandi (${payloadSizeMB} MB / max 7 MB)\n\n` +
-      `Anche dopo la compressione aggressiva, i dati superano il limite.\n\n` +
-      `Questo può accadere con ${numeroOspiti} ospiti.\n\n` +
-      `Prova a:\n` +
-      `• Scattare foto con risoluzione MOLTO bassa\n` +
-      `• Usare la fotocamera con qualità "bassa"\n` +
-      `• Comprimere le immagini prima di caricarle\n` +
-      `• Ridurre il numero di ospiti per prenotazione`
-    );
-  }
-  
-  showNotification(
-    `✅ ${numeroOspiti} documenti compressi: ${totalSizeKB.toFixed(0)} KB totali (~${(totalSizeKB/numeroOspiti).toFixed(0)} KB/doc)`,
-    'success'
-  );
+  showNotification(`✅ Documento caricato correttamente`, 'success');
   
   return datiPrenotazione;
 }
