@@ -1406,7 +1406,7 @@ async function raccogliDatiPrenotazioneConCompressione() {
   showNotification('📄 Caricamento documento in corso...', 'info');
   
   const fileInput = document.querySelector(`input[name="ospite1_documento_file"]`);
-  
+  let sizeKB = null;
   if (fileInput?.files?.[0]) {
     try {
       const file = fileInput.files[0];
@@ -1419,7 +1419,7 @@ async function raccogliDatiPrenotazioneConCompressione() {
       // ✅ COMPRESSIONE AGGRESSIVA a 400KB
       const base64Finale = await comprimiImmagineBase64(base64, 400);
       
-      const sizeKB = (base64Finale.split(',')[1].length * 0.75) / 1024;
+      sizeKB = (base64Finale.split(',')[1].length * 0.75) / 1024;
       
       if (sizeKB > 500) {
         throw new Error(`Documento troppo grande anche dopo compressione (${sizeKB.toFixed(0)} KB). Usa una foto con risoluzione più bassa.`);
@@ -1454,7 +1454,9 @@ async function raccogliDatiPrenotazioneConCompressione() {
     throw new Error(`Payload troppo grande (${payloadSizeMB} MB). Riduci la qualità del documento.`);
   }
   
+  if (sizeKB !== null) {
   showNotification(`✅ Documento caricato (${sizeKB.toFixed(0)} KB)`, 'success');
+}
   
   return datiPrenotazione;
 }
