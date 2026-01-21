@@ -204,10 +204,10 @@ function generaHTMLRiepilogo(dati) {
 
   // Genera HTML ospiti con page-break corretto
   const ospitiHTML = (dati.ospiti || []).map((ospite, index) => {
-    // ✅ Cerca documento SOLO per ospite 1
-    const documento = index === 0 ? documentiValidi.find(d => 
-      d && d.ospiteNumero && d.ospiteNumero === 1
-    ) : null;
+    // ✅ CERCA DOCUMENTO SOLO PER OSPITE 1
+    const documento = (index === 0 && documentiValidi.length > 0) 
+      ? documentiValidi.find(d => d && d.ospiteNumero === 1) 
+      : null;
     
     // ✅ CORREZIONE: Ospite 1 da solo in pag 1, poi 3 ospiti per pagina
 // Pag 1: Dettagli + Ospite 1
@@ -495,17 +495,17 @@ body { font-family: 'Arial', sans-serif; line-height: 1.3; color: #333; margin: 
 
       ${ospitiHTML}
 
-      ${documentiValidi.length > 0 ? `
-      <div class="section">
-        <h2>📎 Documenti Allegati</h2>
-        <p>I documenti di identità sono allegati separatamente a questa email:</p>
-        <ul>
-          ${documentiValidi.map(doc => `
-            <li><strong>Ospite ${doc.ospiteNumero}:</strong> ${doc.nomeFile} (${Math.round(doc.dimensione / 1024)} KB)</li>
-          `).join('')}
-        </ul>
-      </div>
-      ` : ''}
+${documento ? `
+    <div class="documento-note">
+      <strong>📎 Documento allegato:</strong> ${documento.nomeFile || 'Documento'} 
+      (${Math.round(documento.dimensione / 1024)} KB) - 
+      <em>Vedi allegati email separati</em>
+    </div>
+    ` : (index === 0 ? `
+    <div class="documento-note">
+      <strong>⚠️ Documento non allegato</strong>
+    </div>
+    ` : '')}
     </body>
     </html>
   `;
