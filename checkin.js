@@ -566,6 +566,7 @@ function validaStepOspite(numOspite) {
     { name: `ospite${numOspite}_luogo_nascita`, label: "Luogo di nascita" }
   ];
 
+  // ✅ CAMPI DOCUMENTO SOLO PER OSPITE 1
   if (numOspite === 1) {
     requiredFields.push(
       { name: `ospite1_tipo_documento`, label: "Tipo documento" },
@@ -593,6 +594,7 @@ function validaStepOspite(numOspite) {
     }
   }
 
+  // ✅ VALIDAZIONE MAGGIORENNE E DOCUMENTO SOLO PER OSPITE 1
   if (numOspite === 1) {
     const nascita = document.querySelector(`input[name="ospite1_nascita"]`)?.value;
     if (nascita) {
@@ -603,7 +605,6 @@ function validaStepOspite(numOspite) {
       }
     }
     
-    // ✅ VALIDAZIONE DOCUMENTO SOLO PER OSPITE 1
     const fileInput = document.querySelector(`input[name="ospite1_documento_file"]`);
     if (!fileInput?.files?.length) {
       showNotification(`È necessario caricare un documento per il responsabile`, 'error');
@@ -718,56 +719,56 @@ function generaStepOspiti() {
     stepDiv.className = 'step';
     stepDiv.id = `step-${i + 1}`;
     
-   // ✅ CAMPI DOCUMENTO SOLO PER OSPITE 1
-   let campiDocumento = '';
-   
-   if (i === 1) {
-     campiDocumento = `
-  <div class="form-group">
-    <label class="form-label" for="ospite1_tipo_documento">Tipo documento *</label>
-    <select id="ospite1_tipo_documento" name="ospite1_tipo_documento" class="form-select" required>
-      <option value="">Seleziona tipo documento</option>
-      ${tipiDocumento.map(tipo => `<option value="${tipo}">${tipo}</option>`).join('')}
-    </select>
-  </div>
-  <div class="form-group">
-    <label class="form-label" for="ospite1_numero_documento">Numero documento *</label>
-    <input type="text" id="ospite1_numero_documento" name="ospite1_numero_documento" 
-           class="form-input" required placeholder="Es. AA1234567" maxlength="20" pattern="[A-Za-z0-9]+">
-  </div>
-  <div class="form-group">
-    <label class="form-label" for="ospite1_luogo_rilascio">Luogo rilascio documento *</label>
-    <select id="ospite1_luogo_rilascio" name="ospite1_luogo_rilascio" class="form-select" required>
-      <option value="">Seleziona luogo rilascio</option>
-      ${stati.map(stato => `<option value="${stato}">${stato}</option>`).join('')}
-    </select>
-  </div>
-  <div class="document-section" style="grid-column: 1 / -1;">
-    <h3 class="document-title">📄 Documento di identità</h3>
-    <p class="document-subtitle">Carica una foto o scansione del documento (max 2 MB)</p>
-    <div class="document-upload">
-      <div class="upload-group">
-        <label for="ospite1_documento_file" class="upload-label">📎 Scegli file</label>
-        <input type="file" id="ospite1_documento_file" name="ospite1_documento_file" 
-               class="upload-input" accept="image/*,.pdf" onchange="handleFileUpload(this, 1)">
-      </div>
-      <div class="camera-group">
-        <button type="button" class="camera-btn" onclick="openCamera(1)">📷 Fotografa documento</button>
-      </div>
-    </div>
-    <div id="camera-preview-1" class="camera-preview" style="display: none;">
-      <video id="camera-video-1" autoplay playsinline></video>
-      <canvas id="camera-canvas-1" style="display: none;"></canvas>
-      <div class="camera-controls">
-        <button type="button" class="capture-btn" onclick="capturePhoto(1)">📸 Scatta</button>
-        <button type="button" class="close-camera-btn" onclick="closeCamera(1)">✕ Chiudi</button>
-      </div>
-    </div>
-  </div>
-`;
-   }
+    // ✅ CAMPI DOCUMENTO SOLO PER OSPITE 1
+    let campiDocumento = '';
+    
+    if (i === 1) {
+      campiDocumento = `
+        <div class="form-group">
+          <label class="form-label" for="ospite1_tipo_documento">Tipo documento *</label>
+          <select id="ospite1_tipo_documento" name="ospite1_tipo_documento" class="form-select" required>
+            <option value="">Seleziona tipo documento</option>
+            ${tipiDocumento.map(tipo => `<option value="${tipo}">${tipo}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="ospite1_numero_documento">Numero documento *</label>
+          <input type="text" id="ospite1_numero_documento" name="ospite1_numero_documento" 
+                 class="form-input" required placeholder="Es. AA1234567" maxlength="20" pattern="[A-Za-z0-9]+">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="ospite1_luogo_rilascio">Luogo rilascio documento *</label>
+          <select id="ospite1_luogo_rilascio" name="ospite1_luogo_rilascio" class="form-select" required>
+            <option value="">Seleziona luogo rilascio</option>
+            ${stati.map(stato => `<option value="${stato}">${stato}</option>`).join('')}
+          </select>
+        </div>
+        <div class="document-section" style="grid-column: 1 / -1;">
+          <h3 class="document-title">📄 Documento di identità</h3>
+          <p class="document-subtitle">Carica una foto o scansione del documento (max 2 MB)</p>
+          <div class="document-upload">
+            <div class="upload-group">
+              <label for="ospite1_documento_file" class="upload-label">📎 Scegli file</label>
+              <input type="file" id="ospite1_documento_file" name="ospite1_documento_file" 
+                     class="upload-input" accept="image/*,.pdf" onchange="handleFileUpload(this, 1)">
+            </div>
+            <div class="camera-group">
+              <button type="button" class="camera-btn" onclick="openCamera(1)">📷 Fotografa documento</button>
+            </div>
+          </div>
+          <div id="camera-preview-1" class="camera-preview" style="display: none;">
+            <video id="camera-video-1" autoplay playsinline></video>
+            <canvas id="camera-canvas-1" style="display: none;"></canvas>
+            <div class="camera-controls">
+              <button type="button" class="capture-btn" onclick="capturePhoto(1)">📸 Scatta</button>
+              <button type="button" class="close-camera-btn" onclick="closeCamera(1)">✕ Chiudi</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
 
-   stepDiv.innerHTML = `
+    stepDiv.innerHTML = `
       <div class="step-header">
         <h2 class="step-title">Ospite ${i}${i === 1 ? ' (Responsabile)' : ''}</h2>
         <p class="step-subtitle">Inserisci i dati dell'ospite</p>
@@ -1374,11 +1375,11 @@ async function raccogliDatiPrenotazioneConCompressione() {
     tipoGruppo: document.getElementById('tipo-gruppo')?.value || null,
     totale: calcolaTotale(),
     ospiti: [],
-    documenti: [], // ✅ ARRAY VUOTO, verrà riempito solo con documento ospite 1
+    documenti: [], // ✅ Solo documento ospite 1 verrà aggiunto
     timestamp: new Date().toISOString()
   };
 
-  // Raccogli ospiti
+  // Raccogli dati ospiti
   for (let i = 1; i <= numeroOspiti; i++) {
     const ospite = {
       numero: i,
@@ -1398,6 +1399,7 @@ async function raccogliDatiPrenotazioneConCompressione() {
       ospite.provincia = document.querySelector(`select[name="ospite${i}_provincia"]`)?.value;
     }
     
+    // ✅ CAMPI DOCUMENTO SOLO PER OSPITE 1
     if (i === 1) {
       ospite.tipoDocumento = document.querySelector(`select[name="ospite1_tipo_documento"]`)?.value;
       ospite.numeroDocumento = document.querySelector(`input[name="ospite1_numero_documento"]`)?.value?.trim();
@@ -1409,10 +1411,11 @@ async function raccogliDatiPrenotazioneConCompressione() {
   }
   
   // ✅ RACCOGLI DOCUMENTO SOLO OSPITE 1
-  showNotification('📄 Caricamento documento in corso...', 'info');
+  showNotification('📄 Caricamento documento responsabile...', 'info');
   
   const fileInput = document.querySelector(`input[name="ospite1_documento_file"]`);
   let sizeKB = null;
+  
   if (fileInput?.files?.[0]) {
     try {
       const file = fileInput.files[0];
@@ -1421,8 +1424,6 @@ async function raccogliDatiPrenotazioneConCompressione() {
       console.log(`📸 Documento responsabile: ${file.name} - ${originalSizeMB} MB (originale)`);
       
       const base64 = await fileToBase64(file);
-      
-      // ✅ COMPRESSIONE AGGRESSIVA a 400KB
       const base64Finale = await comprimiImmagineBase64(base64, 400);
       
       sizeKB = (base64Finale.split(',')[1].length * 0.75) / 1024;
@@ -1431,9 +1432,9 @@ async function raccogliDatiPrenotazioneConCompressione() {
         throw new Error(`Documento troppo grande anche dopo compressione (${sizeKB.toFixed(0)} KB). Usa una foto con risoluzione più bassa.`);
       }
       
-      console.log(`✅ Documento compresso: ${sizeKB.toFixed(2)} KB`);
+      console.log(`✅ Documento responsabile compresso: ${sizeKB.toFixed(2)} KB`);
       
-      // ✅ AGGIUNGI SOLO QUESTO DOCUMENTO
+      // ✅ AGGIUNGI SOLO DOCUMENTO RESPONSABILE
       datiPrenotazione.documenti.push({
         ospiteNumero: 1,
         nomeFile: file.name,
@@ -1448,12 +1449,12 @@ async function raccogliDatiPrenotazioneConCompressione() {
     }
   }
   
-  // ✅ VERIFICA FINALE
+  // Verifica finale
   const payloadSize = JSON.stringify(datiPrenotazione).length;
   const payloadSizeMB = (payloadSize / 1024 / 1024).toFixed(2);
   
   console.log(`📦 Dimensione finale payload: ${payloadSizeMB} MB (${payloadSize} bytes)`);
-  console.log(`📎 Documenti inclusi: ${datiPrenotazione.documenti.length}`);
+  console.log(`📎 Documenti inclusi: ${datiPrenotazione.documenti.length} (solo responsabile)`);
   console.log(`👥 Ospiti: ${datiPrenotazione.ospiti.length}`);
   
   if (payloadSize > 4 * 1024 * 1024) {
@@ -1461,8 +1462,8 @@ async function raccogliDatiPrenotazioneConCompressione() {
   }
   
   if (sizeKB !== null) {
-  showNotification(`✅ Documento caricato (${sizeKB.toFixed(0)} KB)`, 'success');
-}
+    showNotification(`✅ Documento responsabile caricato (${sizeKB.toFixed(0)} KB)`, 'success');
+  }
   
   return datiPrenotazione;
 }
@@ -1918,3 +1919,4 @@ dateErrorStyle.textContent = `
   }
 `;
 document.head.appendChild(dateErrorStyle);
+console.log('✅ Modifiche applicate: documenti solo per ospite 1 (responsabile)');
