@@ -707,6 +707,7 @@ function validaPrenotazioneCompleta() {
 }
 
 // === GENERAZIONE STEP OSPITI ===
+// === GENERAZIONE STEP OSPITI ===
 function generaStepOspiti() {
   const form = document.getElementById('checkin-form');
   const stepFinal = document.getElementById('step-final');
@@ -717,7 +718,11 @@ function generaStepOspiti() {
     stepDiv.className = 'step';
     stepDiv.id = `step-${i + 1}`;
     
-   const campiDocumento = i === 1 ? `
+   // ✅ CAMPI DOCUMENTO SOLO PER OSPITE 1
+   let campiDocumento = '';
+   
+   if (i === 1) {
+     campiDocumento = `
   <div class="form-group">
     <label class="form-label" for="ospite1_tipo_documento">Tipo documento *</label>
     <select id="ospite1_tipo_documento" name="ospite1_tipo_documento" class="form-select" required>
@@ -759,7 +764,8 @@ function generaStepOspiti() {
       </div>
     </div>
   </div>
-` : '';
+`;
+   }
 
    stepDiv.innerHTML = `
       <div class="step-header">
