@@ -1186,29 +1186,36 @@ window.procediAlPagamento = async function() {
   try {
     showNotification('📦 Raccolta documenti in corso...', 'info');
     
-    // ✅ NUOVO: Raccogli dati con compressione
+    // ✅ Raccogli dati completi
     const datiCompleti = await raccogliDatiPrenotazioneConCompressione();
     
-    // ✅ NUOVO: Calcola dimensione payload
+    // ✅ CRITICAL: Genera tempSessionId PRIMA di salvare
+    const tempSessionId = 'temp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    console.log('🔑 CREATO temp_session_id:', tempSessionId);
+    
+    // ✅ Verifica dati prima del salvataggio
+    console.log('📊 DATI DA SALVARE:', {
+      ospiti: datiCompleti.ospiti?.length,
+      documenti: datiCompleti.documenti?.length,
+      appartamento: datiCompleti.appartamento,
+      totale: datiCompleti.totale,
+      dataCheckin: datiCompleti.dataCheckin
+    });
+    
     const payloadSize = JSON.stringify(datiCompleti).length;
     const payloadSizeMB = (payloadSize / 1024 / 1024).toFixed(2);
     
-    console.log(`📊 Dimensione payload: ${payloadSizeMB} MB (${payloadSize} bytes)`);
-    console.log(`✅ Dati raccolti: ${datiCompleti.ospiti.length} ospiti, ${datiCompleti.documenti.length} documenti`);
+    console.log(`📦 Dimensione payload: ${payloadSizeMB} MB (${payloadSize} bytes)`);
     
-    // ✅ NUOVO: Avvisa se payload è grande
-    if (payloadSize > 4 * 1024 * 1024) { // > 4MB
+    if (payloadSize > 4 * 1024 * 1024) {
       showNotification('⚠️ Documenti molto grandi, il salvataggio potrebbe richiedere più tempo...', 'info');
     }
     
-    const tempSessionId = 'temp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-    console.log('🔑 Session ID temporaneo:', tempSessionId);
-    
     if (payButton) payButton.innerHTML = '⏳ Salvataggio dati (questo può richiedere fino a 30 secondi)...';
     
-    // ✅ NUOVO: Timeout aumentato a 45 secondi
+    // ✅ Salvataggio con timeout aumentato
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 secondi
+    const timeoutId = setTimeout(() => controller.abort(), 45000);
     
     try {
       const salvataggioResponse = await fetch(`${API_BASE_URL}/salva-dati-temporanei`, {
@@ -1218,7 +1225,7 @@ window.procediAlPagamento = async function() {
           'Accept': 'application/json'
         },
         body: JSON.stringify({
-          sessionId: tempSessionId,
+          sessionId: tempSessionId,  // ✅ USA LO STESSO ID
           datiPrenotazione: datiCompleti
         }),
         signal: controller.signal
@@ -1239,7 +1246,7 @@ window.procediAlPagamento = async function() {
         throw new Error(result.error || 'Salvataggio fallito');
       }
       
-      console.log('✅ Dati salvati temporaneamente sul server');
+      console.log('✅ Dati salvati su Redis con chiave:', tempSessionId);
       
     } catch (fetchError) {
       clearTimeout(timeoutId);
@@ -1252,6 +1259,7 @@ window.procediAlPagamento = async function() {
     
     if (payButton) payButton.innerHTML = '⏳ Creazione pagamento...';
     
+    // ✅ Passa tempSessionId a Stripe
     await creaLinkPagamentoConSessionId(datiCompleti, tempSessionId);
     
   } catch (error) {
@@ -1263,7 +1271,6 @@ window.procediAlPagamento = async function() {
       payButton.innerHTML = `💳 Paga €${calcolaTotale().toFixed(2)} con Stripe`;
     }
     
-    // ✅ NUOVO: Messaggio di errore più specifico
     let errorMessage = 'Errore: ' + error.message;
     
     if (error.message.includes('Timeout') || error.message.includes('timeout')) {
@@ -1367,15 +1374,17 @@ async function raccogliDatiPrenotazioneConCompressione() {
     ? appartamenti[0] 
     : appartamenti.join(' + ');
 
+  console.log('🏠 APPARTAMENTO SELEZIONATO:', appartamentoValore);
+
   const datiPrenotazione = {
     dataCheckin: dataCheckin,
-    appartamento: appartamentoValore,
+    appartamento: appartamentoValore, // ✅ CRITICAL
     numeroOspiti: numeroOspiti,
     numeroNotti: numeroNotti,
     tipoGruppo: document.getElementById('tipo-gruppo')?.value || null,
     totale: calcolaTotale(),
     ospiti: [],
-    documenti: [], // ✅ Solo documento ospite 1 verrà aggiunto
+    documenti: [],
     timestamp: new Date().toISOString()
   };
 
@@ -1399,7 +1408,6 @@ async function raccogliDatiPrenotazioneConCompressione() {
       ospite.provincia = document.querySelector(`select[name="ospite${i}_provincia"]`)?.value;
     }
     
-    // ✅ CAMPI DOCUMENTO SOLO PER OSPITE 1
     if (i === 1) {
       ospite.tipoDocumento = document.querySelector(`select[name="ospite1_tipo_documento"]`)?.value;
       ospite.numeroDocumento = document.querySelector(`input[name="ospite1_numero_documento"]`)?.value?.trim();
@@ -1407,10 +1415,11 @@ async function raccogliDatiPrenotazioneConCompressione() {
       ospite.isResponsabile = true;
     }
     
+    console.log(`✅ Ospite ${i}:`, ospite.cognome, ospite.nome);
     datiPrenotazione.ospiti.push(ospite);
   }
   
-  // ✅ RACCOGLI DOCUMENTO SOLO OSPITE 1
+  // Raccogli documento responsabile
   showNotification('📄 Caricamento documento responsabile...', 'info');
   
   const fileInput = document.querySelector(`input[name="ospite1_documento_file"]`);
@@ -1434,7 +1443,6 @@ async function raccogliDatiPrenotazioneConCompressione() {
       
       console.log(`✅ Documento responsabile compresso: ${sizeKB.toFixed(2)} KB`);
       
-      // ✅ AGGIUNGI SOLO DOCUMENTO RESPONSABILE
       datiPrenotazione.documenti.push({
         ospiteNumero: 1,
         nomeFile: file.name,
@@ -1453,9 +1461,13 @@ async function raccogliDatiPrenotazioneConCompressione() {
   const payloadSize = JSON.stringify(datiPrenotazione).length;
   const payloadSizeMB = (payloadSize / 1024 / 1024).toFixed(2);
   
-  console.log(`📦 Dimensione finale payload: ${payloadSizeMB} MB (${payloadSize} bytes)`);
-  console.log(`📎 Documenti inclusi: ${datiPrenotazione.documenti.length} (solo responsabile)`);
-  console.log(`👥 Ospiti: ${datiPrenotazione.ospiti.length}`);
+  console.log(`📦 PAYLOAD FINALE:`, {
+    size: `${payloadSizeMB} MB`,
+    ospiti: datiPrenotazione.ospiti.length,
+    documenti: datiPrenotazione.documenti.length,
+    appartamento: datiPrenotazione.appartamento,
+    totale: datiPrenotazione.totale
+  });
   
   if (payloadSize > 4 * 1024 * 1024) {
     throw new Error(`Payload troppo grande (${payloadSizeMB} MB). Riduci la qualità del documento.`);
