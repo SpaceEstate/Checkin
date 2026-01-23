@@ -2,7 +2,7 @@
 let currentStep = 0; // Inizia da 0 (verifica prenotazione)
 let numeroOspiti = 0;
 let numeroNotti = 0;
-let dataCheckin = '';
+let dataCheckin = ''; 
 let stepGenerated = false;
 window.datiPrecompilati = false; // Flag globale per dati pre-compilati
  
