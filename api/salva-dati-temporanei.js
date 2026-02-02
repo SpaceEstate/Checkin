@@ -1,60 +1,74 @@
 // api/salva-dati-temporanei.js
-// FIX: Parsing corretto dei dati Redis
+// VERSIONE NEON POSTGRESQL - Sostituisce Redis
 
-import { createClient } from 'redis';
+import postgres from 'postgres';
 
-let redisClient = null;
+let sql = null;
 
-async function getRedisClient() {
-  if (redisClient && redisClient.isOpen) {
-    return redisClient;
+// Connessione Neon PostgreSQL
+async function getPostgresClient() {
+  if (sql) return sql;
+  
+  const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+  
+  if (!connectionString) {
+    throw new Error("DATABASE_URL o POSTGRES_URL non configurato nelle variabili d'ambiente");
   }
 
-  const redisUrl = process.env.ciao_REDIS_URL;
-  if (!redisUrl) {
-    throw new Error("REDIS_URL non configurato nelle variabili d'ambiente");
-  }
-
-  console.log('🔌 Creazione nuovo client Redis...');
+  console.log('🔌 Creazione connessione Neon PostgreSQL...');
   
-  const useTLS = redisUrl.startsWith('rediss://');
+  sql = postgres(connectionString, {
+    ssl: 'require',
+    max: 10,
+    idle_timeout: 20,
+    connect_timeout: 10,
+  });
+
+  console.log('✅ Connessione Neon PostgreSQL stabilita');
+  return sql;
+}
+
+// Crea la tabella se non esiste
+async function initDatabase() {
+  const db = await getPostgresClient();
   
-  redisClient = createClient({
-    url: redisUrl,
-    socket: {
-      tls: useTLS,
-      rejectUnauthorized: false,
-      connectTimeout: 10000,
-    },
-  });
+  await db`
+    CREATE TABLE IF NOT EXISTS temporary_sessions (
+      session_id VARCHAR(255) PRIMARY KEY,
+      data JSONB NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW(),
+      expires_at TIMESTAMP NOT NULL
+    )
+  `;
+  
+  // Crea indice per pulizia automatica
+  await db`
+    CREATE INDEX IF NOT EXISTS idx_expires_at 
+    ON temporary_sessions(expires_at)
+  `;
+  
+  console.log('✅ Tabella temporary_sessions pronta');
+}
 
-  redisClient.on("error", (err) => {
-    console.error("❌ Redis Error:", err.message);
-  });
-
-  redisClient.on("connect", () => {
-    console.log("✅ Redis connesso!");
-  });
-
-  redisClient.on("ready", () => {
-    console.log("✅ Redis pronto!");
-  });
-
-  try {
-    await redisClient.connect();
-    console.log("✅ Connessione Redis stabilita");
-    return redisClient;
-  } catch (error) {
-    console.error("❌ Errore connessione Redis:", error.message);
-    throw error;
+// Pulizia sessioni scadute (opzionale, chiamata periodicamente)
+async function cleanExpiredSessions() {
+  const db = await getPostgresClient();
+  
+  const result = await db`
+    DELETE FROM temporary_sessions 
+    WHERE expires_at < NOW()
+    RETURNING session_id
+  `;
+  
+  if (result.length > 0) {
+    console.log(`🗑️ Pulite ${result.length} sessioni scadute`);
   }
 }
 
 export default async function handler(req, res) {
   console.log(`📥 ${req.method} /api/salva-dati-temporanei`);
 
-  const origin = req.headers.origin || req.headers.referer || 'https://spaceestate.github.io';
-  
+  // CORS Headers
   res.setHeader("Access-Control-Allow-Origin", "https://spaceestate.github.io");
   res.setHeader("Access-Control-Allow-Credentials", "true");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
@@ -63,12 +77,19 @@ export default async function handler(req, res) {
 
   if (req.method === "OPTIONS") {
     console.log('✅ Preflight OPTIONS - Risposta 200 OK');
-    res.status(200).end();
-    return;
+    return res.status(200).end();
   }
 
   try {
-    const client = await getRedisClient();
+    const db = await getPostgresClient();
+    await initDatabase();
+    
+    // Pulizia periodica (solo 10% delle volte per non rallentare)
+    if (Math.random() < 0.1) {
+      cleanExpiredSessions().catch(err => 
+        console.warn('⚠️ Errore pulizia sessioni:', err.message)
+      );
+    }
 
     // === POST: Salva dati ===
     if (req.method === "POST") {
@@ -93,74 +114,58 @@ export default async function handler(req, res) {
       
       console.log(`💾 Dimensione payload: ${totalSizeMB} MB (${totalSize} bytes)`);
 
-      const MAX_REDIS_SIZE = 8 * 1024 * 1024;
+      // PostgreSQL può gestire JSONB di grandi dimensioni, ma manteniamo un limite ragionevole
+      const MAX_SIZE = 50 * 1024 * 1024; // 50 MB (molto più generoso di Redis)
       
-      if (totalSize > MAX_REDIS_SIZE) {
-        console.error(`❌ Payload troppo grande: ${totalSizeMB} MB (max 8 MB)`);
+      if (totalSize > MAX_SIZE) {
+        console.error(`❌ Payload troppo grande: ${totalSizeMB} MB (max 50 MB)`);
         return res.status(413).json({
           error: "Payload too large",
-          message: `I dati sono troppo grandi (${totalSizeMB} MB). Riduci la dimensione delle immagini dei documenti.`,
+          message: `I dati sono troppo grandi (${totalSizeMB} MB). Limite massimo: 50 MB.`,
           size: totalSize,
-          maxSize: MAX_REDIS_SIZE
+          maxSize: MAX_SIZE
         });
       }
 
-      let documentiSize = 0;
-      if (datiPrenotazione.documenti) {
-        documentiSize = datiPrenotazione.documenti.reduce((acc, doc) => {
-          return acc + (doc.base64 ? doc.base64.length : 0);
-        }, 0);
-        console.log(`📎 Dimensione documenti: ${(documentiSize / 1024 / 1024).toFixed(2)} MB`);
-      }
-
       const ttlSeconds = 7200; // 2 ore
+      const expiresAt = new Date(Date.now() + ttlSeconds * 1000);
 
       try {
-        let retries = 3;
-        let saved = false;
-        
-        while (retries > 0 && !saved) {
-          try {
-            await client.setEx(sessionId, ttlSeconds, jsonString);
-            saved = true;
-            console.log(`✅ Dati salvati su Redis (tentativo ${4 - retries})`);
-          } catch (redisError) {
-            retries--;
-            console.warn(`⚠️ Errore Redis, retry... (${retries} tentativi rimasti)`, redisError.message);
-            
-            if (retries === 0) {
-              throw redisError;
-            }
-            
-            await new Promise(resolve => setTimeout(resolve, 1000));
-          }
-        }
+        // Upsert (insert or update)
+        await db`
+          INSERT INTO temporary_sessions (session_id, data, expires_at)
+          VALUES (${sessionId}, ${jsonString}::jsonb, ${expiresAt})
+          ON CONFLICT (session_id) 
+          DO UPDATE SET 
+            data = ${jsonString}::jsonb,
+            expires_at = ${expiresAt},
+            created_at = NOW()
+        `;
 
-        const expiresAt = new Date(Date.now() + ttlSeconds * 1000).toISOString();
-        console.log(`⏰ Scadenza: ${expiresAt}`);
+        console.log(`✅ Dati salvati su Neon PostgreSQL`);
+        console.log(`⏰ Scadenza: ${expiresAt.toISOString()}`);
 
         return res.status(200).json({
           success: true,
-          message: "Dati salvati temporaneamente su Redis",
+          message: "Dati salvati temporaneamente su Neon PostgreSQL",
           sessionId: sessionId,
           details: {
             numeroOspiti: datiPrenotazione.ospiti?.length || 0,
             numeroDocumenti: datiPrenotazione.documenti?.length || 0,
-            documentiSizeKB: (documentiSize / 1024).toFixed(2),
             totalSizeKB: (totalSize / 1024).toFixed(2),
             totalSizeMB: totalSizeMB,
-            expiresAt: expiresAt,
-            storage: 'Redis',
+            expiresAt: expiresAt.toISOString(),
+            storage: 'Neon PostgreSQL',
             ttlSeconds: ttlSeconds
           }
         });
         
       } catch (error) {
-        console.error('❌ Errore Redis:', error);
+        console.error('❌ Errore PostgreSQL:', error);
         console.error('Stack:', error.stack);
         
         return res.status(500).json({
-          error: "Errore Redis",
+          error: "Errore PostgreSQL",
           message: error.message,
           hint: "Il server di storage potrebbe essere sovraccarico. Riprova tra qualche secondo."
         });
@@ -183,50 +188,42 @@ export default async function handler(req, res) {
 
       console.log(`🔑 Recupero per: ${sessionId}`);
 
-      const dataString = await client.get(sessionId);
+      const result = await db`
+        SELECT data, expires_at 
+        FROM temporary_sessions 
+        WHERE session_id = ${sessionId}
+        AND expires_at > NOW()
+        LIMIT 1
+      `;
 
-      if (!dataString) {
-        console.warn(`⚠️ Dati non trovati per: ${sessionId}`);
+      if (result.length === 0) {
+        console.warn(`⚠️ Dati non trovati o scaduti per: ${sessionId}`);
         return res.status(404).json({ 
           error: "Dati non trovati o scaduti",
           sessionId: sessionId
         });
       }
 
-      // ✅ FIX: Parsing diretto - i dati sono già l'oggetto completo
-      let datiPrenotazione;
-      try {
-        datiPrenotazione = JSON.parse(dataString);
-      } catch (parseError) {
-        console.error('❌ Errore parsing JSON:', parseError);
-        return res.status(500).json({
-          error: "Dati corrotti",
-          message: "Impossibile leggere i dati salvati"
-        });
-      }
-
-      // ✅ VERIFICA: Controlla che i dati abbiano i campi essenziali
-      if (!datiPrenotazione || typeof datiPrenotazione !== 'object') {
-        console.error('❌ Struttura dati non valida');
-        return res.status(500).json({
-          error: "Struttura dati non valida",
-          message: "I dati recuperati non hanno il formato corretto"
-        });
-      }
+      const sessionData = result[0];
+      const datiPrenotazione = sessionData.data;
 
       console.log(`✅ Dati recuperati con successo`);
       console.log(`📊 Struttura: ospiti=${datiPrenotazione.ospiti?.length || 0}, documenti=${datiPrenotazione.documenti?.length || 0}`);
 
       // Elimina dopo recupero (uso singolo)
-      await client.del(sessionId);
+      await db`
+        DELETE FROM temporary_sessions 
+        WHERE session_id = ${sessionId}
+      `;
       console.log('🗑️ Dati eliminati (uso singolo)');
 
       return res.status(200).json({
         success: true,
-        datiPrenotazione: datiPrenotazione, // ✅ Ritorna direttamente l'oggetto
+        datiPrenotazione: datiPrenotazione,
         metadata: {
-          salvataAlle: new Date().toISOString(),
-          storage: 'Redis'
+          salvataAlle: sessionData.created_at,
+          scadenzaOriginale: sessionData.expires_at,
+          storage: 'Neon PostgreSQL'
         }
       });
     }
@@ -240,19 +237,19 @@ export default async function handler(req, res) {
     console.error('❌ Errore:', error);
     console.error('Stack:', error.stack);
 
-    if (error.message.includes('REDIS_URL')) {
+    if (error.message.includes('DATABASE_URL') || error.message.includes('POSTGRES_URL')) {
       return res.status(500).json({
-        error: "Configurazione Redis mancante",
-        message: "REDIS_URL non configurato nelle variabili d'ambiente",
-        help: "Aggiungi REDIS_URL su Vercel Dashboard → Settings → Environment Variables"
+        error: "Configurazione PostgreSQL mancante",
+        message: "DATABASE_URL o POSTGRES_URL non configurato nelle variabili d'ambiente",
+        help: "Aggiungi DATABASE_URL su Vercel Dashboard → Settings → Environment Variables"
       });
     }
 
     if (error.message.includes('ECONNREFUSED') || error.message.includes('timeout')) {
       return res.status(500).json({
-        error: "Impossibile connettersi a Redis",
+        error: "Impossibile connettersi a PostgreSQL",
         message: error.message,
-        help: "Verifica che il server Redis sia attivo e raggiungibile"
+        help: "Verifica che il database Neon sia attivo e raggiungibile"
       });
     }
 
