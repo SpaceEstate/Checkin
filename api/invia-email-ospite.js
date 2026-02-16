@@ -1,5 +1,5 @@
 // api/invia-email-ospite.js
-// VERSIONE CORRETTA - Caricamento foto con percorsi Vercel
+// VERSIONE CORRETTA - nomi file immagini aggiornati
 
 import nodemailer from 'nodemailer';
 import { readFile } from 'fs/promises';
@@ -46,7 +46,6 @@ export default async function handler(req, res) {
 
     const htmlContent = generaHTMLEmailOspite(datiPrenotazione, codiciCassetta);
 
-    // ✅ Carica foto (con fallback se non trovate)
     const allegati = await caricaAllegatiFoto();
     console.log(`📎 Foto caricate: ${allegati.length}`);
 
@@ -74,69 +73,55 @@ export default async function handler(req, res) {
   }
 }
 
-// ✅ FIX: Percorsi corretti per Vercel
+// ✅ FIX: nomi file corretti (con prefisso numerico)
 async function caricaAllegatiFoto() {
   const allegati = [];
   
   try {
-    // ✅ CRITICAL: Percorsi ASSOLUTI per Vercel
-    const possibiliPercorsi = [
-      '/var/task/public/images/cassetta',      // Vercel runtime (PRIORITÀ)
-      join(process.cwd(), 'public/images/cassetta'), // Build directory
-      join(__dirname, '..', 'public', 'images', 'cassetta'), // Relativo
-    ];
+    const basePath = '/var/task/public/images/cassetta';
     
+    // ✅ NOMI FILE CORRETTI
     const files = [
-      { name: 'ingresso_proprieta.jpg', cid: 'ingresso_proprieta' },
-      { name: 'cassetta_sicurezza.jpg', cid: 'cassetta_sicurezza' },
-      { name: 'ubicazione_cassetta.jpg', cid: 'ubicazione_cassetta' }
+      { name: '1_ingresso_proprieta.jpg',  cid: 'ingresso_proprieta' },
+      { name: '2_cassetta_sicurezza.jpg',  cid: 'cassetta_sicurezza' },
+      { name: '3_ubicazione_cassetta.jpg', cid: 'ubicazione_cassetta' }
     ];
     
-    console.log('🔍 Percorsi da provare:', possibiliPercorsi);
+    console.log('🔍 Directory foto:', basePath);
+    
+    // Log contenuto directory per debug
+    try {
+      const { readdir } = await import('fs/promises');
+      const contenuto = await readdir(join(basePath, '..')).catch(() => []);
+      console.log('📂 Contenuto images/:', contenuto);
+      const contenutoCassetta = await readdir(basePath).catch(() => []);
+      console.log('📂 Contenuto images/cassetta/:', contenutoCassetta);
+    } catch (e) {
+      console.warn('⚠️ Impossibile listare directory');
+    }
     
     for (const file of files) {
-      let caricato = false;
-      
-      for (const basePath of possibiliPercorsi) {
-        try {
-          const filePath = join(basePath, file.name);
-          console.log(`🔍 Tentativo: ${filePath}`);
-          
-          const content = await readFile(filePath);
-          
-          allegati.push({
-            filename: file.name,
-            content: content,
-            cid: file.cid,
-            contentType: 'image/jpeg'
-          });
-          
-          console.log(`✅ Foto caricata: ${file.name} (${(content.length / 1024).toFixed(2)} KB)`);
-          caricato = true;
-          break;
-        } catch (error) {
-          // Continua con il prossimo percorso
-          continue;
-        }
-      }
-      
-      if (!caricato) {
-        console.warn(`⚠️ Impossibile caricare ${file.name} da nessun percorso`);
+      try {
+        const filePath = join(basePath, file.name);
+        console.log(`🔍 Caricamento: ${filePath}`);
+        
+        const content = await readFile(filePath);
+        
+        allegati.push({
+          filename: file.name,
+          content: content,
+          cid: file.cid,
+          contentType: 'image/jpeg'
+        });
+        
+        console.log(`✅ Foto caricata: ${file.name} (${(content.length / 1024).toFixed(1)} KB)`);
+      } catch (err) {
+        console.warn(`⚠️ Impossibile caricare ${file.name}: ${err.message}`);
       }
     }
     
     if (allegati.length === 0) {
-      console.warn('⚠️ NESSUNA foto trovata.');
-      console.warn('📂 Contenuto directory corrente:', process.cwd());
-      
-      // ✅ Debug: lista contenuto directory
-      try {
-        const { readdir } = await import('fs/promises');
-        const publicDir = await readdir(join(process.cwd(), 'public')).catch(() => []);
-        console.warn('📂 public/:', publicDir);
-      } catch (e) {
-        console.warn('❌ Impossibile leggere directory public');
-      }
+      console.warn('⚠️ NESSUNA foto trovata - email inviata senza immagini');
     }
     
   } catch (error) {
@@ -246,7 +231,6 @@ function generaHTMLEmailOspite(dati, codiciCassetta) {
           margin: 0;
           padding: 0;
         }
-        
         .container {
           max-width: 600px;
           margin: 20px auto;
@@ -256,36 +240,16 @@ function generaHTMLEmailOspite(dati, codiciCassetta) {
           box-shadow: 0 4px 20px rgba(0,0,0,0.1);
           border: 1px solid rgba(232, 220, 192, 0.3);
         }
-        
         .header {
           background: linear-gradient(135deg, #b89968 0%, #a67c52 100%);
           color: white;
           padding: 40px 20px;
           text-align: center;
         }
-        
-        .header h1 {
-          margin: 0;
-          font-size: 28px;
-          font-weight: 600;
-        }
-        
-        .header p {
-          margin: 10px 0 0 0;
-          font-size: 16px;
-          opacity: 0.95;
-        }
-        
-        .content {
-          padding: 40px 30px;
-        }
-        
-        .welcome-text {
-          font-size: 18px;
-          color: #8b7d6b;
-          margin-bottom: 20px;
-        }
-        
+        .header h1 { margin: 0; font-size: 28px; font-weight: 600; }
+        .header p { margin: 10px 0 0 0; font-size: 16px; opacity: 0.95; }
+        .content { padding: 40px 30px; }
+        .welcome-text { font-size: 18px; color: #8b7d6b; margin-bottom: 20px; }
         .code-section {
           background: linear-gradient(135deg, #a67c52 0%, #8b7d6b 100%);
           color: white;
@@ -294,19 +258,8 @@ function generaHTMLEmailOspite(dati, codiciCassetta) {
           text-align: center;
           margin: 30px 0;
         }
-        
-        .code-title {
-          font-size: 20px;
-          font-weight: 600;
-          margin-bottom: 15px;
-        }
-        
-        .code-subtitle {
-          font-size: 16px;
-          margin-bottom: 10px;
-          font-weight: 500;
-        }
-        
+        .code-title { font-size: 20px; font-weight: 600; margin-bottom: 15px; }
+        .code-subtitle { font-size: 16px; margin-bottom: 10px; font-weight: 500; }
         .code-box {
           background: rgba(255, 255, 255, 0.2);
           padding: 20px;
@@ -316,26 +269,14 @@ function generaHTMLEmailOspite(dati, codiciCassetta) {
           letter-spacing: 8px;
           margin: 15px 0;
         }
-        
         .code-sub-section {
           background: rgba(255, 255, 255, 0.1);
           padding: 20px;
           border-radius: 8px;
           margin: 15px 0;
         }
-        
-        .code-sub-section .code-box {
-          font-size: 40px;
-          padding: 15px;
-          background: rgba(255, 255, 255, 0.2);
-        }
-        
-        .code-note {
-          font-size: 14px;
-          opacity: 0.9;
-          margin-top: 10px;
-        }
-        
+        .code-sub-section .code-box { font-size: 40px; padding: 15px; background: rgba(255, 255, 255, 0.2); }
+        .code-note { font-size: 14px; opacity: 0.9; margin-top: 10px; }
         .info-section {
           background: #faf9f6;
           padding: 20px;
@@ -343,35 +284,16 @@ function generaHTMLEmailOspite(dati, codiciCassetta) {
           margin: 20px 0;
           border-left: 4px solid #b89968;
         }
-        
-        .info-title {
-          font-size: 18px;
-          font-weight: 600;
-          color: #8b7d6b;
-          margin-bottom: 15px;
-        }
-        
+        .info-title { font-size: 18px; font-weight: 600; color: #8b7d6b; margin-bottom: 15px; }
         .info-item {
           display: flex;
           justify-content: space-between;
           padding: 8px 0;
           border-bottom: 1px solid #e8dcc0;
         }
-        
-        .info-item:last-child {
-          border-bottom: none;
-        }
-        
-        .info-label {
-          font-weight: 500;
-          color: #a0927f;
-        }
-        
-        .info-value {
-          font-weight: 600;
-          color: #8b7d6b;
-        }
-        
+        .info-item:last-child { border-bottom: none; }
+        .info-label { font-weight: 500; color: #a0927f; }
+        .info-value { font-weight: 600; color: #8b7d6b; }
         .instructions {
           background: #fff9e6;
           padding: 20px;
@@ -379,27 +301,8 @@ function generaHTMLEmailOspite(dati, codiciCassetta) {
           margin: 20px 0;
           border-left: 4px solid #ffc107;
         }
-        
-        .instructions h3 {
-          color: #856404;
-          margin-top: 0;
-          font-size: 18px;
-          margin-bottom: 15px;
-        }
-        
-        .instructions p {
-          margin: 10px 0;
-          color: #8b7d6b;
-          line-height: 1.8;
-        }
-
-        .instructions strong {
-          color: #856404;
-          display: block;
-          margin-top: 15px;
-          margin-bottom: 5px;
-        }
-
+        .instructions h3 { color: #856404; margin-top: 0; font-size: 18px; margin-bottom: 15px; }
+        .instructions p { margin: 10px 0; color: #8b7d6b; line-height: 1.8; }
         .address-block {
           background: white;
           padding: 12px;
@@ -407,23 +310,9 @@ function generaHTMLEmailOspite(dati, codiciCassetta) {
           margin: 10px 0;
           border-left: 3px solid #b89968;
         }
-
-        .photo-gallery {
-          margin: 30px 0;
-        }
-
-        .photo-gallery h3 {
-          color: #8b7d6b;
-          font-size: 20px;
-          margin-bottom: 20px;
-          text-align: center;
-        }
-
-        .photo-item {
-          margin: 20px 0;
-          text-align: center;
-        }
-
+        .photo-gallery { margin: 30px 0; }
+        .photo-gallery h3 { color: #8b7d6b; font-size: 20px; margin-bottom: 20px; text-align: center; }
+        .photo-item { margin: 20px 0; text-align: center; }
         .photo-item img {
           max-width: 100%;
           height: auto;
@@ -431,13 +320,7 @@ function generaHTMLEmailOspite(dati, codiciCassetta) {
           box-shadow: 0 4px 15px rgba(0,0,0,0.2);
           margin-bottom: 10px;
         }
-
-        .photo-caption {
-          font-size: 14px;
-          color: #8b7d6b;
-          font-style: italic;
-        }
-        
+        .photo-caption { font-size: 14px; color: #8b7d6b; font-style: italic; }
         .footer {
           background: #f5f2e9;
           padding: 30px;
@@ -445,17 +328,7 @@ function generaHTMLEmailOspite(dati, codiciCassetta) {
           color: #a0927f;
           font-size: 14px;
         }
-        
-        .footer p {
-          margin: 5px 0;
-        }
-        
-        .highlight {
-          background: #fff3cd;
-          padding: 2px 6px;
-          border-radius: 4px;
-          font-weight: 600;
-        }
+        .footer p { margin: 5px 0; }
       </style>
     </head>
     <body>
