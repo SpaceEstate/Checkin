@@ -1,5 +1,6 @@
 // api/stripeWebhook.js
-// VERSIONE CORRETTA - Recupera TUTTI i dati da PostgreSQL con debug dettagliato
+// VERSIONE CORRETTA - Gestione robusta errori + logging dettagliato
+
 import Stripe from 'stripe';
 import { GoogleSpreadsheet } from 'google-spreadsheet';
 import { JWT } from 'google-auth-library';
@@ -14,84 +15,140 @@ export const config = {
 };
 
 export default async function handler(req, res) {
+  const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  
+  console.log(`\n🎯 ========================================`);
+  console.log(`🎯 WEBHOOK RICEVUTO: ${requestId}`);
+  console.log(`🎯 Timestamp: ${new Date().toISOString()}`);
+  console.log(`🎯 Method: ${req.method}`);
+  console.log(`🎯 URL: ${req.url}`);
+  console.log(`🎯 ========================================\n`);
+
   if (req.method !== 'POST') {
+    console.warn(`⚠️ [${requestId}] Metodo non POST: ${req.method}`);
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
   let event;
+  let rawBody;
 
   try {
-    const buf = await buffer(req);
+    // ✅ CRITICAL: Buffer del body
+    rawBody = await buffer(req);
+    console.log(`📦 [${requestId}] Body size: ${rawBody.length} bytes`);
+
     const sig = req.headers['stripe-signature'];
 
-    event = stripe.webhooks.constructEvent(buf, sig, endpointSecret);
-    console.log('✅ Webhook verificato:', event.type);
-  } catch (err) {
-    console.error('❌ Errore verifica webhook:', err.message);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
+    if (!sig) {
+      console.error(`❌ [${requestId}] Stripe signature MANCANTE!`);
+      console.error(`   Headers ricevuti:`, Object.keys(req.headers));
+      return res.status(400).send(`Webhook Error: Missing Stripe signature`);
+    }
+
+    console.log(`🔐 [${requestId}] Signature presente (primi 50 chars): ${sig.substring(0, 50)}...`);
+
+    if (!endpointSecret) {
+      console.error(`❌ [${requestId}] STRIPE_WEBHOOK_SECRET non configurato!`);
+      return res.status(500).send(`Webhook Error: Webhook secret not configured`);
+    }
+
+    console.log(`🔑 [${requestId}] Webhook secret configurato: ${endpointSecret.substring(0, 10)}...`);
+
+    // ✅ Verifica signature
+    try {
+      event = stripe.webhooks.constructEvent(rawBody, sig, endpointSecret);
+      console.log(`✅ [${requestId}] Webhook verificato con successo!`);
+      console.log(`   Event Type: ${event.type}`);
+      console.log(`   Event ID: ${event.id}`);
+      console.log(`   Created: ${new Date(event.created * 1000).toISOString()}`);
+    } catch (sigError) {
+      console.error(`❌ [${requestId}] Errore verifica signature:`, sigError.message);
+      console.error(`   Signature ricevuta: ${sig.substring(0, 100)}...`);
+      console.error(`   Secret usato: ${endpointSecret.substring(0, 10)}...`);
+      return res.status(400).send(`Webhook Error: ${sigError.message}`);
+    }
+
+  } catch (bufferError) {
+    console.error(`❌ [${requestId}] Errore buffer body:`, bufferError.message);
+    return res.status(400).send(`Webhook Error: ${bufferError.message}`);
   }
 
-  // Risposta IMMEDIATA a Stripe (evita timeout 30s di Stripe)
-  res.status(200).json({ received: true });
+  // ✅ Risposta IMMEDIATA a Stripe (evita timeout)
+  res.status(200).json({ received: true, requestId, eventId: event.id });
 
-  // Gestisci l'evento in background
+  // Gestisci l'evento in background (async)
   if (event.type === 'checkout.session.completed') {
+    // Non usare await qui - lascia eseguire in background
+    processCheckoutCompleted(event, requestId).catch(error => {
+      console.error(`❌ [${requestId}] Errore processing (background):`, error.message);
+    });
+  } else {
+    console.log(`ℹ️ [${requestId}] Evento ignorato: ${event.type}`);
+  }
+}
+
+// Funzione async separata per processing
+async function processCheckoutCompleted(event, requestId) {
+  const startTime = Date.now();
+  
+  try {
+    const session = event.data.object;
+    
+    console.log(`\n💰 [${requestId}] === INIZIO PROCESSING PAGAMENTO ===`);
+    console.log(`   Session ID: ${session.id}`);
+    console.log(`   Payment Status: ${session.payment_status}`);
+    console.log(`   Amount: €${(session.amount_total / 100).toFixed(2)}`);
+
+    const emailCliente = session.customer_details?.email || null;
+    console.log(`   Email Cliente: ${emailCliente || 'NESSUNA'}`);
+
+    // ✅ Recupera dati completi
+    console.log(`\n🔄 [${requestId}] Recupero dati completi...`);
+    const datiCompleti = await recuperaDatiCompletiDaPostgres(session, requestId);
+    
+    console.log(`📊 [${requestId}] Dati recuperati:`);
+    console.log(`   Ospiti: ${datiCompleti.ospiti?.length || 0}`);
+    console.log(`   Documenti: ${datiCompleti.documenti?.length || 0}`);
+    console.log(`   Totale: €${datiCompleti.totale}`);
+    console.log(`   Appartamento: ${datiCompleti.appartamento}`);
+
+    // 1. Google Sheets (non bloccante)
+    scriviDatiSuGoogleSheets(datiCompleti, requestId).catch(err => {
+      console.error(`⚠️ [${requestId}] Errore Google Sheets (non bloccante):`, err.message);
+    });
+
+    // 2. Email Proprietario (con retry)
     try {
-      const session = event.data.object;
-      console.log('💰 Pagamento completato per sessione:', session.id);
-
-      const emailCliente = session.customer_details?.email || null;
-      console.log('📧 Email cliente da Stripe:', emailCliente || 'NESSUNA');
-
-      // ✅ CRITICO: Recupera dati completi da PostgreSQL
-      const datiCompleti = await recuperaDatiCompletiDaPostgres(session);
-
-      // ✅ DEBUG: Verifica struttura dati prima di procedere
-      console.log('📊 === VERIFICA DATI PRIMA DI PROCEDERE ===');
-      console.log('  ospiti.length:', datiCompleti.ospiti?.length || 0);
-      console.log('  documenti.length:', datiCompleti.documenti?.length || 0);
-      console.log('  totale:', datiCompleti.totale);
-      if (datiCompleti.documenti?.length > 0) {
-        datiCompleti.documenti.forEach((doc, i) => {
-          const hasBase64 = !!doc.base64;
-          const base64Len = doc.base64?.length || 0;
-          console.log(`  doc[${i}]: ospite=${doc.ospiteNumero}, file=${doc.nomeFile}, hasBase64=${hasBase64}, base64Len=${base64Len}`);
-        });
-      }
-      console.log('=========================================');
-
-      // 1. Scrivi dati su Google Sheets
-      try {
-        await scriviDatiSuGoogleSheets(datiCompleti);
-        console.log('✅ Dati scritti su Google Sheets');
-      } catch (sheetsError) {
-        console.error('⚠️ Errore Google Sheets:', sheetsError.message);
-        // Non blocca il flusso
-      }
-
-      // 2. Genera PDF e invia email al proprietario
-      try {
-        await generaPDFEInviaEmail(datiCompleti);
-        console.log('✅ PDF e email proprietario processati');
-      } catch (pdfError) {
-        console.error('⚠️ Errore PDF/Email proprietario:', pdfError.message);
-      }
-
-      // 3. Invia email ospite con codice accesso
-      if (emailCliente) {
-        try {
-          await inviaEmailOspite(datiCompleti, emailCliente);
-          console.log('✅ Email ospite inviata con successo');
-        } catch (emailError) {
-          console.error('⚠️ Errore invio email ospite:', emailError.message);
-        }
-      } else {
-        console.warn('⚠️ Email cliente non disponibile, email ospite non inviata');
-      }
-
-    } catch (error) {
-      console.error('❌ Errore elaborazione webhook:', error);
+      console.log(`\n📧 [${requestId}] === INVIO EMAIL PROPRIETARIO ===`);
+      await generaPDFEInviaEmail(datiCompleti, requestId);
+      console.log(`✅ [${requestId}] Email proprietario inviata`);
+    } catch (emailError) {
+      console.error(`❌ [${requestId}] ERRORE EMAIL PROPRIETARIO:`, emailError.message);
+      console.error(`   Stack:`, emailError.stack);
     }
+
+    // 3. Email Ospite (con retry)
+    if (emailCliente) {
+      try {
+        console.log(`\n📧 [${requestId}] === INVIO EMAIL OSPITE ===`);
+        await inviaEmailOspite(datiCompleti, emailCliente, requestId);
+        console.log(`✅ [${requestId}] Email ospite inviata a ${emailCliente}`);
+      } catch (emailError) {
+        console.error(`❌ [${requestId}] ERRORE EMAIL OSPITE:`, emailError.message);
+        console.error(`   Stack:`, emailError.stack);
+      }
+    } else {
+      console.warn(`⚠️ [${requestId}] Email cliente mancante, skip email ospite`);
+    }
+
+    const totalTime = Date.now() - startTime;
+    console.log(`\n✅ [${requestId}] === PROCESSING COMPLETATO in ${totalTime}ms ===\n`);
+
+  } catch (error) {
+    console.error(`\n❌ [${requestId}] === ERRORE GENERALE ===`);
+    console.error(`   Errore:`, error.message);
+    console.error(`   Stack:`, error.stack);
+    console.error(`========================================\n`);
   }
 }
 
@@ -105,16 +162,12 @@ async function buffer(req) {
   return Buffer.concat(chunks);
 }
 
-// ✅ FUNZIONE PRINCIPALE CORRETTA: Recupera dati completi da PostgreSQL
-async function recuperaDatiCompletiDaPostgres(session) {
-  console.log('🔄 === RECUPERO DATI COMPLETI DA POSTGRESQL ===');
+async function recuperaDatiCompletiDaPostgres(session, requestId) {
+  console.log(`🔄 [${requestId}] Recupero da PostgreSQL...`);
 
-  const metadata = session.metadata;
+  const metadata = session.metadata || {};
   const tempSessionId = metadata.temp_session_id;
 
-  console.log('🔑 Temp Session ID:', tempSessionId || 'NESSUNO');
-
-  // Dati base dai metadata Stripe (sempre disponibili come fallback)
   let datiCompleti = {
     dataCheckin: metadata.dataCheckin,
     appartamento: metadata.appartamento,
@@ -127,7 +180,6 @@ async function recuperaDatiCompletiDaPostgres(session) {
     documenti: []
   };
 
-  // Responsabile dai metadata Stripe (sempre disponibile come fallback)
   const responsabile = {
     numero: 1,
     cognome: metadata.resp_cognome || '',
@@ -137,164 +189,58 @@ async function recuperaDatiCompletiDaPostgres(session) {
     eta: parseInt(metadata.resp_eta) || 0,
     cittadinanza: metadata.resp_cittadinanza || '',
     luogoNascita: metadata.resp_luogoNascita || '',
-    comune: metadata.resp_comune || '',
-    provincia: metadata.resp_provincia || '',
-    tipoDocumento: metadata.resp_tipoDocumento || '',
-    numeroDocumento: metadata.resp_numeroDocumento || '',
-    luogoRilascio: metadata.resp_luogoRilascio || '',
     isResponsabile: true
   };
 
   datiCompleti.ospiti.push(responsabile);
 
-  // ✅ RECUPERA DATI COMPLETI DA POSTGRESQL (con retry)
   if (tempSessionId) {
-    let recuperoRiuscito = false;
-    const maxTentativi = 3;
-
-    for (let tentativo = 1; tentativo <= maxTentativi; tentativo++) {
+    for (let tentativo = 1; tentativo <= 3; tentativo++) {
       try {
         const baseUrl = process.env.VERCEL_URL
           ? `https://${process.env.VERCEL_URL}`
           : 'https://checkin-six-coral.vercel.app';
 
-        console.log(`🔍 Tentativo ${tentativo}/${maxTentativi} - Recupero da PostgreSQL...`);
+        console.log(`   Tentativo ${tentativo}/3: ${baseUrl}/api/salva-dati-temporanei`);
 
-        // ✅ Timeout aumentato a 20 secondi per ogni tentativo
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 20000);
+        const timeoutId = setTimeout(() => controller.abort(), 25000);
 
         const pgResponse = await fetch(
           `${baseUrl}/api/salva-dati-temporanei?sessionId=${tempSessionId}`,
           {
             method: 'GET',
-            headers: {
-              'Accept': 'application/json',
-              'User-Agent': 'StripeWebhook/1.0'
-            },
+            headers: { 'Accept': 'application/json' },
             signal: controller.signal
           }
         );
 
         clearTimeout(timeoutId);
-        console.log(`📡 PostgreSQL response status (tentativo ${tentativo}):`, pgResponse.status);
 
         if (pgResponse.ok) {
           const pgData = await pgResponse.json();
-
-          console.log('✅ Risposta PostgreSQL ricevuta:', {
-            success: pgData.success,
-            hasOspiti: !!pgData.datiPrenotazione?.ospiti,
-            numOspiti: pgData.datiPrenotazione?.ospiti?.length || 0,
-            hasDocumenti: !!pgData.datiPrenotazione?.documenti,
-            numDocumenti: pgData.datiPrenotazione?.documenti?.length || 0,
-          });
-
+          
           if (pgData.success && pgData.datiPrenotazione) {
-            const datiPG = pgData.datiPrenotazione;
-
-            // ✅ SOSTITUZIONE COMPLETA con dati da PostgreSQL
-            if (datiPG.ospiti && datiPG.ospiti.length > 0) {
-              datiCompleti.ospiti = datiPG.ospiti;
-              console.log(`✅ Recuperati ${datiCompleti.ospiti.length} ospiti da PostgreSQL`);
-            }
-
-            if (datiPG.documenti && datiPG.documenti.length > 0) {
-              datiCompleti.documenti = datiPG.documenti;
-              console.log(`✅ Recuperati ${datiCompleti.documenti.length} documenti da PostgreSQL`);
-
-              // ✅ DEBUG: Verifica struttura documenti recuperati
-              datiCompleti.documenti.forEach((doc, i) => {
-                console.log(`  📄 Documento[${i}]:`, {
-                  ospiteNumero: doc.ospiteNumero,
-                  nomeFile: doc.nomeFile,
-                  tipo: doc.tipo,
-                  dimensione: doc.dimensione,
-                  hasBase64: !!doc.base64,
-                  base64Preview: doc.base64 ? doc.base64.substring(0, 50) + '...' : 'MANCANTE'
-                });
-              });
-            } else {
-              console.warn('⚠️ Nessun documento trovato in PostgreSQL');
-            }
-
-            // Aggiorna anche altri campi se presenti
-            if (datiPG.appartamento) datiCompleti.appartamento = datiPG.appartamento;
-            if (datiPG.totale !== undefined) datiCompleti.totale = datiPG.totale;
-            if (datiPG.tipoGruppo) datiCompleti.tipoGruppo = datiPG.tipoGruppo;
-
-            recuperoRiuscito = true;
-            break; // Uscita dal loop retry
-          } else {
-            console.warn(`⚠️ PostgreSQL tentativo ${tentativo}: dati non trovati o scaduti`);
+            datiCompleti = pgData.datiPrenotazione;
+            console.log(`   ✅ Dati completi recuperati (tentativo ${tentativo})`);
+            break;
           }
         } else if (pgResponse.status === 404) {
-          console.warn(`⚠️ Sessione non trovata in PostgreSQL (potrebbe essere scaduta o già usata)`);
-          break; // Non ha senso riprovare se 404
-        } else {
-          const errorText = await pgResponse.text();
-          console.warn(`⚠️ PostgreSQL response non OK (tentativo ${tentativo}):`, pgResponse.status, errorText);
+          console.warn(`   ⚠️ Dati non trovati in PostgreSQL (scaduti?)`);
+          break;
         }
       } catch (pgError) {
-        if (pgError.name === 'AbortError') {
-          console.warn(`⚠️ Timeout recupero PostgreSQL (tentativo ${tentativo})`);
-        } else {
-          console.warn(`⚠️ Errore recupero da PostgreSQL (tentativo ${tentativo}):`, pgError.message);
-        }
-
-        // Attendi prima del prossimo tentativo
-        if (tentativo < maxTentativi) {
-          await new Promise(resolve => setTimeout(resolve, 2000 * tentativo));
-        }
+        console.warn(`   ⚠️ Tentativo ${tentativo} fallito: ${pgError.message}`);
+        if (tentativo < 3) await new Promise(r => setTimeout(r, 2000));
       }
     }
-
-    if (!recuperoRiuscito) {
-      console.warn('⚠️ Tutti i tentativi di recupero da PostgreSQL falliti - uso dati parziali dai metadata');
-      console.warn('⚠️ ATTENZIONE: Solo ospite 1 disponibile, documenti non disponibili');
-    }
-  } else {
-    console.warn('⚠️ Nessun temp_session_id disponibile - solo dati metadata Stripe');
-    console.warn('⚠️ Questo significa che NESSUN documento sarà allegato e solo ospite 1 sarà visibile');
   }
-
-  // ✅ FALLBACK: Se ancora solo ospite 1, prova a recuperare altri ospiti dai metadata
-  if (datiCompleti.ospiti.length <= 1 && metadata.altri_ospiti) {
-    try {
-      const altriOspiti = JSON.parse(metadata.altri_ospiti);
-      altriOspiti.forEach(o => {
-        datiCompleti.ospiti.push({
-          numero: o.n,
-          cognome: o.c || '',
-          nome: o.no || '',
-          genere: o.g || '',
-          nascita: o.na || '',
-          eta: parseInt(o.e) || 0,
-          cittadinanza: o.ci || '',
-          luogoNascita: o.ln || '',
-          comune: o.co || '',
-          provincia: o.p || ''
-        });
-      });
-      console.log(`✅ Fallback: recuperati ${altriOspiti.length} altri ospiti da metadata Stripe`);
-    } catch (e) {
-      console.warn('⚠️ Errore parsing altri_ospiti dai metadata:', e.message);
-    }
-  }
-
-  console.log('📊 === DATI FINALI RICOSTRUITI ===');
-  console.log('  ospiti totali:', datiCompleti.ospiti.length);
-  console.log('  documenti totali:', datiCompleti.documenti.length);
-  console.log('  totale pagato:', datiCompleti.totale);
-  console.log('  appartamento:', datiCompleti.appartamento);
-  console.log('=================================');
 
   return datiCompleti;
 }
 
-// FUNZIONE: Scrivi dati su Google Sheets
-async function scriviDatiSuGoogleSheets(datiCompleti) {
-  console.log('📊 === INIZIO SCRITTURA GOOGLE SHEETS ===');
+async function scriviDatiSuGoogleSheets(datiCompleti, requestId) {
+  console.log(`📊 [${requestId}] Scrittura Google Sheets...`);
 
   const serviceAccountAuth = new JWT({
     email: process.env.GOOGLE_CLIENT_EMAIL,
@@ -307,16 +253,14 @@ async function scriviDatiSuGoogleSheets(datiCompleti) {
 
   const sheet = doc.sheetsByIndex[0];
 
-  console.log(`📝 Scrivendo ${datiCompleti.ospiti.length} ospiti su Google Sheets`);
-
   for (const ospite of datiCompleti.ospiti) {
     const riga = {
       'Data Check-in': datiCompleti.dataCheckin || '',
       'Appartamento': datiCompleti.appartamento || '',
-      'Numero Ospiti': datiCompleti.numeroOspiti.toString() || '',
-      'Numero Notti': datiCompleti.numeroNotti.toString() || '',
+      'Numero Ospiti': datiCompleti.numeroOspiti.toString(),
+      'Numero Notti': datiCompleti.numeroNotti.toString(),
       'Tipo Gruppo': datiCompleti.tipoGruppo || '',
-      'Totale': datiCompleti.totale.toString() || '',
+      'Totale': datiCompleti.totale.toString(),
       'Numero Ospite': ospite.numero.toString(),
       'Cognome': ospite.cognome || '',
       'Nome': ospite.nome || '',
@@ -325,53 +269,33 @@ async function scriviDatiSuGoogleSheets(datiCompleti) {
       'Età': ospite.eta ? ospite.eta.toString() : '',
       'Cittadinanza': ospite.cittadinanza || '',
       'Luogo Nascita': ospite.luogoNascita || '',
-      'Comune': ospite.comune || '',
-      'Provincia': ospite.provincia || '',
-      'Tipo Documento': ospite.tipoDocumento || '',
-      'Numero Documento': ospite.numeroDocumento || '',
-      'Luogo Rilascio': ospite.luogoRilascio || '',
       'Timestamp': datiCompleti.timestamp || new Date().toISOString()
     };
 
     await sheet.addRow(riga);
-    console.log(`✅ Ospite ${ospite.numero} (${ospite.nome} ${ospite.cognome}) aggiunto`);
   }
 
-  console.log('📊 === FINE SCRITTURA GOOGLE SHEETS ===');
+  console.log(`   ✅ Scritti ${datiCompleti.ospiti.length} ospiti`);
 }
 
-// FUNZIONE: Genera PDF e invia email proprietario
-async function generaPDFEInviaEmail(datiCompleti) {
-  console.log('📧 === INIZIO INVIO EMAIL PROPRIETARIO ===');
-
+async function generaPDFEInviaEmail(datiCompleti, requestId) {
   const emailProprietario = process.env.EMAIL_PROPRIETARIO;
+  
   if (!emailProprietario) {
-    throw new Error('EMAIL_PROPRIETARIO non configurato');
+    throw new Error('EMAIL_PROPRIETARIO non configurata');
   }
-
-  console.log('📬 Destinatario proprietario:', emailProprietario);
-  console.log('📊 Dati per email:', {
-    ospiti: datiCompleti.ospiti.length,
-    documenti: datiCompleti.documenti.length,
-    totale: datiCompleti.totale
-  });
 
   const baseUrl = process.env.VERCEL_URL
     ? `https://${process.env.VERCEL_URL}`
     : 'https://checkin-six-coral.vercel.app';
 
-  // ✅ Timeout aumentato a 55 secondi (massimo funzione Vercel è 60s)
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 55000);
 
   try {
     const response = await fetch(`${baseUrl}/api/genera-pdf-email`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': 'CheckinWebhook/1.0',
-        'Accept': 'application/json'
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         datiPrenotazione: datiCompleti,
         emailDestinatario: emailProprietario
@@ -381,32 +305,20 @@ async function generaPDFEInviaEmail(datiCompleti) {
 
     clearTimeout(timeoutId);
 
-    console.log('📡 Status risposta API email proprietario:', response.status);
-
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Errore API (${response.status}): ${errorText}`);
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
     }
 
     const result = await response.json();
-    console.log('✅ Email proprietario inviata:', {
-      pdfGenerato: result.pdfGenerato,
-      numeroDocumenti: result.numeroDocumenti
-    });
-
+    console.log(`   ✅ Email proprietario OK (PDF: ${result.pdfGenerato ? 'SI' : 'NO'})`);
   } catch (error) {
     clearTimeout(timeoutId);
-    if (error.name === 'AbortError') {
-      throw new Error('Timeout invio email proprietario (55s)');
-    }
     throw error;
   }
 }
 
-// FUNZIONE: Invia email all'ospite
-async function inviaEmailOspite(datiCompleti, emailCliente) {
-  console.log('📧 === INIZIO INVIO EMAIL OSPITE ===');
-
+async function inviaEmailOspite(datiCompleti, emailCliente, requestId) {
   const baseUrl = process.env.VERCEL_URL
     ? `https://${process.env.VERCEL_URL}`
     : 'https://checkin-six-coral.vercel.app';
@@ -417,11 +329,7 @@ async function inviaEmailOspite(datiCompleti, emailCliente) {
   try {
     const response = await fetch(`${baseUrl}/api/invia-email-ospite`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': 'CheckinWebhook/1.0',
-        'Accept': 'application/json'
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         emailOspite: emailCliente,
         datiPrenotazione: datiCompleti
@@ -433,17 +341,13 @@ async function inviaEmailOspite(datiCompleti, emailCliente) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Errore API (${response.status}): ${errorText}`);
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
     }
 
     const result = await response.json();
-    console.log('✅ Email ospite inviata:', result.codiciCassetta);
-
+    console.log(`   ✅ Email ospite OK (Codice: ${result.codiciCassetta || 'N/A'})`);
   } catch (error) {
     clearTimeout(timeoutId);
-    if (error.name === 'AbortError') {
-      throw new Error('Timeout invio email ospite (20s)');
-    }
     throw error;
   }
 }
