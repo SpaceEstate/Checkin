@@ -1,5 +1,5 @@
 // api/stripeWebhook.js
-// VERSIONE SEMPLIFICATA - SOLO METADATA STRIPE (no PostgreSQL)
+// VERSIONE CORRETTA - res.json() chiamato SOLO DOPO tutte le operazioni async
 
 import Stripe from 'stripe';
 import { GoogleSpreadsheet } from 'google-spreadsheet';
@@ -35,38 +35,81 @@ export default async function handler(req, res) {
     }
 
     event = stripe.webhooks.constructEvent(rawBody, sig, endpointSecret);
-    console.log(`✅ [${requestId}] Event: ${event.type}`);
+    console.log(`✅ [${requestId}] Event verified: ${event.type}`);
 
   } catch (err) {
     console.error(`❌ [${requestId}] Signature error:`, err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
-  // Risposta immediata a Stripe
-  res.status(200).json({ received: true });
-
-  // Processing asincrono
+  // ✅ CRITICO: await processPayment PRIMA di rispondere a Stripe
+  // Vercel termina il processo subito dopo res.json(), quindi
+  // qualsiasi codice asincrono dopo res.json() non viene mai eseguito
   if (event.type === 'checkout.session.completed') {
-    setImmediate(() => {
-      processPayment(event, requestId).catch(err => {
-        console.error(`❌ [${requestId}] Process error:`, err.message);
-      });
-    });
+    try {
+      await processPayment(event, requestId);
+    } catch (err) {
+      // Log dell'errore ma rispondi comunque 200 a Stripe
+      // per evitare retry infiniti da parte di Stripe
+      console.error(`❌ [${requestId}] Process error:`, err.message);
+      console.error(err.stack);
+    }
   }
+
+  // ✅ RISPOSTA A STRIPE - SOLO DOPO aver completato tutto
+  console.log(`✅ [${requestId}] Sending 200 to Stripe`);
+  return res.status(200).json({ received: true });
 }
 
 async function processPayment(event, requestId) {
-  try {
-    const session = event.data.object;
-    const metadata = session.metadata || {};
-    
-    console.log(`💰 [${requestId}] PAYMENT COMPLETED`);
-    console.log(`   Session: ${session.id}`);
-    console.log(`   Email: ${session.customer_details?.email || 'N/A'}`);
-    console.log(`   Amount: €${(session.amount_total / 100).toFixed(2)}`);
+  const session = event.data.object;
+  const metadata = session.metadata || {};
+  
+  console.log(`\n💰 [${requestId}] PAYMENT COMPLETED`);
+  console.log(`   Session: ${session.id}`);
+  console.log(`   Email: ${session.customer_details?.email || 'N/A'}`);
+  console.log(`   Amount: €${(session.amount_total / 100).toFixed(2)}`);
+  console.log(`   Ospiti: ${metadata.numeroOspiti || 'N/A'}`);
+  console.log(`   temp_session_id: ${metadata.temp_session_id || 'MANCANTE'}`);
 
-    // Costruisci dati da metadata Stripe
-    const datiCompleti = {
+  // ✅ Prova prima a recuperare dati completi da PostgreSQL
+  let datiCompleti = null;
+
+  if (metadata.temp_session_id) {
+    console.log(`\n🔍 [${requestId}] Recupero dati da PostgreSQL...`);
+    try {
+      const pgResponse = await fetch(
+        `https://checkin-six-coral.vercel.app/api/salva-dati-temporanei?sessionId=${metadata.temp_session_id}`,
+        {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' }
+        }
+      );
+
+      if (pgResponse.ok) {
+        const pgData = await pgResponse.json();
+        if (pgData.success && pgData.datiPrenotazione) {
+          datiCompleti = pgData.datiPrenotazione;
+          console.log(`✅ [${requestId}] Dati PostgreSQL recuperati:`);
+          console.log(`   ospiti=${datiCompleti.ospiti?.length}`);
+          console.log(`   documenti=${datiCompleti.documenti?.length}`);
+          // Aggiungi email ospite se mancante nei dati salvati
+          if (datiCompleti.ospiti?.[0] && !datiCompleti.ospiti[0].email) {
+            datiCompleti.ospiti[0].email = session.customer_details?.email || '';
+          }
+        }
+      } else {
+        console.warn(`⚠️ [${requestId}] PostgreSQL HTTP ${pgResponse.status}`);
+      }
+    } catch (pgErr) {
+      console.warn(`⚠️ [${requestId}] PostgreSQL fallito: ${pgErr.message}`);
+    }
+  }
+
+  // Fallback: costruisci dati minimi da metadata Stripe
+  if (!datiCompleti) {
+    console.log(`⚠️ [${requestId}] Fallback a metadata Stripe (dati parziali, senza documenti)`);
+    datiCompleti = {
       dataCheckin: metadata.dataCheckin || '',
       appartamento: metadata.appartamento || '',
       numeroOspiti: parseInt(metadata.numeroOspiti) || 1,
@@ -88,68 +131,68 @@ async function processPayment(event, requestId) {
       }],
       documenti: []
     };
-
-    console.log(`📊 [${requestId}] Ospiti: ${datiCompleti.ospiti.length}`);
-
-    // 1. Google Sheets
-    console.log(`📊 [${requestId}] Saving to Google Sheets...`);
-    try {
-      await saveToGoogleSheets(datiCompleti);
-      console.log(`✅ [${requestId}] Google Sheets saved`);
-    } catch (err) {
-      console.error(`⚠️ [${requestId}] Google Sheets error:`, err.message);
-    }
-
-    // 2. Email Proprietario
-    const emailProp = process.env.EMAIL_PROPRIETARIO;
-    if (emailProp) {
-      console.log(`📧 [${requestId}] Sending owner email to ${emailProp}...`);
-      try {
-        await sendEmailWithRetry(
-          'https://checkin-six-coral.vercel.app/api/genera-pdf-email',
-          {
-            datiPrenotazione: datiCompleti,
-            emailDestinatario: emailProp
-          },
-          45000,
-          requestId
-        );
-        console.log(`✅ [${requestId}] Owner email sent`);
-      } catch (err) {
-        console.error(`❌ [${requestId}] Owner email failed:`, err.message);
-      }
-    } else {
-      console.warn(`⚠️ [${requestId}] EMAIL_PROPRIETARIO not configured`);
-    }
-
-    // 3. Email Ospite
-    const emailGuest = session.customer_details?.email;
-    if (emailGuest) {
-      console.log(`📧 [${requestId}] Sending guest email to ${emailGuest}...`);
-      try {
-        await sendEmailWithRetry(
-          'https://checkin-six-coral.vercel.app/api/invia-email-ospite',
-          {
-            emailOspite: emailGuest,
-            datiPrenotazione: datiCompleti
-          },
-          20000,
-          requestId
-        );
-        console.log(`✅ [${requestId}] Guest email sent`);
-      } catch (err) {
-        console.error(`❌ [${requestId}] Guest email failed:`, err.message);
-      }
-    } else {
-      console.warn(`⚠️ [${requestId}] Guest email not available`);
-    }
-
-    console.log(`✅ [${requestId}] COMPLETED\n`);
-
-  } catch (error) {
-    console.error(`❌ [${requestId}] CRITICAL ERROR:`, error.message);
-    console.error(error.stack);
   }
+
+  console.log(`\n📊 [${requestId}] Dati pronti per invio:`);
+  console.log(`   appartamento: ${datiCompleti.appartamento}`);
+  console.log(`   ospiti: ${datiCompleti.ospiti.length}`);
+  console.log(`   documenti: ${datiCompleti.documenti.length}`);
+
+  // 1. Google Sheets
+  console.log(`\n📊 [${requestId}] Saving to Google Sheets...`);
+  try {
+    await saveToGoogleSheets(datiCompleti);
+    console.log(`✅ [${requestId}] Google Sheets saved`);
+  } catch (err) {
+    console.error(`⚠️ [${requestId}] Google Sheets error:`, err.message);
+    // Non bloccante - continua con le email
+  }
+
+  // 2. Email Proprietario
+  const emailProp = process.env.EMAIL_PROPRIETARIO;
+  if (emailProp) {
+    console.log(`\n📧 [${requestId}] Sending owner email to ${emailProp}...`);
+    try {
+      await sendEmailWithRetry(
+        'https://checkin-six-coral.vercel.app/api/genera-pdf-email',
+        {
+          datiPrenotazione: datiCompleti,
+          emailDestinatario: emailProp
+        },
+        45000,
+        requestId
+      );
+      console.log(`✅ [${requestId}] Owner email sent`);
+    } catch (err) {
+      console.error(`❌ [${requestId}] Owner email failed:`, err.message);
+    }
+  } else {
+    console.warn(`⚠️ [${requestId}] EMAIL_PROPRIETARIO not configured`);
+  }
+
+  // 3. Email Ospite
+  const emailGuest = session.customer_details?.email;
+  if (emailGuest) {
+    console.log(`\n📧 [${requestId}] Sending guest email to ${emailGuest}...`);
+    try {
+      await sendEmailWithRetry(
+        'https://checkin-six-coral.vercel.app/api/invia-email-ospite',
+        {
+          emailOspite: emailGuest,
+          datiPrenotazione: datiCompleti
+        },
+        20000,
+        requestId
+      );
+      console.log(`✅ [${requestId}] Guest email sent`);
+    } catch (err) {
+      console.error(`❌ [${requestId}] Guest email failed:`, err.message);
+    }
+  } else {
+    console.warn(`⚠️ [${requestId}] Guest email not available`);
+  }
+
+  console.log(`\n✅ [${requestId}] processPayment COMPLETED\n`);
 }
 
 // === UTILITY FUNCTIONS ===
