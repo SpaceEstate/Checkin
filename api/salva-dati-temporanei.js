@@ -1,5 +1,5 @@
 // api/salva-dati-temporanei.js
-// VERSIONE NEON POSTGRESQL - Sostituisce Redis
+// VERSIONE CORRETTA - NON cancella dati dopo recupero, mantiene fino a scadenza TTL
 
 import postgres from 'postgres';
 
@@ -127,7 +127,8 @@ export default async function handler(req, res) {
         });
       }
 
-      const ttlSeconds = 7200; // 2 ore
+      // ✅ TTL AUMENTATO: 4 ore invece di 2 per permettere retry webhook
+      const ttlSeconds = 4 * 60 * 60; // 4 ore
       const expiresAt = new Date(Date.now() + ttlSeconds * 1000);
 
       try {
@@ -143,7 +144,7 @@ export default async function handler(req, res) {
         `;
 
         console.log(`✅ Dati salvati su Neon PostgreSQL`);
-        console.log(`⏰ Scadenza: ${expiresAt.toISOString()}`);
+        console.log(`⏰ Scadenza: ${expiresAt.toISOString()} (${ttlSeconds / 3600}h)`);
 
         return res.status(200).json({
           success: true,
@@ -156,7 +157,7 @@ export default async function handler(req, res) {
             totalSizeMB: totalSizeMB,
             expiresAt: expiresAt.toISOString(),
             storage: 'Neon PostgreSQL',
-            ttlSeconds: ttlSeconds
+            ttlHours: ttlSeconds / 3600
           }
         });
         
@@ -189,7 +190,7 @@ export default async function handler(req, res) {
       console.log(`🔑 Recupero per: ${sessionId}`);
 
       const result = await db`
-        SELECT data, expires_at 
+        SELECT data, expires_at, created_at 
         FROM temporary_sessions 
         WHERE session_id = ${sessionId}
         AND expires_at > NOW()
@@ -209,13 +210,12 @@ export default async function handler(req, res) {
 
       console.log(`✅ Dati recuperati con successo`);
       console.log(`📊 Struttura: ospiti=${datiPrenotazione.ospiti?.length || 0}, documenti=${datiPrenotazione.documenti?.length || 0}`);
+      console.log(`⏰ Scadenza: ${sessionData.expires_at}`);
 
-      // Elimina dopo recupero (uso singolo)
-      await db`
-        DELETE FROM temporary_sessions 
-        WHERE session_id = ${sessionId}
-      `;
-      console.log('🗑️ Dati eliminati (uso singolo)');
+      // ✅ CRITICO: NON elimina più dopo recupero
+      // Permette retry del webhook in caso di errori
+      // I dati scadranno naturalmente dopo il TTL
+      console.log('💾 Dati mantenuti fino a scadenza naturale (retry-safe)');
 
       return res.status(200).json({
         success: true,
@@ -223,7 +223,8 @@ export default async function handler(req, res) {
         metadata: {
           salvataAlle: sessionData.created_at,
           scadenzaOriginale: sessionData.expires_at,
-          storage: 'Neon PostgreSQL'
+          storage: 'Neon PostgreSQL',
+          note: 'Dati disponibili per retry webhook fino a scadenza TTL'
         }
       });
     }
