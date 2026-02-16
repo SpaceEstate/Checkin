@@ -78,7 +78,7 @@ async function caricaAllegatiFoto() {
   const allegati = [];
   
   try {
-    const basePath = '/var/task/public/images/cassetta';
+    const basePath = join(process.cwd(), 'public', 'images', 'cassetta');
     
     // ✅ NOMI FILE CORRETTI
     const files = [
