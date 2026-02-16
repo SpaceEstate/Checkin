@@ -1,5 +1,5 @@
 // api/stripeWebhook.js
-// VERSIONE CORRETTA - res.json() chiamato SOLO DOPO tutte le operazioni async
+// VERSIONE CORRETTA - res.json() DOPO tutte le operazioni + fix struttura PostgreSQL
 
 import Stripe from 'stripe';
 import { GoogleSpreadsheet } from 'google-spreadsheet';
@@ -42,15 +42,11 @@ export default async function handler(req, res) {
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
-  // ✅ CRITICO: await processPayment PRIMA di rispondere a Stripe
-  // Vercel termina il processo subito dopo res.json(), quindi
-  // qualsiasi codice asincrono dopo res.json() non viene mai eseguito
+  // ✅ CRITICO: await PRIMA di rispondere a Stripe
   if (event.type === 'checkout.session.completed') {
     try {
       await processPayment(event, requestId);
     } catch (err) {
-      // Log dell'errore ma rispondi comunque 200 a Stripe
-      // per evitare retry infiniti da parte di Stripe
       console.error(`❌ [${requestId}] Process error:`, err.message);
       console.error(err.stack);
     }
@@ -88,18 +84,41 @@ async function processPayment(event, requestId) {
 
       if (pgResponse.ok) {
         const pgData = await pgResponse.json();
-        if (pgData.success && pgData.datiPrenotazione) {
-          datiCompleti = pgData.datiPrenotazione;
-          console.log(`✅ [${requestId}] Dati PostgreSQL recuperati:`);
-          console.log(`   ospiti=${datiCompleti.ospiti?.length}`);
-          console.log(`   documenti=${datiCompleti.documenti?.length}`);
-          // Aggiungi email ospite se mancante nei dati salvati
+
+        // 🔍 LOG DIAGNOSTICO - struttura completa risposta PostgreSQL
+        console.log(`📋 [${requestId}] Struttura pgData:`, JSON.stringify(pgData, null, 2).substring(0, 500));
+
+        // La risposta di salva-dati-temporanei è:
+        // { success: true, datiPrenotazione: { ospiti: [...], documenti: [...], ... }, metadata: {...} }
+        // MA datiPrenotazione potrebbe essere un oggetto annidato o stringificato
+        
+        let parsed = pgData.datiPrenotazione;
+
+        // Se è una stringa JSON, parsala
+        if (typeof parsed === 'string') {
+          console.log(`🔄 [${requestId}] datiPrenotazione è una stringa, parsing...`);
+          parsed = JSON.parse(parsed);
+        }
+
+        // Verifica che abbia la struttura attesa
+        if (parsed && (parsed.ospiti || parsed.appartamento || parsed.dataCheckin)) {
+          datiCompleti = parsed;
+          console.log(`✅ [${requestId}] Dati PostgreSQL validi:`);
+          console.log(`   ospiti=${datiCompleti.ospiti?.length ?? 'undefined'}`);
+          console.log(`   documenti=${datiCompleti.documenti?.length ?? 'undefined'}`);
+          console.log(`   appartamento=${datiCompleti.appartamento ?? 'undefined'}`);
+          console.log(`   dataCheckin=${datiCompleti.dataCheckin ?? 'undefined'}`);
+          
+          // Aggiungi email ospite se mancante
           if (datiCompleti.ospiti?.[0] && !datiCompleti.ospiti[0].email) {
             datiCompleti.ospiti[0].email = session.customer_details?.email || '';
           }
+        } else {
+          console.warn(`⚠️ [${requestId}] Struttura datiPrenotazione non valida:`, typeof parsed, Object.keys(parsed || {}));
         }
       } else {
-        console.warn(`⚠️ [${requestId}] PostgreSQL HTTP ${pgResponse.status}`);
+        const errText = await pgResponse.text();
+        console.warn(`⚠️ [${requestId}] PostgreSQL HTTP ${pgResponse.status}: ${errText.substring(0, 200)}`);
       }
     } catch (pgErr) {
       console.warn(`⚠️ [${requestId}] PostgreSQL fallito: ${pgErr.message}`);
@@ -133,6 +152,15 @@ async function processPayment(event, requestId) {
     };
   }
 
+  // Garantisci struttura minima per evitare crash
+  if (!Array.isArray(datiCompleti.ospiti)) {
+    console.warn(`⚠️ [${requestId}] ospiti non è un array, inizializzo array vuoto`);
+    datiCompleti.ospiti = [];
+  }
+  if (!Array.isArray(datiCompleti.documenti)) {
+    datiCompleti.documenti = [];
+  }
+
   console.log(`\n📊 [${requestId}] Dati pronti per invio:`);
   console.log(`   appartamento: ${datiCompleti.appartamento}`);
   console.log(`   ospiti: ${datiCompleti.ospiti.length}`);
@@ -145,7 +173,6 @@ async function processPayment(event, requestId) {
     console.log(`✅ [${requestId}] Google Sheets saved`);
   } catch (err) {
     console.error(`⚠️ [${requestId}] Google Sheets error:`, err.message);
-    // Non bloccante - continua con le email
   }
 
   // 2. Email Proprietario
@@ -216,15 +243,19 @@ async function saveToGoogleSheets(datiCompleti) {
   await doc.loadInfo();
   const sheet = doc.sheetsByIndex[0];
 
-  for (const ospite of datiCompleti.ospiti) {
+  const ospitiDaSalvare = datiCompleti.ospiti?.length > 0
+    ? datiCompleti.ospiti
+    : [{ numero: 1, cognome: '', nome: '', genere: '', nascita: '', eta: 0, cittadinanza: '', luogoNascita: '' }];
+
+  for (const ospite of ospitiDaSalvare) {
     await sheet.addRow({
       'Data Check-in': datiCompleti.dataCheckin || '',
       'Appartamento': datiCompleti.appartamento || '',
-      'Numero Ospiti': datiCompleti.numeroOspiti.toString(),
-      'Numero Notti': datiCompleti.numeroNotti.toString(),
+      'Numero Ospiti': (datiCompleti.numeroOspiti || 0).toString(),
+      'Numero Notti': (datiCompleti.numeroNotti || 0).toString(),
       'Tipo Gruppo': datiCompleti.tipoGruppo || '',
-      'Totale': datiCompleti.totale.toString(),
-      'Numero Ospite': ospite.numero.toString(),
+      'Totale': (datiCompleti.totale || 0).toString(),
+      'Numero Ospite': (ospite.numero || 1).toString(),
       'Cognome': ospite.cognome || '',
       'Nome': ospite.nome || '',
       'Genere': ospite.genere || '',
