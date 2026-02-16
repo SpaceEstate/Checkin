@@ -248,7 +248,8 @@ async function saveToGoogleSheets(datiCompleti) {
     : [{ numero: 1, cognome: '', nome: '', genere: '', nascita: '', eta: 0, cittadinanza: '', luogoNascita: '' }];
 
   for (const ospite of ospitiDaSalvare) {
-    await sheet.addRow({
+    // ✅ FIX: Aggiungi campi documento solo per il responsabile (ospite 1)
+    const rowData = {
       'Data Check-in': datiCompleti.dataCheckin || '',
       'Appartamento': datiCompleti.appartamento || '',
       'Numero Ospiti': (datiCompleti.numeroOspiti || 0).toString(),
@@ -264,10 +265,23 @@ async function saveToGoogleSheets(datiCompleti) {
       'Cittadinanza': ospite.cittadinanza || '',
       'Luogo Nascita': ospite.luogoNascita || '',
       'Timestamp': datiCompleti.timestamp || new Date().toISOString()
-    });
+    };
+
+    // ✅ CRITICAL: Aggiungi campi documento SOLO per ospite responsabile (numero 1)
+    if (ospite.numero === 1 || ospite.isResponsabile) {
+      rowData['Tipo Documento'] = ospite.tipoDocumento || '';
+      rowData['Numero Documento'] = ospite.numeroDocumento || '';
+      rowData['Luogo Rilascio'] = ospite.luogoRilascio || '';
+    } else {
+      // Per gli altri ospiti, lascia vuoti i campi documento
+      rowData['Tipo Documento'] = '';
+      rowData['Numero Documento'] = '';
+      rowData['Luogo Rilascio'] = '';
+    }
+
+    await sheet.addRow(rowData);
   }
 }
-
 async function sendEmailWithRetry(url, body, timeoutMs, requestId) {
   const maxRetries = 2;
   
