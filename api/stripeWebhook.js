@@ -264,6 +264,8 @@ async function saveToGoogleSheets(datiCompleti) {
       'Età': ospite.eta ? ospite.eta.toString() : '',
       'Cittadinanza': ospite.cittadinanza || '',
       'Luogo Nascita': ospite.luogoNascita || '',
+      'Comune': ospite.comune || '',
+      'Provincia': ospite.provincia || '',
       'Timestamp': datiCompleti.timestamp || new Date().toISOString()
     };
 
