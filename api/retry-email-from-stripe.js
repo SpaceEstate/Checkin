@@ -5,6 +5,13 @@ import Stripe from 'stripe';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
+function maskEmail(email) {
+  if (!email || typeof email !== 'string' || !email.includes('@')) return 'N/A';
+  const [user, domain] = email.split('@');
+  const maskedUser = user.length <= 2 ? `${user[0]}*` : `${user.slice(0, 2)}${'*'.repeat(user.length - 2)}`;
+  return `${maskedUser}@${domain}`;
+}
+
 export default async function handler(req, res) {
   console.log('\n🔄 === RETRY EMAIL DA SESSIONE STRIPE ===\n');
 
@@ -12,6 +19,21 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   
   if (req.method === "OPTIONS") return res.status(200).end();
+
+  // Endpoint amministrativo: richiede un secret, non è pensato per essere chiamato
+  // dal sito pubblico. Accetta sia header (per curl/script) sia query param
+  // (comodo per uso manuale da browser).
+  if (!process.env.ADMIN_SECRET) {
+    console.error('❌ ADMIN_SECRET non configurato sul server');
+    return res.status(500).json({ error: 'Configurazione server incompleta' });
+  }
+
+  const providedSecret = req.headers['x-admin-secret'] || req.query.key;
+
+  if (providedSecret !== process.env.ADMIN_SECRET) {
+    console.warn('🚫 Tentativo di accesso non autorizzato a retry-email-from-stripe');
+    return res.status(401).json({ error: 'Non autorizzato' });
+  }
 
   try {
     // Può essere GET con ?session_id= o POST con body
@@ -37,7 +59,7 @@ export default async function handler(req, res) {
     }
 
     console.log(`✅ Sessione trovata:`);
-    console.log(`   Email: ${session.customer_details?.email}`);
+    console.log(`   Email: ${maskEmail(session.customer_details?.email)}`);
     console.log(`   Importo: €${(session.amount_total / 100).toFixed(2)}`);
     console.log(`   Status: ${session.payment_status}`);
 
@@ -65,7 +87,10 @@ export default async function handler(req, res) {
           `${baseUrl}/api/salva-dati-temporanei?sessionId=${tempSessionId}`,
           {
             method: 'GET',
-            headers: { 'Accept': 'application/json' }
+            headers: {
+              'Accept': 'application/json',
+              'x-internal-secret': process.env.INTERNAL_API_SECRET
+            }
           }
         );
 
@@ -154,7 +179,7 @@ export default async function handler(req, res) {
     const emailOspite = session.customer_details?.email;
 
     if (emailOspite) {
-      console.log(`\n📤 Invio email ospite a: ${emailOspite}`);
+      console.log(`\n📤 Invio email ospite a: ${maskEmail(emailOspite)}`);
       
       try {
         const baseUrl = process.env.VERCEL_URL
@@ -173,7 +198,7 @@ export default async function handler(req, res) {
         if (emailResponse.ok) {
           const result = await emailResponse.json();
           console.log(`✅ Email ospite inviata`);
-          console.log(`   Codici cassetta: ${result.codiciCassetta || 'N/A'}`);
+          console.log(`   Codici cassetta: ${result.codiciCassetta?.length ? 'generati (' + result.codiciCassetta.length + ')' : 'N/A'}`);
           
           results.emailOspite = {
             status: 'SUCCESS',
