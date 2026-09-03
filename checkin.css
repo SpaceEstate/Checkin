@@ -53,6 +53,7 @@ body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background: linear-gradient(135deg, var(--color-bg-cream) 0%, var(--color-border) 100%);
   min-height: 100vh;
+  min-height: 100dvh; /* su Safari iOS evita lo spazio fantasma quando la barra indirizzi è visibile */
   padding: 20px;
   line-height: 1.6;
   /* Notch / area sicura su dispositivi moderni (spostato da index.html) */
@@ -1647,4 +1648,59 @@ body {
   .date-input-wrapper.mobile-date-input .date-picker-btn:active {
     transform: scale(0.95);
   }
+}
+
+/* ============================================================
+   MODALE DI CONFERMA (sostituisce il confirm() nativo del browser,
+   incoerente tra i browser mobile, specie quelli in-app)
+   ============================================================ */
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  padding-bottom: max(20px, env(safe-area-inset-bottom));
+  z-index: 10001;
+  animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.confirm-box {
+  background: var(--color-white);
+  border-radius: 20px;
+  padding: 28px 24px;
+  max-width: 360px;
+  width: 100%;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
+  animation: slideUp 0.25s ease-out;
+}
+
+@keyframes slideUp {
+  from { transform: translateY(16px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.confirm-message {
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--color-text);
+  margin-bottom: 24px;
+  text-align: center;
+}
+
+.confirm-box .button-group {
+  margin-top: 0;
+  gap: 12px;
+}
+
+.confirm-box .btn {
+  flex: 1;
+  min-width: 120px;
 }
