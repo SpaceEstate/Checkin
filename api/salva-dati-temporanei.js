@@ -174,7 +174,27 @@ export default async function handler(req, res) {
     }
 
     // === GET: Recupera dati ===
+    // Chiamato solo da codice server-to-server (webhook Stripe, script di
+    // retry/diagnostica) — mai dal browser dell'ospite, che usa solo POST.
+    // In precedenza chiunque conoscesse (o intercettasse) il sessionId — che
+    // finisce nell'URL della pagina di successo, quindi in cronologia browser,
+    // log, referrer — poteva leggere qui i dati completi degli ospiti,
+    // documento d'identità incluso, senza alcuna autenticazione. Ora il
+    // chiamante deve anche presentare INTERNAL_API_SECRET in un header.
     if (req.method === "GET") {
+      const secretAtteso = process.env.INTERNAL_API_SECRET;
+      const secretRicevuto = req.headers['x-internal-secret'];
+
+      if (!secretAtteso) {
+        console.error('❌ INTERNAL_API_SECRET non configurato nelle variabili d\'ambiente');
+        return res.status(500).json({ error: "Configurazione server incompleta" });
+      }
+
+      if (secretRicevuto !== secretAtteso) {
+        console.warn('⚠️ Tentativo di GET senza secret valido, sessionId:', req.query?.sessionId);
+        return res.status(401).json({ error: "Non autorizzato" });
+      }
+
       console.log('\n🔍 === RECUPERO DATI ===');
       
       const { sessionId } = req.query;
