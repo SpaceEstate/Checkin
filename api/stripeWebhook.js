@@ -8,6 +8,16 @@ import { JWT } from 'google-auth-library';
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
+// I log di questo file finiscono su Vercel, che ha una sua retention: mascherare
+// l'indirizzo (mantenendo il dominio, utile per capire se un provider ha problemi
+// di recapito) evita di tenere l'email leggibile dell'ospite nei log applicativi.
+function maskEmail(email) {
+  if (!email || typeof email !== 'string' || !email.includes('@')) return 'N/A';
+  const [user, domain] = email.split('@');
+  const maskedUser = user.length <= 2 ? `${user[0]}*` : `${user.slice(0, 2)}${'*'.repeat(user.length - 2)}`;
+  return `${maskedUser}@${domain}`;
+}
+
 export const config = {
   api: {
     bodyParser: false,
@@ -63,7 +73,7 @@ async function processPayment(event, requestId) {
   
   console.log(`\n💰 [${requestId}] PAYMENT COMPLETED`);
   console.log(`   Session: ${session.id}`);
-  console.log(`   Email: ${session.customer_details?.email || 'N/A'}`);
+  console.log(`   Email: ${maskEmail(session.customer_details?.email)}`);
   console.log(`   Amount: €${(session.amount_total / 100).toFixed(2)}`);
   console.log(`   Ospiti: ${metadata.numeroOspiti || 'N/A'}`);
   console.log(`   temp_session_id: ${metadata.temp_session_id || 'MANCANTE'}`);
@@ -78,15 +88,20 @@ async function processPayment(event, requestId) {
         `https://checkin-six-coral.vercel.app/api/salva-dati-temporanei?sessionId=${metadata.temp_session_id}`,
         {
           method: 'GET',
-          headers: { 'Accept': 'application/json' }
+          headers: {
+            'Accept': 'application/json',
+            'x-internal-secret': process.env.INTERNAL_API_SECRET
+          }
         }
       );
 
       if (pgResponse.ok) {
         const pgData = await pgResponse.json();
 
-        // 🔍 LOG DIAGNOSTICO - struttura completa risposta PostgreSQL
-        console.log(`📋 [${requestId}] Struttura pgData:`, JSON.stringify(pgData, null, 2).substring(0, 500));
+        // 🔍 LOG DIAGNOSTICO: solo la struttura (chiavi presenti / conteggi),
+        // mai il contenuto — prima qui finiva un dump JSON che includeva nome,
+        // data di nascita e documento del primo ospite nei log di Vercel.
+        console.log(`📋 [${requestId}] Struttura pgData: chiavi=${Object.keys(pgData || {}).join(',')}`);
 
         // La risposta di salva-dati-temporanei è:
         // { success: true, datiPrenotazione: { ospiti: [...], documenti: [...], ... }, metadata: {...} }
@@ -200,7 +215,7 @@ async function processPayment(event, requestId) {
   // 3. Email Ospite
   const emailGuest = session.customer_details?.email;
   if (emailGuest) {
-    console.log(`\n📧 [${requestId}] Sending guest email to ${emailGuest}...`);
+    console.log(`\n📧 [${requestId}] Sending guest email to ${maskEmail(emailGuest)}...`);
     try {
       await sendEmailWithRetry(
         'https://checkin-six-coral.vercel.app/api/invia-email-ospite',
