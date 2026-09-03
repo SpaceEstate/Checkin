@@ -8,93 +8,15 @@ window.datiPrecompilati = false; // Flag globale per dati pre-compilati
  
 const API_BASE_URL = 'https://checkin-six-coral.vercel.app/api';
 
-// === FUNZIONE: Aggiorna appartamenti selezionati ===
-window.aggiornaAppartamentiSelezionati = function() {
-  const selectElement = document.getElementById('appartamento');
-  
-  if (!selectElement) {
-    console.warn('⚠️ Select appartamento non trovato');
-    return;
-  }
-
-  // Ottieni tutti i valori selezionati
-  const selectedOptions = Array.from(selectElement.selectedOptions);
-  const valoriSelezionati = selectedOptions.map(option => option.value);
-  
-  console.log('📍 Appartamenti selezionati:', valoriSelezionati);
-  
-  // Aggiorna il valore del select in base alla selezione
-  if (valoriSelezionati.length === 0) {
-    selectElement.value = '';
-  } else if (valoriSelezionati.length === 1) {
-    // Un solo appartamento
-    selectElement.setAttribute('data-selected', valoriSelezionati[0]);
-  } else {
-    // Entrambi gli appartamenti - formato speciale per lo script Google Apps
-    const valoreComposto = valoriSelezionati.join(' + ');
-    selectElement.setAttribute('data-selected', valoreComposto);
-  }
-}
-
-
-// === MODIFICA: validaStep1 ===
-function validaStep1() {
-  const dataCheckinInput = document.getElementById("data-checkin");
-  const appartamentoSelect = document.getElementById("appartamento");
-  const numOspitiSelect = document.getElementById("numero-ospiti");
-  const numNottiInput = document.getElementById("numero-notti");
-  
-  if (!dataCheckinInput?.value) {
-    showNotification("Seleziona la data di check-in", "error");
-    dataCheckinInput?.focus();
-    return false;
-  }
-
-  const dataScelta = new Date(dataCheckinInput.value);
-  const oggi = new Date();
-  oggi.setHours(0, 0, 0, 0);
-  
-  if (!window.datiPrecompilati && dataScelta < oggi) {
-    showNotification("La data di check-in non può essere nel passato", "error");
-    dataCheckinInput?.focus();
-    return false;
-  }
-
-  // ✅ VALIDAZIONE SELECT MULTIPLO
-  const selectedOptions = Array.from(appartamentoSelect?.selectedOptions || []);
-  if (selectedOptions.length === 0) {
-    showNotification("Seleziona almeno un appartamento", "error");
-    appartamentoSelect?.focus();
-    return false;
-  }
-
-  if (!numOspitiSelect?.value) {
-    showNotification("Seleziona il numero di ospiti", "error");
-    numOspitiSelect?.focus();
-    return false;
-  }
-
-  const notti = parseInt(numNottiInput?.value) || 0;
-  if (notti < 1) {
-    showNotification("Inserisci un numero di notti valido (minimo 1)", "error");
-    numNottiInput?.focus();
-    return false;
-  }
-
-  dataCheckin = dataCheckinInput.value;
-  numeroOspiti = parseInt(numOspitiSelect.value);
-  numeroNotti = notti;
-
-  if (numeroOspiti > 1) {
-    const tipoGruppoSelect = document.getElementById("tipo-gruppo");
-    if (!tipoGruppoSelect?.value) {
-      showNotification("Seleziona il tipo di gruppo", "error");
-      tipoGruppoSelect?.focus();
-      return false;
-    }
-  }
-
-  return true;
+// === SELEZIONE APPARTAMENTO (checkbox al posto del vecchio <select multiple>) ===
+// NOTA: questa sezione prima conteneva anche aggiornaAppartamentiSelezionati()
+// (mai chiamata da nessuna parte del file) e una PRIMA versione di validaStep1
+// che veniva sempre sovrascritta dalla seconda dichiarazione più sotto nel file
+// (in JS l'ultima "function nome(){}" con lo stesso nome vince sempre) — erano
+// quindi entrambe morte al 100%. Rimosse.
+function getAppartamentiSelezionati() {
+  return Array.from(document.querySelectorAll('.apartment-chip input[type="checkbox"]:checked'))
+    .map(cb => cb.value);
 }
 
 // === MODIFICA: precompilaDatiPrenotazione ===
@@ -110,56 +32,35 @@ function precompilaDatiPrenotazione(dati) {
     dataInput.style.cursor = 'not-allowed';
   }
   
-  // ✅ APPARTAMENTI - CORRETTA SELEZIONE
-  const appartamentoSelect = document.getElementById('appartamento');
-  if (appartamentoSelect && dati.appartamento) {
-   console.log("VALORE GREZZO ARRIVATO DAL SERVER →", dati.appartamento);
-console.log("TIPO →", typeof dati.appartamento);
-
+  // Appartamenti pre-verificati: selezione + blocco delle checkbox corrispondenti
+  const appartamentoCheckboxes = document.querySelectorAll('.apartment-chip input[type="checkbox"]');
+  if (appartamentoCheckboxes.length && dati.appartamento) {
     // Gestione formati multipli: " + " oppure ","
-let appartamenti;
+    let appartamenti;
+    if (dati.appartamento.includes(' + ')) {
+      appartamenti = dati.appartamento.split(' + ');
+    } else if (dati.appartamento.includes(',')) {
+      appartamenti = dati.appartamento.split(',');
+    } else {
+      appartamenti = [dati.appartamento];
+    }
+    appartamenti = appartamenti.map(a => a.trim());
 
-if (dati.appartamento.includes(' + ')) {
-  appartamenti = dati.appartamento.split(' + ');
-} else if (dati.appartamento.includes(',')) {
-  appartamenti = dati.appartamento.split(',');
-} else {
-  appartamenti = [dati.appartamento];
-}
-
-// Pulisci spazi
-appartamenti = appartamenti.map(a => a.trim());
-
-    
-    console.log('🏠 Appartamenti da selezionare:', appartamenti);
-    
     // Deseleziona tutto prima
-    Array.from(appartamentoSelect.options).forEach(option => {
-      option.selected = false;
-    });
-    
-    // Seleziona le opzioni corrispondenti
+    appartamentoCheckboxes.forEach(cb => { cb.checked = false; });
+
+    // Seleziona le checkbox corrispondenti (match flessibile su "corte"/"torre")
     appartamenti.forEach(app => {
       const appLower = app.trim().toLowerCase();
-      
-      Array.from(appartamentoSelect.options).forEach(option => {
-        const optionLower = option.value.toLowerCase();
-        
-        // Match flessibile: cerca "corte" o "torre" nel nome
-        if (appLower.includes('corte') && optionLower.includes('corte')) {
-          option.selected = true;
-          console.log('✓ Selezionato Corte');
-        }
-        if (appLower.includes('torre') && optionLower.includes('torre')) {
-          option.selected = true;
-          console.log('✓ Selezionato Torre');
-        }
+      appartamentoCheckboxes.forEach(cb => {
+        const valueLower = cb.value.toLowerCase();
+        if (appLower.includes('corte') && valueLower.includes('corte')) cb.checked = true;
+        if (appLower.includes('torre') && valueLower.includes('torre')) cb.checked = true;
       });
     });
-    
-    appartamentoSelect.disabled = true;
-    appartamentoSelect.style.backgroundColor = '#f5f2e9';
-    appartamentoSelect.style.cursor = 'not-allowed';
+
+    // Blocca la selezione: prenotazione già verificata, l'ospite non deve poterla cambiare
+    appartamentoCheckboxes.forEach(cb => { cb.disabled = true; });
   }
   
   // Numero ospiti
@@ -246,6 +147,23 @@ function mostraStepCorrente() {
     stepToShow.classList.add('active');
     stepToShow.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
+  aggiornaProgressBar();
+}
+
+// Passi totali: verifica (1) + info generali (1) + un passo per ospite + riepilogo (1).
+// Prima dello step 1, numeroOspiti non è ancora noto: si usa un totale provvisorio di 3
+// che si aggiusta automaticamente appena il numero di ospiti viene scelto.
+function aggiornaProgressBar() {
+  const progressFill = document.getElementById('progress-fill');
+  const progressLabel = document.getElementById('progress-label');
+  if (!progressFill || !progressLabel) return;
+
+  const totalSteps = (numeroOspiti > 0 ? numeroOspiti : 0) + 3;
+  const currentIndex = currentStep === 99 ? totalSteps : Math.min(currentStep + 1, totalSteps);
+
+  const percent = Math.round((currentIndex / totalSteps) * 100);
+  progressFill.style.width = `${percent}%`;
+  progressLabel.textContent = `Passo ${currentIndex} di ${totalSteps}`;
 }
 
 // === FUNZIONI UTILITÀ ===
@@ -498,7 +416,6 @@ window.indietroStep = function() {
 // === VALIDAZIONE ===
 function validaStep1() {
   const dataCheckinInput = document.getElementById("data-checkin");
-  const appartamentoSelect = document.getElementById("appartamento");
   const numOspitiSelect = document.getElementById("numero-ospiti");
   const numNottiInput = document.getElementById("numero-notti");
   
@@ -518,11 +435,10 @@ function validaStep1() {
     return false;
   }
 
-  // ✅ VALIDAZIONE SELECT MULTIPLO
-  const selectedOptions = Array.from(appartamentoSelect?.selectedOptions || []);
-  if (selectedOptions.length === 0) {
+  const appartamentiSelezionati = getAppartamentiSelezionati();
+  if (appartamentiSelezionati.length === 0) {
     showNotification("Seleziona almeno un appartamento", "error");
-    appartamentoSelect?.focus();
+    document.getElementById('appartamento-group')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return false;
   }
 
@@ -626,9 +542,7 @@ function validaPrenotazioneCompleta() {
     return false;
   }
   
-  const appartamentoSelect = document.getElementById('appartamento');
-  const selectedOptions = Array.from(appartamentoSelect?.selectedOptions || []);
-  if (selectedOptions.length === 0) {
+  if (getAppartamentiSelezionati().length === 0) {
     showNotification('Nessun appartamento selezionato', 'error');
     return false;
   }
@@ -863,10 +777,7 @@ function preparaRiepilogo() {
   const dettagliSection = document.createElement('div');
   dettagliSection.className = 'summary-section';
   
-  // ✅ Gestisci select multiplo
-  const appartamentoSelect = document.getElementById('appartamento');
-  const selectedOptions = Array.from(appartamentoSelect?.selectedOptions || []);
-  const appartamenti = selectedOptions.map(opt => opt.value);
+  const appartamenti = getAppartamentiSelezionati();
   const appartamentoDisplay = appartamenti.length === 1 
     ? appartamenti[0]
     : appartamenti.join('<br>➕ ');
@@ -1023,17 +934,21 @@ window.handleFileUpload = function(input, ospiteNum) {
   if (!label) return;
   
   if (file) {
-    // ✅ LIMITE FISSO 2 MB per l'unico documento
-    const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2 MB
+    // Il limite qui era fissato a 2 MB, PRIMA che la compressione (più sotto,
+    // comprimiImmagineBase64) avesse la possibilità di agire — quella riduce
+    // qualunque immagine a ~150 KB ridimensionandola a 1280px. Una foto scattata
+    // con un telefono moderno (spesso 4-8 MB) veniva quindi rifiutata anche se
+    // la pipeline di compressione l'avrebbe gestita senza problemi. Il limite
+    // qui serve solo a scartare file anomali, non foto normali: alzato a 20 MB.
+    const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
     
     if (file.size > MAX_FILE_SIZE) {
       const fileSizeMB = (file.size / 1024 / 1024).toFixed(2);
       showNotification(
         `📦 File troppo grande: ${fileSizeMB} MB\n` +
-        `Limite massimo: 2 MB\n\n` +
+        `Limite massimo: 20 MB\n\n` +
         `💡 Suggerimenti:\n` +
-        `• Usa la fotocamera con risoluzione "Bassa"\n` +
-        `• Scatta da più lontano\n` +
+        `• Scatta una nuova foto invece di scegliere un file esistente\n` +
         `• Comprimi la foto prima di caricarla`,
         'error'
       );
@@ -1367,9 +1282,7 @@ async function comprimiImmagineBase64(base64String, maxSizeKB = 150) { // ⬅️
 // ✅ NUOVA FUNZIONE: Raccogli dati con compressione
 // ✅ COMPRESSIONE DOCUMENTI CON VALIDAZIONE E STATISTICHE
 async function raccogliDatiPrenotazioneConCompressione() {
-  const appartamentoSelect = document.getElementById('appartamento');
-  const selectedOptions = Array.from(appartamentoSelect?.selectedOptions || []);
-  const appartamenti = selectedOptions.map(opt => opt.value);
+  const appartamenti = getAppartamentiSelezionati();
   const appartamentoValore = appartamenti.length === 1 
     ? appartamenti[0] 
     : appartamenti.join(' + ');
@@ -1807,23 +1720,6 @@ document.addEventListener('DOMContentLoaded', function() {
     dataCheckinInput.min = oggi;
   }
   
-  // ✅ FIX: Click semplice per selezione multipla
-  const appartamentoSelect = document.getElementById('appartamento');
-  if (appartamentoSelect) {
-    appartamentoSelect.addEventListener('mousedown', function(e) {
-      e.preventDefault();
-      const option = e.target;
-      
-      if (option.tagName === 'OPTION') {
-        // Toggle selezione senza Ctrl/Cmd
-        option.selected = !option.selected;
-        
-        // Trigger change event
-        this.dispatchEvent(new Event('change', { bubbles: true }));
-      }
-    });
-  }
-
   // Inizializza mostrando lo step 0 (verifica prenotazione)
   document.querySelectorAll('.step').forEach(step => step.classList.remove('active'));
   const firstStep = document.getElementById('step-0');
@@ -1903,32 +1799,8 @@ document.addEventListener('DOMContentLoaded', function() {
   
 }); // ⬅️ FINE DOMContentLoaded - CHIUSURA CORRETTA
 
-// Stili aggiuntivi per input errore (FUORI dall'event listener è OK)
-const dateErrorStyle = document.createElement('style');
-dateErrorStyle.textContent = `
-  .date-text-input.error {
-    border-color: #e74c3c !important;
-    background-color: #fadbd8 !important;
-    color: #c0392b;
-  }
-
-  .date-picker-btn {
-    box-shadow: 0 2px 8px rgba(184, 153, 104, 0.3) !important;
-  }
-
-  .date-picker-btn:active {
-    transform: scale(0.95) !important;
-  }
-
-  @media (hover: none) and (pointer: coarse) {
-    .date-picker-btn:hover {
-      transform: none !important;
-    }
-
-    .date-picker-btn:active {
-      transform: scale(0.95) !important;
-    }
-  }
-`;
-document.head.appendChild(dateErrorStyle);
-console.log('✅ Modifiche applicate: documenti solo per ospite 1 (responsabile)');
+// Nota: gli stili per .date-text-input.error e .date-picker-btn erano prima
+// iniettati qui a runtime, duplicando (con un valore diverso per lo scale
+// dello stato :active, 0.95 invece di 0.98) regole già presenti in
+// checkin.css. Rimossi da qui; checkin.css è ora l'unica fonte per questi
+// stili, con 0.95 come valore corretto.
