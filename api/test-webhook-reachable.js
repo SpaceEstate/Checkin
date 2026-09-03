@@ -40,6 +40,22 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  // Endpoint di debug: richiede un secret. Se questo endpoint è registrato come
+  // webhook URL su Stripe Dashboard, il secret va aggiunto come query string
+  // nell'URL stesso (es. .../api/test-webhook-reachable?key=IL_TUO_SECRET),
+  // perché Stripe non permette di aggiungere header personalizzati alle chiamate.
+  if (!process.env.ADMIN_SECRET) {
+    console.error('❌ ADMIN_SECRET non configurato sul server');
+    return res.status(500).json({ error: 'Configurazione server incompleta' });
+  }
+
+  const providedSecret = req.headers['x-admin-secret'] || req.query.key;
+
+  if (providedSecret !== process.env.ADMIN_SECRET) {
+    console.warn('🚫 Tentativo di accesso non autorizzato a test-webhook-reachable');
+    return res.status(401).json({ error: 'Non autorizzato' });
+  }
+
   try {
     const buf = await buffer(req);
     const bodyString = buf.toString('utf8');
