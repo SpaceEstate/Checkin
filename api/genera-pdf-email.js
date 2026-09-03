@@ -2,6 +2,24 @@
 // VERSIONE CORRETTA - Tutti gli ospiti nel PDF + documenti allegati correttamente
 import nodemailer from 'nodemailer';
 
+// L'HTML generato da generaHTMLRiepilogo() viene inviato a Browserless, che lo
+// apre in un vero browser per produrre il PDF. Ogni campo qui sotto arriva da
+// dati inviati dall'ospite (o da chiunque chiami direttamente questa API, dato
+// che è un endpoint pubblico — i vincoli del form HTML, es. un <select> con
+// valori fissi, non impediscono a una richiesta POST diretta di mandare
+// qualsiasi stringa). Senza escaping, un valore tipo "<script>...</script>" nel
+// cognome o nel numero documento verrebbe eseguito dentro il browser che genera
+// il PDF invece di essere mostrato come testo.
+function escapeHtml(value) {
+  if (value === null || value === undefined) return '';
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Metodo non consentito' });
@@ -36,7 +54,7 @@ export default async function handler(req, res) {
     console.log('  totale:', datiPrenotazione.totale);
 
     datiPrenotazione.ospiti?.forEach((o, i) => {
-      console.log(`  ospite[${i}]: ${o.cognome} ${o.nome}, isResp=${o.isResponsabile}`);
+      console.log(`  ospite[${i}]: presente=${!!(o.cognome && o.nome)}, isResp=${o.isResponsabile}`);
     });
 
     datiPrenotazione.documenti?.forEach((d, i) => {
@@ -242,10 +260,10 @@ function generaHTMLRiepilogo(dati) {
     return `
       <div class="ospite ${ospite.isResponsabile ? 'responsabile' : ''}" ${needsPageBreak ? 'style="page-break-before: always;"' : ''}>
         <div class="ospite-header">
-          <div class="ospite-nome">${ospite.cognome || 'N/A'} ${ospite.nome || 'N/A'}</div>
+          <div class="ospite-nome">${escapeHtml(ospite.cognome) || 'N/A'} ${escapeHtml(ospite.nome) || 'N/A'}</div>
           ${ospite.isResponsabile
             ? '<div class="ospite-badge">RESPONSABILE</div>'
-            : `<div class="ospite-number">Ospite ${ospite.numero}</div>`
+            : `<div class="ospite-number">Ospite ${escapeHtml(ospite.numero)}</div>`
           }
         </div>
 
@@ -264,16 +282,16 @@ function generaHTMLRiepilogo(dati) {
           </div>
           <div class="info-item">
             <div class="info-label">Cittadinanza</div>
-            <div class="info-value">${ospite.cittadinanza || 'N/A'}</div>
+            <div class="info-value">${escapeHtml(ospite.cittadinanza) || 'N/A'}</div>
           </div>
           <div class="info-item">
             <div class="info-label">Luogo Nascita</div>
-            <div class="info-value">${ospite.luogoNascita || 'N/A'}</div>
+            <div class="info-value">${escapeHtml(ospite.luogoNascita) || 'N/A'}</div>
           </div>
           ${ospite.comune && ospite.provincia ? `
           <div class="info-item">
             <div class="info-label">Comune/Provincia</div>
-            <div class="info-value">${ospite.comune} (${ospite.provincia})</div>
+            <div class="info-value">${escapeHtml(ospite.comune)} (${escapeHtml(ospite.provincia)})</div>
           </div>
           ` : ''}
         </div>
@@ -282,22 +300,22 @@ function generaHTMLRiepilogo(dati) {
         <div class="info-grid" style="margin-top: 10px;">
           <div class="info-item">
             <div class="info-label">Tipo Documento</div>
-            <div class="info-value">${ospite.tipoDocumento}</div>
+            <div class="info-value">${escapeHtml(ospite.tipoDocumento)}</div>
           </div>
           <div class="info-item">
             <div class="info-label">Numero Documento</div>
-            <div class="info-value">${ospite.numeroDocumento || 'N/A'}</div>
+            <div class="info-value">${escapeHtml(ospite.numeroDocumento) || 'N/A'}</div>
           </div>
           <div class="info-item">
             <div class="info-label">Luogo Rilascio</div>
-            <div class="info-value">${ospite.luogoRilascio || 'N/A'}</div>
+            <div class="info-value">${escapeHtml(ospite.luogoRilascio) || 'N/A'}</div>
           </div>
         </div>
         ` : ''}
 
         ${documento ? `
         <div class="documento-note">
-          <strong>📎 Documento allegato:</strong> ${documento.nomeFile || 'Documento'}
+          <strong>📎 Documento allegato:</strong> ${escapeHtml(documento.nomeFile) || 'Documento'}
           (${Math.round((documento.dimensione || 0) / 1024)} KB) -
           <em>Vedi allegati email separati</em>
         </div>
@@ -356,15 +374,15 @@ function generaHTMLRiepilogo(dati) {
           </div>
           <div class="info-item">
             <div class="info-label">Appartamento</div>
-            <div class="info-value">${dati.appartamento || 'Non specificato'}</div>
+            <div class="info-value">${escapeHtml(dati.appartamento) || 'Non specificato'}</div>
           </div>
           <div class="info-item">
             <div class="info-label">Numero Ospiti</div>
-            <div class="info-value">${dati.numeroOspiti || ospiti.length}</div>
+            <div class="info-value">${escapeHtml(dati.numeroOspiti) || ospiti.length}</div>
           </div>
           <div class="info-item">
             <div class="info-label">Numero Notti</div>
-            <div class="info-value">${dati.numeroNotti || 0}</div>
+            <div class="info-value">${escapeHtml(dati.numeroNotti) || 0}</div>
           </div>
         </div>
       </div>
@@ -386,7 +404,7 @@ function generaHTMLRiepilogo(dati) {
         <p style="font-size: 10px; margin: 4px 0;">I documenti di identità sono allegati separatamente a questa email:</p>
         <ul>
           ${documentiValidi.map(doc => `
-            <li><strong>Ospite ${doc.ospiteNumero || '?'}:</strong> ${doc.nomeFile} (~${Math.round((doc.dimensione || 0) / 1024)} KB)</li>
+            <li><strong>Ospite ${escapeHtml(doc.ospiteNumero) || '?'}:</strong> ${escapeHtml(doc.nomeFile)} (~${Math.round((doc.dimensione || 0) / 1024)} KB)</li>
           `).join('')}
         </ul>
       </div>
