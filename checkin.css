@@ -1,10 +1,48 @@
-.step {
-    display: none;
+/* ============================================================
+   VARIABILI — palette "La Columbera"
+   ------------------------------------------------------------
+   I toni "base" restano quelli originali e vanno usati per bordi,
+   sfondi chiari e ombre (nessun testo sopra, quindi il contrasto
+   non è un problema).
+   I toni "-dark" sono la stessa tonalità scurita quanto basta per
+   garantire almeno 4.5:1 di contrasto con testo bianco sopra
+   (calcolato secondo la formula WCAG): usarli SOLO su bottoni,
+   header e altri elementi dove il testo è bianco su sfondo colorato.
+   ============================================================ */
+:root {
+  --color-accent-100: #c4a484;
+  --color-accent-100-rgb: 196, 164, 132;
+  --color-accent-200: #b89968;
+  --color-accent-200-rgb: 184, 153, 104;
+  --color-accent-300: #a67c52;
+  --color-accent-300-rgb: 166, 124, 82;
+  --color-accent-400: #8b7d6b;
+  --color-accent-400-rgb: 139, 125, 107;
+
+  --color-accent-100-dark: #89725c;
+  --color-accent-200-dark: #806b48;
+  --color-accent-300-dark: #745639;
+  --color-accent-400-dark: #61574a;
+
+  /* Testo: scuriti rispetto all'originale (#8b7d6b e #a0927f) per
+     rientrare nel minimo leggibile AA (4.5:1) su sfondo bianco/crema */
+  --color-text: #766a5a;
+  --color-text-muted: #786d5f;
+
+  --color-bg-cream: #f5f2e9;
+  --color-bg-cream-light: #faf9f6;
+  --color-border: #e8dcc0;
+  --color-border-light: #d4c7b5;
+
+  --color-white: #ffffff;
+  --color-error: #e74c3c;
+  --color-error-bg: #fadbd8;
+  --color-error-text: #c0392b;
 }
 
-.step.active {
-    display: block;
-}
+/* ============================================================
+   RESET & BASE
+   ============================================================ */
 * {
   margin: 0;
   padding: 0;
@@ -13,14 +51,15 @@
 
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: linear-gradient(135deg, #f5f2e9 0%, #e8dcc0 100%);
+  background: linear-gradient(135deg, var(--color-bg-cream) 0%, var(--color-border) 100%);
   min-height: 100vh;
   padding: 20px;
   line-height: 1.6;
-}
-.step:not(.active) {
-  content-visibility: hidden;
-  contain: layout style paint;
+  /* Notch / area sicura su dispositivi moderni (spostato da index.html) */
+  padding-left: max(20px, env(safe-area-inset-left));
+  padding-right: max(20px, env(safe-area-inset-right));
+  padding-top: max(20px, env(safe-area-inset-top));
+  padding-bottom: max(20px, env(safe-area-inset-bottom));
 }
 
 .container {
@@ -29,14 +68,17 @@ body {
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(10px);
   border-radius: 24px;
-  box-shadow: 0 20px 40px rgba(139, 125, 107, 0.15);
+  box-shadow: 0 20px 40px rgba(var(--color-accent-400-rgb), 0.15);
   overflow: hidden;
-  border: 1px solid rgba(232, 220, 192, 0.3);
+  border: 1px solid rgba(var(--color-accent-100-rgb), 0.3);
 }
 
+/* ============================================================
+   HEADER
+   ============================================================ */
 .header {
-  background: linear-gradient(135deg, #c4a484 0%, #b89968 100%);
-  color: white;
+  background: linear-gradient(135deg, var(--color-accent-100-dark) 0%, var(--color-accent-200-dark) 100%);
+  color: var(--color-white);
   text-align: center;
   padding: 40px 20px;
   position: relative;
@@ -69,11 +111,52 @@ body {
 
 .header p {
   font-size: 1.1rem;
-  opacity: 0.9;
+  opacity: 0.95;
   position: relative;
   z-index: 1;
 }
 
+/* ============================================================
+   PROGRESS BAR — nuovo, valori aggiornati via JS
+   ============================================================ */
+.progress-wrapper {
+  max-width: 900px;
+  margin: 16px auto 0;
+  padding: 0 40px;
+}
+
+.progress-track {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--color-accent-200-dark), var(--color-accent-300-dark));
+  border-radius: 6px;
+  transition: width 0.3s ease;
+}
+
+.progress-label {
+  margin-top: 8px;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+@media (max-width: 768px) {
+  .progress-wrapper {
+    padding: 0 20px;
+  }
+}
+
+/* ============================================================
+   FORM CONTAINER & STEP
+   ============================================================ */
 .form-container {
   padding: 40px;
   width: 100%;
@@ -87,6 +170,11 @@ body {
 
 .step.active {
   display: block;
+}
+
+.step:not(.active) {
+  content-visibility: hidden;
+  contain: layout style paint;
 }
 
 @keyframes fadeInUp {
@@ -108,15 +196,50 @@ body {
 .step-title {
   font-size: 2rem;
   font-weight: 600;
-  color: #8b7d6b;
+  color: var(--color-text);
   margin-bottom: 10px;
 }
 
 .step-subtitle {
-  color: #a0927f;
+  color: var(--color-text-muted);
   font-size: 1.1rem;
 }
 
+/* Step 0: verifica prenotazione */
+.booking-input-wrapper {
+  margin-bottom: 30px;
+}
+
+.form-input-code {
+  text-align: center;
+  font-size: 1.2rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.no-booking-link {
+  display: block;
+  text-align: center;
+  margin-top: 15px;
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+  text-decoration: none;
+  transition: all 0.3s ease;
+}
+
+.no-booking-link:hover {
+  color: var(--color-accent-300-dark);
+  text-decoration: underline;
+}
+
+.verification-icon {
+  font-size: 3rem;
+  margin-bottom: 20px;
+}
+
+/* ============================================================
+   FORM: LABEL, INPUT, SELECT
+   ============================================================ */
 .form-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -135,44 +258,70 @@ body {
 .form-label {
   display: block;
   font-weight: 500;
-  color: #8b7d6b;
+  color: var(--color-text);
   margin-bottom: 8px;
   font-size: 0.95rem;
   letter-spacing: 0.3px;
+}
+
+.required-mark {
+  color: var(--color-error);
+  font-weight: bold;
+}
+
+.field-error {
+  display: block;
+  min-height: 1.2em;
+  margin-top: 6px;
+  color: var(--color-error-text);
+  font-size: 0.85rem;
 }
 
 .form-input,
 .form-select {
   width: 100%;
   padding: 14px 16px;
-  border: 2px solid #e8dcc0;
+  border: 2px solid var(--color-border);
   border-radius: 12px;
   font-size: 1rem;
   transition: all 0.3s ease;
-  background: white;
-  color: #8b7d6b;
+  background: var(--color-white);
+  color: var(--color-text);
 }
 
 .form-input:focus,
 .form-select:focus {
   outline: none;
-  border-color: #b89968;
-  box-shadow: 0 0 0 3px rgba(184, 153, 104, 0.15);
+  border-color: var(--color-accent-200);
+  box-shadow: 0 0 0 3px rgba(var(--color-accent-200-rgb), 0.15);
   transform: translateY(-2px);
 }
 
 .form-input:hover,
 .form-select:hover {
-  border-color: #c4a484;
+  border-color: var(--color-accent-100);
+}
+
+.form-select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23766a5a' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 20px;
+  padding-right: 40px;
+  font-size: 16px;
+  min-height: 48px;
 }
 
 .conditional-group {
   display: none;
   margin-top: 20px;
   padding: 20px;
-  background: #faf9f6;
+  background: var(--color-bg-cream-light);
   border-radius: 12px;
-  border-left: 4px solid #b89968;
+  border-left: 4px solid var(--color-accent-200);
 }
 
 .conditional-group.show {
@@ -199,21 +348,201 @@ body {
   gap: 15px;
 }
 
-/* Stili per la sezione documenti */
+/* Input data: reset cross-browser + icona calendario custom */
+.form-input[type="date"],
+.form-input[type="datetime-local"],
+.form-input[type="month"],
+.form-input[type="time"],
+.form-input[type="week"] {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-color: var(--color-white);
+  padding: 12px 45px 12px 14px;
+  font-size: 16px; /* Previene lo zoom su iOS */
+  font-family: inherit;
+  border: 2px solid var(--color-border);
+  border-radius: 12px;
+  width: 100%;
+  color: var(--color-text);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.form-input[type="date"]::-webkit-calendar-picker-indicator {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  width: 100%; height: 100%;
+  color: transparent;
+  background: transparent;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.form-input[type="date"]::-webkit-datetime-edit,
+.form-input[type="date"]::-webkit-datetime-edit-fields-wrapper {
+  padding: 0;
+}
+
+.form-input[type="date"]::-webkit-datetime-edit-text,
+.form-input[type="date"]::-webkit-datetime-edit-month-field,
+.form-input[type="date"]::-webkit-datetime-edit-day-field,
+.form-input[type="date"]::-webkit-datetime-edit-year-field,
+.form-input[type="date"]::-webkit-datetime-edit-hour-field,
+.form-input[type="date"]::-webkit-datetime-edit-minute-field {
+  color: var(--color-text);
+  font-size: inherit;
+  padding: 0 2px;
+}
+
+.form-input[type="date"]::-webkit-outer-spin-button,
+.form-input[type="date"]::-webkit-inner-spin-button {
+  display: none;
+}
+
+.form-input[type="date"]::after {
+  content: '📅';
+  position: absolute;
+  right: 12px;
+  pointer-events: none;
+}
+
+.form-input[type="date"]:focus,
+.form-input[type="datetime-local"]:focus {
+  outline: none;
+  border-color: var(--color-accent-200);
+  box-shadow: 0 0 0 3px rgba(var(--color-accent-200-rgb), 0.15);
+  transform: translateY(-2px);
+}
+
+/* ============================================================
+   SELEZIONE APPARTAMENTO — checkbox "chip"
+   (esisteva già una versione di questi stili con nomi diversi —
+   .appartamento-checkbox-item, .checkbox-custom-app — ma non era
+   referenziata da nessun file del progetto ED era comunque
+   intrappolata dentro @media (hover:none) and (pointer:coarse):
+   CSS morto due volte. Rimossa, ricostruita qui a livello globale
+   con i nomi usati in index.html.)
+   ============================================================ */
+.apartment-options {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.apartment-chip {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 15px;
+  background: var(--color-white);
+  border: 2px solid var(--color-border);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.apartment-chip:hover {
+  border-color: var(--color-accent-200);
+  box-shadow: 0 2px 8px rgba(var(--color-accent-200-rgb), 0.15);
+}
+
+/* Prenotazione già verificata: checkbox disabilitata, chip visivamente "bloccata" */
+.apartment-chip:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.7;
+  background: var(--color-bg-cream-light);
+}
+
+.apartment-chip:has(input:disabled):hover {
+  box-shadow: none;
+}
+
+.apartment-chip input[type="checkbox"] {
+  display: none;
+}
+
+.apartment-chip-icon {
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--color-border-light);
+  border-radius: 6px;
+  background: var(--color-white);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  flex-shrink: 0;
+  position: relative;
+}
+
+/* L'icona dell'appartamento (🏰/🏡) raddoppia da segnaposto della checkbox
+   custom: quando selezionata prende un bordo/sfondo evidenziato */
+.apartment-chip input[type="checkbox"]:checked + .apartment-chip-icon {
+  background: linear-gradient(135deg, var(--color-accent-200) 0%, var(--color-accent-300) 100%);
+  border-color: var(--color-accent-300);
+  box-shadow: 0 2px 8px rgba(var(--color-accent-200-rgb), 0.3);
+}
+
+.apartment-chip input[type="checkbox"]:checked ~ .apartment-chip-text {
+  color: var(--color-accent-300-dark);
+}
+
+.apartment-chip-text {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex: 1;
+}
+
+.apartment-chip-text strong {
+  font-size: 1.1rem;
+  color: var(--color-text);
+}
+
+.apartment-chip-text small {
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+}
+
+@media (max-width: 768px) {
+  .apartment-chip {
+    padding: 12px;
+  }
+
+  .apartment-chip-text strong {
+    font-size: 1rem;
+  }
+
+  .apartment-chip-text small {
+    font-size: 0.85rem;
+  }
+}
+
+/* ============================================================
+   SEZIONE DOCUMENTI & UPLOAD
+   ============================================================ */
 .document-section {
-  background: linear-gradient(135deg, #faf9f6 0%, #f5f2e9 100%);
+  background: linear-gradient(135deg, var(--color-bg-cream-light) 0%, var(--color-bg-cream) 100%);
   padding: 30px;
   border-radius: 16px;
   margin: 30px 0;
-  border: 1px solid #e8dcc0;
+  border: 1px solid var(--color-border);
 }
 
 .document-title {
   font-size: 1.3rem;
   font-weight: 600;
-  color: #8b7d6b;
+  color: var(--color-text);
   margin-bottom: 20px;
   text-align: center;
+}
+
+.document-subtitle {
+  text-align: center;
+  color: var(--color-text-muted);
+  margin-bottom: 20px;
 }
 
 .document-upload {
@@ -232,12 +561,12 @@ body {
   align-items: center;
   justify-content: center;
   padding: 20px;
-  border: 2px dashed #d4c7b5;
+  border: 2px dashed var(--color-border-light);
   border-radius: 12px;
   cursor: pointer;
   transition: all 0.3s ease;
-  background: white;
-  color: #a0927f;
+  background: var(--color-white);
+  color: var(--color-text-muted);
   font-weight: 500;
   min-height: 80px;
   text-align: center;
@@ -252,7 +581,7 @@ body {
   left: -100%;
   width: 100%;
   height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(184, 153, 104, 0.1), transparent);
+  background: linear-gradient(90deg, transparent, rgba(var(--color-accent-200-rgb), 0.1), transparent);
   transition: left 0.5s;
 }
 
@@ -261,17 +590,17 @@ body {
 }
 
 .upload-label:hover {
-  border-color: #b89968;
-  background: #faf9f6;
-  color: #8b7d6b;
+  border-color: var(--color-accent-200);
+  background: var(--color-bg-cream-light);
+  color: var(--color-text);
   transform: translateY(-2px);
-  box-shadow: 0 4px 15px rgba(184, 153, 104, 0.15);
+  box-shadow: 0 4px 15px rgba(var(--color-accent-200-rgb), 0.15);
 }
 
 .upload-label.has-file {
-  border-color: #a67c52;
-  background: #f5f2e9;
-  color: #a67c52;
+  border-color: var(--color-accent-300);
+  background: var(--color-bg-cream);
+  color: var(--color-accent-300-dark);
   border-style: solid;
 }
 
@@ -283,6 +612,48 @@ body {
   cursor: pointer;
 }
 
+.file-input-wrapper {
+  position: relative;
+  overflow: hidden;
+  display: inline-block;
+  width: 100%;
+}
+
+.file-input-wrapper input[type=file] {
+  position: absolute;
+  left: -9999px;
+}
+
+.file-input-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  border: 2px dashed var(--color-border-light);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background: var(--color-bg-cream-light);
+  color: var(--color-text-muted);
+  font-weight: 500;
+  min-height: 80px;
+}
+
+.file-input-label:hover {
+  border-color: var(--color-accent-200);
+  background: var(--color-bg-cream);
+  color: var(--color-text);
+}
+
+.file-input-label.has-file {
+  border-color: var(--color-accent-300);
+  background: var(--color-bg-cream);
+  color: var(--color-accent-300-dark);
+}
+
+/* ============================================================
+   FOTOCAMERA
+   ============================================================ */
 .camera-group {
   position: relative;
 }
@@ -293,10 +664,10 @@ body {
   justify-content: center;
   width: 100%;
   padding: 20px;
-  border: 2px solid #b89968;
+  border: 2px solid var(--color-accent-200);
   border-radius: 12px;
-  background: linear-gradient(135deg, #b89968 0%, #a67c52 100%);
-  color: white;
+  background: linear-gradient(135deg, var(--color-accent-200-dark) 0%, var(--color-accent-300-dark) 100%);
+  color: var(--color-white);
   font-weight: 500;
   cursor: pointer;
   transition: all 0.3s ease;
@@ -323,28 +694,27 @@ body {
 
 .camera-btn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(184, 153, 104, 0.4);
+  box-shadow: 0 6px 20px rgba(var(--color-accent-200-rgb), 0.4);
 }
 
 .camera-btn:active {
   transform: translateY(0);
 }
 
-/* Stili per l'anteprima della fotocamera */
 .camera-preview {
-  background: white;
+  background: var(--color-white);
   border-radius: 16px;
   padding: 20px;
   margin-top: 20px;
-  border: 2px solid #e8dcc0;
-  box-shadow: 0 4px 15px rgba(139, 125, 107, 0.1);
+  border: 2px solid var(--color-border);
+  box-shadow: 0 4px 15px rgba(var(--color-accent-400-rgb), 0.1);
 }
 
 .camera-preview video {
   width: 100%;
   max-width: 400px;
   border-radius: 12px;
-  box-shadow: 0 4px 15px rgba(139, 125, 107, 0.2);
+  box-shadow: 0 4px 15px rgba(var(--color-accent-400-rgb), 0.2);
   margin-bottom: 15px;
 }
 
@@ -356,8 +726,8 @@ body {
 }
 
 .capture-btn {
-  background: linear-gradient(135deg, #a67c52 0%, #8b7d6b 100%);
-  color: white;
+  background: linear-gradient(135deg, var(--color-accent-300-dark) 0%, var(--color-accent-400-dark) 100%);
+  color: var(--color-white);
   border: none;
   padding: 12px 24px;
   border-radius: 25px;
@@ -369,40 +739,7 @@ body {
   overflow: hidden;
 }
 
-.capture-btn::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
-  transition: left 0.5s;
-}
-
-.capture-btn:hover::before {
-  left: 100%;
-}
-
-.capture-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 15px rgba(166, 124, 82, 0.4);
-}
-
-.close-camera-btn {
-  background: linear-gradient(135deg, #c4a484 0%, #b89968 100%);
-  color: white;
-  border: none;
-  padding: 12px 24px;
-  border-radius: 25px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  font-size: 0.95rem;
-  position: relative;
-  overflow: hidden;
-}
-
+.capture-btn::before,
 .close-camera-btn::before {
   content: '';
   position: absolute;
@@ -414,54 +751,38 @@ body {
   transition: left 0.5s;
 }
 
+.capture-btn:hover::before,
 .close-camera-btn:hover::before {
   left: 100%;
 }
 
-.close-camera-btn:hover {
+.capture-btn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 15px rgba(196, 164, 132, 0.4);
+  box-shadow: 0 4px 15px rgba(var(--color-accent-300-rgb), 0.4);
 }
 
-.file-input-wrapper {
-  position: relative;
-  overflow: hidden;
-  display: inline-block;
-  width: 100%;
-}
-
-.file-input-wrapper input[type=file] {
-  position: absolute;
-  left: -9999px;
-}
-
-.file-input-label {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  border: 2px dashed #d4c7b5;
-  border-radius: 12px;
+.close-camera-btn {
+  background: linear-gradient(135deg, var(--color-accent-100-dark) 0%, var(--color-accent-200-dark) 100%);
+  color: var(--color-white);
+  border: none;
+  padding: 12px 24px;
+  border-radius: 25px;
+  font-weight: 500;
   cursor: pointer;
   transition: all 0.3s ease;
-  background: #faf9f6;
-  color: #a0927f;
-  font-weight: 500;
-  min-height: 80px;
+  font-size: 0.95rem;
+  position: relative;
+  overflow: hidden;
 }
 
-.file-input-label:hover {
-  border-color: #b89968;
-  background: #f5f2e9;
-  color: #8b7d6b;
+.close-camera-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(var(--color-accent-100-rgb), 0.4);
 }
 
-.file-input-label.has-file {
-  border-color: #a67c52;
-  background: #f5f2e9;
-  color: #a67c52;
-}
-
+/* ============================================================
+   BOTTONI
+   ============================================================ */
 .button-group {
   display: flex;
   gap: 15px;
@@ -500,186 +821,36 @@ body {
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, #b89968, #a67c52);
-  color: white;
-  box-shadow: 0 4px 15px rgba(184, 153, 104, 0.3);
+  background: linear-gradient(135deg, var(--color-accent-200-dark), var(--color-accent-300-dark));
+  color: var(--color-white);
+  box-shadow: 0 4px 15px rgba(var(--color-accent-200-rgb), 0.3);
 }
 
 .btn-primary:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(184, 153, 104, 0.4);
+  box-shadow: 0 6px 20px rgba(var(--color-accent-200-rgb), 0.4);
 }
 
 .btn-secondary {
-  background: linear-gradient(135deg, #c4a484, #b89968);
-  color: white;
-  box-shadow: 0 4px 15px rgba(196, 164, 132, 0.3);
+  background: linear-gradient(135deg, var(--color-accent-100-dark), var(--color-accent-200-dark));
+  color: var(--color-white);
+  box-shadow: 0 4px 15px rgba(var(--color-accent-100-rgb), 0.3);
 }
 
 .btn-secondary:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(196, 164, 132, 0.4);
+  box-shadow: 0 6px 20px rgba(var(--color-accent-100-rgb), 0.4);
 }
 
 .btn-success {
-  background: linear-gradient(135deg, #a67c52, #8b7d6b);
-  color: white;
-  box-shadow: 0 4px 15px rgba(166, 124, 82, 0.3);
+  background: linear-gradient(135deg, var(--color-accent-300-dark), var(--color-accent-400-dark));
+  color: var(--color-white);
+  box-shadow: 0 4px 15px rgba(var(--color-accent-300-rgb), 0.3);
 }
 
 .btn-success:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(166, 124, 82, 0.4);
-}
-
-.summary-section {
-  background: #faf9f6;
-  padding: 30px;
-  border-radius: 16px;
-  margin-bottom: 30px;
-  border-left: 4px solid #b89968;
-  width: 100%;
-  box-sizing: border-box;
-  overflow: hidden;
-}
-
-/* Ottimizzazione sezione ospiti riepilogo */
-.guest-summary {
-  background: white;
-  padding: 15px;
-  border-radius: 10px;
-  margin-bottom: 12px;
-  border: 1px solid #e8dcc0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  width: 100%;
-  box-sizing: border-box;
-}
-
-.guest-summary strong {
-  color: #8b7d6b;
-  font-size: 1.05rem;
-  display: block;
-  word-break: break-word;
-}
-
-.guest-summary .age {
-  color: #a0927f;
-  font-size: 0.9rem;
-  display: block;
-  word-break: break-word;
-}
-
-.total-amount {
-  font-size: 2rem;
-  font-weight: 700;
-  color: #a67c52;
-  text-align: center;
-  margin: 20px 0;
-  padding: 20px;
-  background: linear-gradient(135deg, rgba(184, 153, 104, 0.1) 0%, rgba(166, 124, 82, 0.1) 100%);
-  border-radius: 12px;
-}
-
-.tax-note {
-  display: block;
-  text-align: center;
-  color: #a0927f;
-  font-size: 0.85rem;
-  font-style: italic;
-  margin-top: 10px;
-}
-
-.privacy-section {
-  background: linear-gradient(135deg, #faf9f6 0%, #f5f2e9 100%);
-  padding: 25px;
-  border-radius: 16px;
-  margin-bottom: 30px;
-  border: 2px solid #e8dcc0;
-  width: 100%;
-  box-sizing: border-box;
-  overflow: hidden;
-}
-
-.privacy-checkbox {
-  display: flex;
-  align-items: flex-start;
-  gap: 15px;
-}
-
-.privacy-input {
-  display: none;
-}
-
-.checkbox-custom {
-  width: 22px;
-  height: 22px;
-  border: 2px solid #d4c7b5;
-  border-radius: 4px;
-  background: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.3s ease;
-  cursor: pointer;
-  flex-shrink: 0;
-  margin-top: 2px;
-  position: relative;
-}
-
-.checkbox-custom::after {
-  content: '✓';
-  color: white;
-  font-size: 14px;
-  font-weight: bold;
-  opacity: 0;
-  transform: scale(0.7);
-  transition: all 0.2s ease;
-}
-
-.privacy-input:checked + .privacy-label .checkbox-custom {
-  background: linear-gradient(135deg, #b89968 0%, #a67c52 100%);
-  border-color: #a67c52;
-  box-shadow: 0 2px 8px rgba(184, 153, 104, 0.3);
-}
-
-.privacy-input:checked + .privacy-label .checkbox-custom::after {
-  opacity: 1;
-  transform: scale(1);
-}
-
-.privacy-label {
-  display: flex;
-  align-items: flex-start;
-  gap: 15px;
-  cursor: pointer;
-  line-height: 1.6;
-}
-
-.privacy-text {
-  color: #8b7d6b;
-  font-size: 0.95rem;
-  text-align: justify;
-  flex: 1;
-}
-
-.privacy-label:hover .checkbox-custom {
-  border-color: #b89968;
-  box-shadow: 0 0 0 3px rgba(184, 153, 104, 0.15);
-}
-
-/* Validazione CSS pura per la checkbox privacy */
-.privacy-input:required:invalid ~ .button-group .btn-success {
-  opacity: 0.5;
-  cursor: not-allowed;
-  pointer-events: none;
-}
-
-.privacy-input:required:valid ~ .button-group .btn-success {
-  opacity: 1;
-  cursor: pointer;
-  pointer-events: auto;
+  box-shadow: 0 6px 20px rgba(var(--color-accent-300-rgb), 0.4);
 }
 
 .btn.disabled,
@@ -689,10 +860,24 @@ body {
   pointer-events: none;
 }
 
+/* ============================================================
+   RIEPILOGO
+   ============================================================ */
+.summary-section {
+  background: var(--color-bg-cream-light);
+  padding: 30px;
+  border-radius: 16px;
+  margin-bottom: 30px;
+  border-left: 4px solid var(--color-accent-200);
+  width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
 .summary-title {
   font-size: 1.5rem;
   font-weight: 600;
-  color: #8b7d6b;
+  color: var(--color-text);
   margin-bottom: 20px;
 }
 
@@ -701,7 +886,7 @@ body {
   justify-content: space-between;
   align-items: flex-start;
   padding: 10px 0;
-  border-bottom: 1px solid #e8dcc0;
+  border-bottom: 1px solid var(--color-border);
   width: 100%;
   box-sizing: border-box;
   gap: 10px;
@@ -727,72 +912,164 @@ body {
   border-bottom: none;
   font-weight: 600;
   font-size: 1.1rem;
-  color: #8b7d6b;
+  color: var(--color-text);
 }
 
-.guest-card {
-  background: white;
+.guest-summary {
+  background: var(--color-white);
+  padding: 15px;
+  border-radius: 10px;
+  margin-bottom: 12px;
+  border: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.guest-summary strong {
+  color: var(--color-text);
+  font-size: 1.05rem;
+  display: block;
+  word-break: break-word;
+}
+
+.guest-summary .age {
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+  display: block;
+  word-break: break-word;
+}
+
+.total-amount {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--color-accent-300-dark);
+  text-align: center;
+  margin: 20px 0;
   padding: 20px;
+  background: linear-gradient(135deg, rgba(var(--color-accent-200-rgb), 0.1) 0%, rgba(var(--color-accent-300-rgb), 0.1) 100%);
   border-radius: 12px;
-  margin-bottom: 15px;
-  box-shadow: 0 2px 10px rgba(139, 125, 107, 0.1);
-  border: 1px solid #e8dcc0;
 }
 
-.guest-card h4 {
-  color: #8b7d6b;
-  margin-bottom: 10px;
-  font-size: 1.1rem;
+.tax-note {
+  display: block;
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  font-style: italic;
+  margin-top: 10px;
 }
 
-.payment-section {
-  background: linear-gradient(135deg, #faf9f6 0%, #f5f2e9 100%);
-  padding: 30px;
+/* ============================================================
+   PRIVACY
+   ============================================================ */
+.privacy-section {
+  background: linear-gradient(135deg, var(--color-bg-cream-light) 0%, var(--color-bg-cream) 100%);
+  padding: 25px;
   border-radius: 16px;
   margin-bottom: 30px;
+  border: 2px solid var(--color-border);
+  width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
-.payment-title {
-  font-size: 1.5rem;
-  font-weight: 600;
-  color: #8b7d6b;
-  margin-bottom: 20px;
-  text-align: center;
+.privacy-checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 15px;
 }
 
-#card-element {
-  padding: 16px;
-  border: 2px solid #e8dcc0;
-  border-radius: 12px;
-  background: white;
-  margin-bottom: 15px;
+.privacy-input {
+  display: none;
+}
+
+.checkbox-custom {
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--color-border-light);
+  border-radius: 4px;
+  background: var(--color-white);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   transition: all 0.3s ease;
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-top: 2px;
+  position: relative;
 }
 
-#card-element:focus-within {
-  border-color: #b89968;
-  box-shadow: 0 0 0 3px rgba(184, 153, 104, 0.15);
+.checkbox-custom::after {
+  content: '✓';
+  color: var(--color-white);
+  font-size: 14px;
+  font-weight: bold;
+  opacity: 0;
+  transform: scale(0.7);
+  transition: all 0.2s ease;
 }
 
-#card-errors {
-  color: #a67c52;
-  font-size: 0.9rem;
-  margin-top: 10px;
-  text-align: center;
+.privacy-input:checked + .privacy-label .checkbox-custom {
+  background: linear-gradient(135deg, var(--color-accent-200) 0%, var(--color-accent-300) 100%);
+  border-color: var(--color-accent-300);
+  box-shadow: 0 2px 8px rgba(var(--color-accent-200-rgb), 0.3);
 }
 
+.privacy-input:checked + .privacy-label .checkbox-custom::after {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.privacy-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 15px;
+  cursor: pointer;
+  line-height: 1.6;
+}
+
+.privacy-text {
+  color: var(--color-text);
+  font-size: 0.95rem;
+  text-align: justify;
+  flex: 1;
+}
+
+.privacy-label:hover .checkbox-custom {
+  border-color: var(--color-accent-200);
+  box-shadow: 0 0 0 3px rgba(var(--color-accent-200-rgb), 0.15);
+}
+
+.privacy-input:required:invalid ~ .button-group .btn-success {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.privacy-input:required:valid ~ .button-group .btn-success {
+  opacity: 1;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+/* ============================================================
+   MESSAGGIO DI SUCCESSO
+   ============================================================ */
 .success-message {
   text-align: center;
   padding: 40px;
-  background: linear-gradient(135deg, #f5f2e9 0%, #e8dcc0 100%);
+  background: linear-gradient(135deg, var(--color-bg-cream) 0%, var(--color-border) 100%);
   border-radius: 16px;
-  color: #8b7d6b;
+  color: var(--color-text);
 }
 
 .success-message h3 {
   font-size: 2rem;
   margin-bottom: 15px;
-  color: #a67c52;
+  color: var(--color-accent-300-dark);
 }
 
 .success-message p {
@@ -800,308 +1077,9 @@ body {
   margin-bottom: 10px;
 }
 
-.loading {
-  opacity: 0.7;
-  pointer-events: none;
-}
-
-.spinner {
-  border: 3px solid #f3f3f3;
-  border-top: 3px solid #b89968;
-  border-radius: 50%;
-  width: 20px;
-  height: 20px;
-  animation: spin 1s linear infinite;
-  display: inline-block;
-  margin-right: 10px;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-/* Responsive design */
-@media (max-width: 768px) {
-  .form-grid {
-    grid-template-columns: 1fr;
-      
-  }
-  /* === OTTIMIZZAZIONE RIEPILOGO MOBILE === */
-  .summary-section {
-    padding: 20px 15px;
-    margin-bottom: 20px;
-    width: 100%;
-    box-sizing: border-box;
-  }
-  
-  .summary-section h3 {
-    font-size: 1.2rem;
-    margin-bottom: 15px;
-    text-align: center;
-    word-break: break-word;
-  }
-  
-  .summary-item {
-    flex-direction: column;
-    gap: 5px;
-    padding: 12px 0;
-    text-align: left;
-    width: 100%;
-    box-sizing: border-box;
-  }
-  
-  .summary-item span {
-    display: block;
-    width: 100%;
-    word-break: break-word;
-  }
-  
-  .summary-item span:first-child {
-    font-weight: 500;
-    color: #a0927f;
-    font-size: 0.9rem;
-    margin-bottom: 3px;
-  }
-  
-  .summary-item span:last-child {
-    font-size: 1rem;
-    color: #8b7d6b;
-    font-weight: 600;
-  }
-  
-  .guest-summary {
-    padding: 12px;
-    margin-bottom: 10px;
-    width: 100%;
-    box-sizing: border-box;
-  }
-  
-  .guest-summary strong {
-    font-size: 1rem;
-    line-height: 1.4;
-  }
-  
-  .guest-summary .age {
-    font-size: 0.85rem;
-    margin-top: 4px;
-  }
-  
-  .total-amount {
-    font-size: 1.8rem;
-    padding: 15px;
-    margin: 15px 0;
-    word-break: break-word;
-    text-align: center;
-  }
-  
-  .tax-note {
-    font-size: 0.8rem;
-    padding: 0 10px;
-    text-align: center;
-    display: block;
-    width: 100%;
-    box-sizing: border-box;
-  }
-  
-  .privacy-section {
-    padding: 20px 15px;
-    margin-bottom: 20px;
-    width: 100%;
-    box-sizing: border-box;
-  }
-  
-  .privacy-text {
-    font-size: 0.9rem;
-    line-height: 1.6;
-    text-align: left;
-  }
-  
-  .button-group {
-    flex-direction: column;
-    align-items: stretch;
-    width: 100%;
-    gap: 10px;
-  }
-  
-  .btn {
-    width: 100%;
-    margin-bottom: 0;
-    box-sizing: border-box;
-  }
-  
-  .header h1 {
-    font-size: 2rem;
-  }
-  
-  .form-container {
-    padding: 20px 15px;
-    width: 100%;
-    box-sizing: border-box;
-  }
-  
-  .document-upload {
-    grid-template-columns: 1fr;
-    gap: 15px;
-  }
-  
-  .camera-controls {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  
-  .capture-btn,
-  .close-camera-btn {
-    width: 100%;
-    margin-bottom: 10px;
-  }
-  
-  .form-row {
-    grid-template-columns: 1fr;
-    gap: 10px;
-  }
-  
-  .privacy-checkbox {
-    flex-direction: column;
-    gap: 10px;
-  }
-  
-  /* Hint per input */
-  .input-hint {
-    display: block;
-    color: #a0927f;
-    font-size: clamp(0.75rem, 2vw, 0.85rem);
-    margin-top: 5px;
-    font-style: italic;
-  }
-
-  /* Date input con supporto manuale */
-  .form-input[type="date"] {
-    position: relative;
-    min-height: 52px;
-    -webkit-appearance: none;
-    -moz-appearance: none;
-    appearance: none;
-    background-color: white;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%238b7d6b' stroke-width='2'%3E%3Crect x='3' y='4' width='18' height='18' rx='2' ry='2'%3E%3C/rect%3E%3Cline x1='16' y1='2' x2='16' y2='6'%3E%3C/line%3E%3Cline x1='8' y1='2' x2='8' y2='6'%3E%3C/line%3E%3Cline x1='3' y1='10' x2='21' y2='10'%3E%3C/line%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 16px center;
-    padding-right: 45px;
-  }
-
-  .form-input[type="date"]::-webkit-calendar-picker-indicator {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    width: 100%;
-    height: 100%;
-    color: transparent;
-    background: transparent;
-    cursor: pointer;
-    opacity: 0;
-  }
-
-  /* Fix per Samsung Internet e altri browser Android */
-  .form-input[type="date"]::-webkit-datetime-edit {
-    padding: 0;
-  }
-
-  .form-input[type="date"]::-webkit-datetime-edit-fields-wrapper {
-    padding: 0;
-  }
-
-  /* Migliora visibilità placeholder/value su Android */
-  .form-input[type="date"]::-webkit-datetime-edit-text {
-    color: #8b7d6b;
-    padding: 0 2px;
-  }
-
-  .form-input[type="date"]::-webkit-datetime-edit-month-field,
-  .form-input[type="date"]::-webkit-datetime-edit-day-field,
-  .form-input[type="date"]::-webkit-datetime-edit-year-field {
-    color: #8b7d6b;
-  }
-  
-  .checkbox-custom {
-    align-self: flex-start;
-  }
-  
-  /* === MIGLIORAMENTI PER MOBILE - SEZIONE DATE INPUT === */
-
-/* Fix completo per input date su iOS e Android */
-.form-input[type="date"],
-.form-input[type="datetime-local"],
-.form-input[type="month"],
-.form-input[type="time"],
-.form-input[type="week"] {
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  appearance: none;
-  background-color: white;
-  padding: 12px 14px;
-  font-size: 16px; /* Previene lo zoom su iOS */
-  font-family: inherit;
-  border: 2px solid #e8dcc0;
-  border-radius: 12px;
-  width: 100%;
-  color: #8b7d6b;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  position: relative;
-}
-
-/* Rimuovi icona predefinita per Android */
-.form-input[type="date"]::-webkit-calendar-picker-indicator {
-  display: none;
-}
-
-.form-input[type="date"]::-webkit-datetime-edit {
-  padding: 0;
-}
-
-.form-input[type="date"]::-webkit-datetime-edit-fields-wrapper {
-  padding: 0;
-}
-
-.form-input[type="date"]::-webkit-datetime-edit-text {
-  color: #8b7d6b;
-  padding: 0 2px;
-}
-
-.form-input[type="date"]::-webkit-datetime-edit-month-field,
-.form-input[type="date"]::-webkit-datetime-edit-day-field,
-.form-input[type="date"]::-webkit-datetime-edit-year-field,
-.form-input[type="date"]::-webkit-datetime-edit-hour-field,
-.form-input[type="date"]::-webkit-datetime-edit-minute-field {
-  color: #8b7d6b;
-  font-size: inherit;
-}
-
-.form-input[type="date"]::-webkit-outer-spin-button,
-.form-input[type="date"]::-webkit-inner-spin-button {
-  display: none;
-}
-
-/* Aggiungi icona custom per i desktop */
-.form-input[type="date"]::after {
-  content: '📅';
-  position: absolute;
-  right: 12px;
-  pointer-events: none;
-}
-
-/* Focus state migliorate */
-.form-input[type="date"]:focus,
-.form-input[type="datetime-local"]:focus {
-  outline: none;
-  border-color: #b89968;
-  box-shadow: 0 0 0 3px rgba(184, 153, 104, 0.15);
-  transform: translateY(-2px);
-}
-
-/* === CONTENITORE CUSTOM DATE INPUT PER MOBILE === */
+/* ============================================================
+   DATE INPUT — wrapper custom per mobile (usato via JS)
+   ============================================================ */
 .date-input-wrapper {
   position: relative;
   display: block;
@@ -1109,7 +1087,6 @@ body {
   box-sizing: border-box;
 }
 
-/* Classe per indicare quando è mobile */
 .date-input-wrapper.mobile-date-input {
   display: flex;
   gap: 10px;
@@ -1124,10 +1101,10 @@ body {
   text-align: center;
   padding: 14px 16px;
   font-size: 16px;
-  border: 2px solid #e8dcc0;
+  border: 2px solid var(--color-border);
   border-radius: 12px;
-  background: white;
-  color: #8b7d6b;
+  background: var(--color-white);
+  color: var(--color-text);
   margin: 0;
   min-width: 0;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -1137,26 +1114,32 @@ body {
 }
 
 .date-input-wrapper.mobile-date-input .date-text-input::placeholder {
-  color: #d4c7b5;
+  color: var(--color-border-light);
 }
 
 .date-input-wrapper.mobile-date-input .date-text-input:focus {
   outline: none;
-  border-color: #b89968;
-  box-shadow: 0 0 0 3px rgba(184, 153, 104, 0.15);
+  border-color: var(--color-accent-200);
+  box-shadow: 0 0 0 3px rgba(var(--color-accent-200-rgb), 0.15);
   transform: translateY(-2px);
 }
 
 .date-input-wrapper.mobile-date-input .date-text-input:hover {
-  border-color: #c4a484;
+  border-color: var(--color-accent-100);
+}
+
+.date-input-wrapper.mobile-date-input .date-text-input.error {
+  border-color: var(--color-error) !important;
+  background-color: var(--color-error-bg) !important;
+  color: var(--color-error-text);
 }
 
 .date-input-wrapper.mobile-date-input .date-picker-btn {
   flex-shrink: 0;
   margin: 0;
   padding: 14px 20px;
-  background: linear-gradient(135deg, #b89968 0%, #a67c52 100%);
-  color: white;
+  background: linear-gradient(135deg, var(--color-accent-200-dark) 0%, var(--color-accent-300-dark) 100%);
+  color: var(--color-white);
   border: none;
   border-radius: 12px;
   cursor: pointer;
@@ -1167,175 +1150,180 @@ body {
   align-items: center;
   justify-content: center;
   transition: all 0.3s ease;
-  box-shadow: 0 2px 8px rgba(184, 153, 104, 0.3);
+  box-shadow: 0 2px 8px rgba(var(--color-accent-200-rgb), 0.3);
   line-height: 1;
 }
 
 .date-input-wrapper.mobile-date-input .date-picker-btn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(184, 153, 104, 0.4);
+  box-shadow: 0 4px 12px rgba(var(--color-accent-200-rgb), 0.4);
 }
 
 .date-input-wrapper.mobile-date-input .date-picker-btn:active {
-  transform: scale(0.98);
-}
-/* === ERRORE STATE === */
-.date-input-wrapper.mobile-date-input .date-text-input.error {
-  border-color: #e74c3c !important;
-  background-color: #fadbd8 !important;
-  color: #c0392b;
+  transform: scale(0.95);
 }
 
-/* === RESPONSIVE MOBILE === */
+/* ============================================================
+   CODICI MULTIPLI (successo-pagamento.html)
+   ============================================================ */
+.multi-codes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px;
+  width: 100%;
+}
+
+.code-item {
+  background: rgba(255, 255, 255, 0.15);
+  padding: 20px;
+  border-radius: 12px;
+  text-align: center;
+}
+
+.code-label {
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin-bottom: 10px;
+  color: var(--color-white);
+  opacity: 0.95;
+}
+
+.code-number {
+  font-size: 2.2rem;
+  font-weight: bold;
+  letter-spacing: 0.15em;
+  margin: 15px 0;
+  background: rgba(255, 255, 255, 0.2);
+  padding: 15px;
+  border-radius: 8px;
+}
+
+.code-desc {
+  display: block;
+  font-size: 0.85rem;
+  opacity: 0.8;
+  margin-top: 8px;
+}
+
+/* ============================================================
+   RESPONSIVE — TABLET/MOBILE (≤768px)
+   ============================================================ */
 @media (max-width: 768px) {
-  .date-input-wrapper.mobile-date-input {
-    gap: 8px;
+  .form-grid {
+    grid-template-columns: 1fr;
   }
 
-  .date-input-wrapper.mobile-date-input .date-text-input {
-    padding: 12px 14px;
-    font-size: 16px;
-    min-height: 48px;
-  }
-
-  .date-input-wrapper.mobile-date-input .date-picker-btn {
-    min-width: 48px;
-    min-height: 48px;
-    padding: 12px 14px;
-    font-size: 1.1rem;
-  }
-}
-
-@media (max-width: 480px) {
-  .date-input-wrapper.mobile-date-input {
-    gap: 6px;
-  }
-
-  .date-input-wrapper.mobile-date-input .date-text-input {
-    padding: 12px 12px;
-    font-size: 16px;
-    min-height: 48px;
-  }
-
-  .date-input-wrapper.mobile-date-input .date-picker-btn {
-    min-width: 48px;
-    min-height: 48px;
-    padding: 12px;
-    font-size: 1rem;
-  }
-}
-
-/* === TOUCH DEVICES === */
-@media (hover: none) and (pointer: coarse) {
-  .date-input-wrapper.mobile-date-input .date-text-input,
-  .date-input-wrapper.mobile-date-input .date-picker-btn {
-    min-height: 44px;
-    min-width: 44px;
-  }
-
-  .date-input-wrapper.mobile-date-input .date-picker-btn:hover {
-    transform: none;
-  }
-
-  .date-input-wrapper.mobile-date-input .date-picker-btn:active {
-    transform: scale(0.98);
-  }
-}
-/* === MIGLIORAMENTI SELECT PER MOBILE === */
-.form-select {
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%238b7d6b' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 12px center;
-  background-size: 20px;
-  padding-right: 40px;
-  font-size: 16px;
-  min-height: 48px;
-}
-
-.form-select:focus {
-  outline: none;
-  border-color: #b89968;
-  box-shadow: 0 0 0 3px rgba(184, 153, 104, 0.15);
-}
-
-/* === GESTIONE KEYBOARD VIRTUAL MOBILE === */
-@media (max-width: 768px) {
-  /* Aumenta padding per evitare tastiera virtuale */
-  .form-input,
-  .form-select {
-    font-size: 16px; /* Previene zoom su iOS quando focus */
-    min-height: 48px;
-    padding: 12px 14px;
-  }
-
-  /* Ripulisci form per mobile */
-  .form-group {
+  .summary-section {
+    padding: 20px 15px;
     margin-bottom: 20px;
   }
 
-  .form-label {
-    font-size: 0.95rem;
-    margin-bottom: 8px;
+  .summary-section h3 {
+    font-size: 1.2rem;
+    margin-bottom: 15px;
+    text-align: center;
+    word-break: break-word;
   }
 
-  /* Date input più grande su mobile */
-  .form-input[type="date"],
-  .form-input[type="datetime-local"] {
-    font-size: 16px;
-    min-height: 50px;
-    padding: 14px 12px;
+  .summary-item {
+    flex-direction: column;
+    gap: 5px;
+    padding: 12px 0;
+    text-align: left;
   }
 
-  /* Select più grandi su mobile */
-  .form-select {
-    min-height: 50px;
-    font-size: 16px;
+  .summary-item span {
+    display: block;
+    width: 100%;
+    word-break: break-word;
   }
 
-  /* Ridimensiona il riquadro form su Android */
-  .form-container {
-    padding: 20px;
+  .summary-item span:first-child {
+    font-weight: 500;
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+    margin-bottom: 3px;
   }
 
-  .form-grid {
-    gap: 15px;
-  }
-
-  /* Migliora usabilità bottoni */
-  .btn {
-    min-height: 48px;
+  .summary-item span:last-child {
     font-size: 1rem;
-    padding: 14px 24px;
+    color: var(--color-text);
+    font-weight: 600;
   }
 
-  /* Aggiungi spazio extra dopo l'ultimo input prima della tastiera */
-  .form-group:last-of-type {
-    margin-bottom: 30px;
+  .guest-summary {
+    padding: 12px;
+    margin-bottom: 10px;
   }
 
-  /* Riduci header su mobile */
-  .header h1 {
+  .guest-summary strong {
+    font-size: 1rem;
+    line-height: 1.4;
+  }
+
+  .guest-summary .age {
+    font-size: 0.85rem;
+    margin-top: 4px;
+  }
+
+  .total-amount {
     font-size: 1.8rem;
+    padding: 15px;
+    margin: 15px 0;
+    word-break: break-word;
+    text-align: center;
   }
 
-  .header p {
-    font-size: 1rem;
+  .tax-note {
+    font-size: 0.8rem;
+    padding: 0 10px;
+    text-align: center;
+    display: block;
   }
 
-  .step-title {
-    font-size: 1.5rem;
+  .privacy-section {
+    padding: 20px 15px;
+    margin-bottom: 20px;
   }
 
-  /* Camera preview responsive */
-  .camera-preview video {
-    max-width: 100%;
-    height: auto;
+  .privacy-text {
+    font-size: 0.9rem;
+    line-height: 1.6;
+    text-align: left;
   }
 
-  /* Documenti sezione */
+  .privacy-checkbox {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .checkbox-custom {
+    align-self: flex-start;
+  }
+
+  .button-group {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+    gap: 10px;
+  }
+
+  .btn {
+    width: 100%;
+    margin-bottom: 0;
+    box-sizing: border-box;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+
+  .header h1 {
+    font-size: 2rem;
+  }
+
+  .form-container {
+    padding: 20px 15px;
+  }
+
   .document-upload {
     grid-template-columns: 1fr;
     gap: 15px;
@@ -1346,145 +1334,172 @@ body {
     margin: 20px 0;
   }
 
-  /* Privacy checkbox alignment */
-  .privacy-checkbox {
-    flex-direction: row;
-    gap: 12px;
+  .camera-controls {
+    flex-direction: column;
+    align-items: stretch;
   }
 
-  .checkbox-custom {
-    min-width: 22px;
-    width: 22px;
-    height: 22px;
-    flex-shrink: 0;
-    margin-top: 0;
+  .camera-preview video {
+    max-width: 100%;
+    height: auto;
   }
 
-  .privacy-text {
-    font-size: 0.9rem;
-    line-height: 1.5;
+  .capture-btn,
+  .close-camera-btn {
+    width: 100%;
+    margin-bottom: 10px;
   }
 
-  /* Summary section su mobile */
-  .summary-section {
-    padding: 20px;
+  .form-row {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  /* Densità form / tastiera virtuale */
+  .form-input,
+  .form-select {
+    font-size: 16px; /* Previene lo zoom su iOS quando in focus */
+    min-height: 48px;
+    padding: 12px 14px;
+  }
+
+  .form-input[type="date"],
+  .form-input[type="datetime-local"] {
+    font-size: 16px;
+    min-height: 50px;
+    padding: 14px 45px 14px 12px;
+  }
+
+  .form-select {
+    min-height: 50px;
+    font-size: 16px;
+  }
+
+  .form-group {
     margin-bottom: 20px;
   }
 
-  .summary-title {
-    font-size: 1.2rem;
+  .form-group:last-of-type {
+    margin-bottom: 30px;
   }
 
-  .summary-item {
+  .form-label {
     font-size: 0.95rem;
-    padding: 8px 0;
+    margin-bottom: 8px;
   }
 
-  /* Riduci gap bottoni */
-  .button-group {
-    gap: 10px;
-    margin-top: 30px;
+  .form-grid {
+    gap: 15px;
   }
 
   .btn {
-    width: 100%;
-    margin-bottom: 0;
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
+    min-height: 48px;
+    font-size: 1rem;
+    padding: 14px 24px;
   }
+
+  .date-input-wrapper.mobile-date-input {
+    gap: 8px;
+  }
+
+  .date-input-wrapper.mobile-date-input .date-text-input {
+    padding: 12px 14px;
+    font-size: 16px;
+    min-height: 48px;
+  }
+
+  .date-input-wrapper.mobile-date-input .date-picker-btn {
+    min-width: 48px;
+    min-height: 48px;
+    padding: 12px 14px;
+    font-size: 1.1rem;
+  }
+
 }
 
-/* === OTTIMIZZAZIONE ULTRA-MOBILE (< 480px) === */
+/* ============================================================
+   RESPONSIVE — ULTRA-MOBILE (≤480px)
+   ============================================================ */
 @media (max-width: 480px) {
   .form-input,
   .form-select,
   .btn {
     font-size: 16px; /* Cruciale per iOS */
   }
-  
-  /* === RIEPILOGO ULTRA-MOBILE === */
+
   .summary-section {
     padding: 15px 10px;
     margin-bottom: 15px;
-    width: 100%;
-    box-sizing: border-box;
   }
-  
+
   .summary-section h3 {
     font-size: 1.1rem;
     margin-bottom: 12px;
     text-align: center;
     word-break: break-word;
   }
-  
+
   .summary-item {
     padding: 10px 0;
     font-size: 0.85rem;
     flex-direction: column;
     gap: 4px;
-    width: 100%;
-    box-sizing: border-box;
   }
-  
+
   .summary-item span {
     display: block;
     width: 100%;
     word-break: break-word;
   }
-  
+
   .summary-item span:first-child {
     font-size: 0.85rem;
   }
-  
+
   .guest-summary {
     padding: 10px;
     margin-bottom: 8px;
-    width: 100%;
-    box-sizing: border-box;
   }
-  
+
   .guest-summary strong {
     font-size: 0.95rem;
     line-height: 1.3;
   }
-  
+
   .guest-summary .age {
     font-size: 0.8rem;
     margin-top: 3px;
   }
-  
+
   .total-amount {
     font-size: 1.5rem;
     padding: 12px 10px;
     margin: 10px 0;
     word-break: break-word;
   }
-  
+
   .tax-note {
     font-size: 0.75rem;
     padding: 0 5px;
     line-height: 1.3;
   }
-  
+
   .privacy-section {
     padding: 15px 10px;
     margin-bottom: 15px;
-    width: 100%;
-    box-sizing: border-box;
   }
-  
+
   .privacy-text {
     font-size: 0.8rem;
     line-height: 1.4;
     text-align: left;
   }
-  
+
   .button-group {
     gap: 8px;
     margin-top: 20px;
-    width: 100%;
   }
-  
+
   .btn {
     padding: 12px 16px;
     font-size: 0.9rem;
@@ -1539,11 +1554,6 @@ body {
     border-radius: 8px;
   }
 
-  .summary-item {
-    padding: 6px 0;
-    font-size: 0.9rem;
-  }
-
   .privacy-text {
     font-size: 0.85rem;
   }
@@ -1560,11 +1570,49 @@ body {
     font-size: 0.9rem;
     min-height: 44px;
   }
+
+  .date-input-wrapper.mobile-date-input {
+    gap: 6px;
+  }
+
+  .date-input-wrapper.mobile-date-input .date-text-input {
+    padding: 12px 12px;
+    font-size: 16px;
+    min-height: 48px;
+  }
+
+  .date-input-wrapper.mobile-date-input .date-picker-btn {
+    min-width: 48px;
+    min-height: 48px;
+    padding: 12px;
+    font-size: 1rem;
+  }
+
+  .multi-codes {
+    grid-template-columns: 1fr;
+    gap: 15px;
+  }
+
+  .code-number {
+    font-size: 1.8rem;
+    padding: 12px;
+  }
+
+  .code-label {
+    font-size: 1rem;
+  }
 }
 
-/* === ACCESSIBILITÀ TOUCH === */
+/* ============================================================
+   ACCESSIBILITÀ TOUCH — SOLO regole specifiche per dispositivi
+   a puntamento impreciso e senza hover (telefoni/tablet touch).
+   ATTENZIONE: prima di questa modifica, .date-input-wrapper,
+   la selezione appartamento e .multi-codes erano finiti PER
+   ERRORE dentro questo media query (parentesi non chiusa), quindi
+   su desktop (mouse) non venivano applicati affatto. Sono stati
+   spostati sopra, a livello globale.
+   ============================================================ */
 @media (hover: none) and (pointer: coarse) {
-  /* Touch devices */
   .btn,
   .form-input,
   .form-select,
@@ -1573,10 +1621,8 @@ body {
   .checkbox-custom {
     min-height: 44px;
     min-width: 44px;
-    /* AA WCAG - minimo 44x44 pixel per target touch */
   }
 
-  /* Rimuovi hover effects su touch */
   .btn:hover::before,
   .form-input:hover,
   .form-select:hover,
@@ -1587,191 +1633,18 @@ body {
   .btn:active {
     transform: scale(0.98);
   }
-    /* === CONTENITORE CUSTOM DATE INPUT PER MOBILE === */
-.date-input-wrapper {
-  position: relative;
-  display: flex;
-  width: 100%;
-}
 
-/* Classe per indicare quando è mobile */
-.date-input-wrapper.mobile-date-input {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  width: 100%;
-  flex-wrap: nowrap;
-}
-
-.date-input-wrapper.mobile-date-input input {
-  flex: 1;
-  text-align: center;
-  padding: 12px;
-  font-size: 16px;
-  border: 2px solid #e8dcc0;
-  border-radius: 8px;
-  background: white;
-  color: #8b7d6b;
-  margin: 0;
-  min-width: 0;
-}
-
-.date-input-wrapper.mobile-date-input .date-picker-btn {
-  flex-shrink: 0;
-  margin: 0;
-}
-    /* ===== STILI CHECKBOX APPARTAMENTI ===== */
-.appartamenti-checkbox-group {
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
-}
-
-.appartamento-checkbox-item {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-  padding: 15px;
-  background: white;
-  border: 2px solid #e8dcc0;
-  border-radius: 12px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.appartamento-checkbox-item:hover {
-  border-color: #b89968;
-  box-shadow: 0 2px 8px rgba(184, 153, 104, 0.15);
-}
-
-.appartamento-checkbox-item input[type="checkbox"] {
-  display: none;
-}
-
-.checkbox-custom-app {
-  width: 24px;
-  height: 24px;
-  border: 2px solid #d4c7b5;
-  border-radius: 6px;
-  background: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.3s ease;
-  flex-shrink: 0;
-  position: relative;
-}
-
-.checkbox-custom-app::after {
-  content: '✓';
-  color: white;
-  font-size: 16px;
-  font-weight: bold;
-  opacity: 0;
-  transform: scale(0.7);
-  transition: all 0.2s ease;
-}
-
-.appartamento-checkbox-item input[type="checkbox"]:checked + .checkbox-custom-app {
-  background: linear-gradient(135deg, #b89968 0%, #a67c52 100%);
-  border-color: #a67c52;
-  box-shadow: 0 2px 8px rgba(184, 153, 104, 0.3);
-}
-
-.appartamento-checkbox-item input[type="checkbox"]:checked + .checkbox-custom-app::after {
-  opacity: 1;
-  transform: scale(1);
-}
-
-.appartamento-checkbox-item input[type="checkbox"]:checked ~ .appartamento-label {
-  color: #a67c52;
-}
-
-.appartamento-label {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  flex: 1;
-}
-
-.appartamento-label strong {
-  font-size: 1.1rem;
-  color: #8b7d6b;
-}
-
-.appartamento-label small {
-  font-size: 0.9rem;
-  color: #a0927f;
-}
-
-/* ===== STILI CODICI MULTIPLI (successo-pagamento.html) ===== */
-.multi-codes {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 20px;
-  width: 100%;
-}
-
-.code-item {
-  background: rgba(255, 255, 255, 0.15);
-  padding: 20px;
-  border-radius: 12px;
-  text-align: center;
-}
-
-.code-label {
-  font-size: 1.2rem;
-  font-weight: 600;
-  margin-bottom: 10px;
-  color: #fff;
-  opacity: 0.95;
-}
-
-.code-number {
-  font-size: 2.2rem;
-  font-weight: bold;
-  letter-spacing: 0.15em;
-  margin: 15px 0;
-  background: rgba(255, 255, 255, 0.2);
-  padding: 15px;
-  border-radius: 8px;
-}
-
-.code-desc {
-  display: block;
-  font-size: 0.85rem;
-  opacity: 0.8;
-  margin-top: 8px;
-}
-
-/* Responsive Mobile */
-@media (max-width: 768px) {
-  .appartamento-checkbox-item {
-    padding: 12px;
+  .date-input-wrapper.mobile-date-input .date-text-input,
+  .date-input-wrapper.mobile-date-input .date-picker-btn {
+    min-height: 44px;
+    min-width: 44px;
   }
-  
-  .appartamento-label strong {
-    font-size: 1rem;
-  }
-  
-  .appartamento-label small {
-    font-size: 0.85rem;
-  }
-}
 
-@media (max-width: 600px) {
-  .multi-codes {
-    grid-template-columns: 1fr;
-    gap: 15px;
+  .date-input-wrapper.mobile-date-input .date-picker-btn:hover {
+    transform: none;
   }
-  
-  .code-number {
-    font-size: 1.8rem;
-    padding: 12px;
+
+  .date-input-wrapper.mobile-date-input .date-picker-btn:active {
+    transform: scale(0.95);
   }
-  
-  .code-label {
-    font-size: 1rem;
-  }
-}
 }
