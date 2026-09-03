@@ -5,6 +5,13 @@ import Stripe from 'stripe';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
+function maskEmail(email) {
+  if (!email || typeof email !== 'string' || !email.includes('@')) return 'N/A';
+  const [user, domain] = email.split('@');
+  const maskedUser = user.length <= 2 ? `${user[0]}*` : `${user.slice(0, 2)}${'*'.repeat(user.length - 2)}`;
+  return `${maskedUser}@${domain}`;
+}
+
 export default async function handler(req, res) {
   console.log('\n🔍 === DIAGNOSI MANCATO INVIO EMAIL ===\n');
 
@@ -12,6 +19,21 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
   
   if (req.method === "OPTIONS") return res.status(200).end();
+
+  // Endpoint amministrativo: richiede un secret, non è pensato per essere chiamato
+  // dal sito pubblico. Accetta sia header (per curl/script) sia query param
+  // (comodo per uso manuale da browser).
+  if (!process.env.ADMIN_SECRET) {
+    console.error('❌ ADMIN_SECRET non configurato sul server');
+    return res.status(500).json({ error: 'Configurazione server incompleta' });
+  }
+
+  const providedSecret = req.headers['x-admin-secret'] || req.query.key;
+
+  if (providedSecret !== process.env.ADMIN_SECRET) {
+    console.warn('🚫 Tentativo di accesso non autorizzato a diagnose-missing-emails');
+    return res.status(401).json({ error: 'Non autorizzato' });
+  }
 
   const diagnosis = {
     timestamp: new Date().toISOString(),
@@ -54,7 +76,7 @@ export default async function handler(req, res) {
       console.log(`\n💳 Pagamento ${events.data.indexOf(event) + 1}:`);
       console.log(`   Session ID: ${paymentInfo.sessionId}`);
       console.log(`   Data: ${paymentInfo.created}`);
-      console.log(`   Email: ${paymentInfo.email || '❌ MANCANTE'}`);
+      console.log(`   Email: ${paymentInfo.email ? maskEmail(paymentInfo.email) : '❌ MANCANTE'}`);
       console.log(`   Importo: ${paymentInfo.amountPaid}`);
       console.log(`   Temp Session ID: ${paymentInfo.tempSessionId || '❌ MANCANTE'}`);
       console.log(`   Data Check-in: ${paymentInfo.dataCheckin || '❌ MANCANTE'}`);
@@ -154,7 +176,10 @@ export default async function handler(req, res) {
             `${baseUrl}/api/salva-dati-temporanei?sessionId=${lastPayment.tempSessionId}`,
             {
               method: 'GET',
-              headers: { 'Accept': 'application/json' }
+              headers: {
+                'Accept': 'application/json',
+                'x-internal-secret': process.env.INTERNAL_API_SECRET
+              }
             }
           );
 
