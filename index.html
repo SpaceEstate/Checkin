@@ -1,81 +1,30 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-    <meta charset="UTF-8">
+  <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, maximum-scale=5, viewport-fit=cover">
   <meta name="theme-color" content="#c4a484">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Check-in Ospiti">
   <meta name="description" content="Completa la registrazione per il tuo soggiorno">
-  
+
   <title>Check-in Ospiti</title>
-  
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="checkin.css">
-  <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" as="style">
-  
-  <!-- Fix per notch e area sicura su dispositivi moderni -->
-  <style>
-    body {
-      padding-left: max(20px, env(safe-area-inset-left));
-      padding-right: max(20px, env(safe-area-inset-right));
-      padding-top: max(20px, env(safe-area-inset-top));
-      padding-bottom: max(20px, env(safe-area-inset-bottom));
-    }
 
-    .container {
-      margin-left: auto;
-      margin-right: auto;
-    }
-
-    /* Stili per lo step 0 (verifica prenotazione) */
-    #step-0 .booking-input-wrapper {
-      margin-bottom: 30px;
-    }
-
-    #step-0 .form-input {
-      text-align: center;
-      font-size: 1.2rem;
-      letter-spacing: 0.05em;
-      text-transform: uppercase;
-    }
-
-    #step-0 .no-booking-link {
-      display: block;
-      text-align: center;
-      margin-top: 15px;
-      color: #a0927f;
-      font-size: 0.9rem;
-      text-decoration: none;
-      transition: all 0.3s ease;
-    }
-
-    #step-0 .no-booking-link:hover {
-      color: #b89968;
-      text-decoration: underline;
-    }
-
-    #step-0 .verification-icon {
-      font-size: 3rem;
-      margin-bottom: 20px;
-    }
-  </style>
-    <!-- 🚀 OTTIMIZZAZIONE: Precarica Domini Stripe -->
-<link rel="preconnect" href="https://js.stripe.com">
-<link rel="preconnect" href="https://checkout.stripe.com">
-<link rel="preconnect" href="https://m.stripe.com">
-<link rel="preconnect" href="https://m.stripe.network">
-<link rel="dns-prefetch" href="https://js.stripe.com">
-<link rel="dns-prefetch" href="https://checkout.stripe.com">
-
-<!-- 🎨 Precarica Font Stripe (opzionale ma aiuta) -->
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-
-<!-- 📊 Precarica API Backend (il tuo Vercel) -->
-<link rel="preconnect" href="https://checkin-six-coral.vercel.app">
-<link rel="dns-prefetch" href="https://checkin-six-coral.vercel.app">
+  <!-- Preconnect Stripe e backend Vercel -->
+  <link rel="preconnect" href="https://js.stripe.com">
+  <link rel="preconnect" href="https://checkout.stripe.com">
+  <link rel="preconnect" href="https://m.stripe.com">
+  <link rel="preconnect" href="https://m.stripe.network">
+  <link rel="dns-prefetch" href="https://js.stripe.com">
+  <link rel="dns-prefetch" href="https://checkout.stripe.com">
+  <link rel="preconnect" href="https://checkin-six-coral.vercel.app">
+  <link rel="dns-prefetch" href="https://checkin-six-coral.vercel.app">
 </head>
 <body>
   <div class="container">
@@ -84,29 +33,36 @@
       <p>Completa la registrazione per il tuo soggiorno</p>
     </div>
 
+    <!-- Indicatore di avanzamento: valori impostati via JS (vedi prossimo passaggio su checkin.js) -->
+    <div class="progress-wrapper" id="progress-wrapper">
+      <div class="progress-track">
+        <div class="progress-fill" id="progress-fill"></div>
+      </div>
+      <p class="progress-label" id="progress-label"></p>
+    </div>
+
     <div class="form-container">
       <form id="checkin-form">
-        
-        <!-- Step 0: Verifica numero prenotazione (NUOVO) -->
+
+        <!-- Step 0: Verifica numero prenotazione -->
         <div class="step active" id="step-0">
           <div class="step-header">
             <div class="verification-icon">🔐</div>
-            <h2 class="step-title">Verifica Prenotazione</h2>
+            <h2 class="step-title">Verifica prenotazione</h2>
             <p class="step-subtitle">Inserisci il tuo numero di prenotazione per iniziare</p>
           </div>
 
           <div class="booking-input-wrapper">
             <div class="form-group">
-              <label class="form-label" for="numero-prenotazione">Numero Prenotazione</label>
-              <input 
-                type="text" 
-                id="numero-prenotazione" 
-                name="numero-prenotazione" 
-                class="form-input" 
+              <label class="form-label" for="numero-prenotazione">Numero prenotazione</label>
+              <input
+                type="text"
+                id="numero-prenotazione"
+                name="numero-prenotazione"
+                class="form-input form-input-code"
                 placeholder="Es. BK12345"
                 autocomplete="off"
-                   pattern="[A-Za-z0-9]*"
-                style="text-transform: uppercase;">
+                pattern="[A-Za-z0-9]*">
             </div>
             <a href="#" class="no-booking-link" onclick="event.preventDefault(); saltaVerifica();">
               Non ho il numero di prenotazione
@@ -123,153 +79,56 @@
         <!-- Step 1: Info generali -->
         <div class="step" id="step-1">
           <div class="step-header">
-            <h2 class="step-title">Informazioni Generali</h2>
+            <h2 class="step-title">Informazioni generali</h2>
             <p class="step-subtitle">Inserisci i dettagli della tua prenotazione</p>
           </div>
+
           <div class="form-group">
             <label class="form-label" for="data-checkin">Data check-in</label>
             <input type="date" id="data-checkin" name="data-checkin" class="form-input" required>
           </div>
 
           <div class="form-grid">
-            <!-- Sostituisci la sezione appartamento nello step-1 con questo -->
-
-<!-- SOSTITUISCI la sezione appartamento in index.html (dentro step-1) con questo codice -->
-
-<div class="form-group full-width">
-  <label class="form-label" for="appartamento">Appartamento/i *</label>
-  <div class="select-wrapper-mobile" onclick="this.querySelector('select').focus(); this.querySelector('select').click();">
-    <select 
-      id="appartamento" 
-      name="appartamento" 
-      class="form-select" 
-      multiple 
-      size="3"
-      required
-      onchange="aggiornaAppartamentiSelezionati()">
-      <option value="La Columbera - Torre, Appartamento con 2 camere da letto">
-        🏰 Torre - Appartamento con 2 camere da letto
-      </option>
-      <option value="La Columbera - Corte, Appartamento con 1 camere da letto">
-        🏡 Corte - Appartamento con 1 camera da letto
-      </option>
-    </select>
-  </div>
-</div>
-
-<style>
-/* Wrapper cliccabile per mobile */
-.select-wrapper-mobile {
-  cursor: pointer;
-  position: relative;
-}
-
-.select-wrapper-mobile::after {
-  content: 'Tocca per selezionare';
-  position: absolute;
-  bottom: 10px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 0.85rem;
-  color: #a0927f;
-  pointer-events: none;
-  opacity: 0.7;
-  text-align: center;
-  width: 100%;
-}
-
-/* Stili per il select multiplo */
-select[multiple].form-select {
-  min-height: 120px;
-  padding: 8px;
-  line-height: 1.6;
-  pointer-events: none; /* Lascia che il wrapper gestisca il click */
-}
-
-select[multiple].form-select option {
-  padding: 12px 15px;
-  border-radius: 8px;
-  margin-bottom: 8px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  background: white;
-  pointer-events: auto; /* Le opzioni devono essere cliccabili */
-}
-
-select[multiple].form-select option:hover {
-  background: linear-gradient(135deg, rgba(184, 153, 104, 0.1) 0%, rgba(166, 124, 82, 0.1) 100%);
-}
-
-select[multiple].form-select option:checked {
-  background: linear-gradient(135deg, #b89968 0%, #a67c52 100%);
-  color: white;
-  font-weight: 600;
-}
-
-/* Mobile: aggiungi bordi più evidenti */
-@media (max-width: 768px) {
-  select[multiple].form-select {
-    min-height: 140px;
-    font-size: 16px;
-    padding-bottom: 40px; /* Spazio per il testo "Tocca per selezionare" */
-  }
-  
-  select[multiple].form-select option {
-    padding: 15px;
-    margin-bottom: 10px;
-    border: 2px solid #e8dcc0;
-  }
-  
-  select[multiple].form-select option:checked {
-    border-color: #a67c52;
-  }
-  
-  .select-wrapper-mobile {
-    border: 2px dashed #d4c7b5;
-    border-radius: 12px;
-    padding: 5px;
-    background: #faf9f6;
-  }
-  
-  .select-wrapper-mobile:active {
-    background: #f5f2e9;
-  }
-}
-
-/* Desktop: nascondi il messaggio e il wrapper */
-@media (min-width: 769px) {
-  .select-wrapper-mobile::after {
-    display: none;
-  }
-  
-  .select-wrapper-mobile {
-    cursor: default;
-    border: none;
-    padding: 0;
-    background: transparent;
-  }
-  
-  select[multiple].form-select {
-    pointer-events: auto;
-    padding-bottom: 8px;
-  }
-}
-</style>
+            <!-- Selezione appartamento: checkbox invece di select multiple (niente hack JS per il toggle) -->
+            <div class="form-group full-width">
+              <label class="form-label" id="appartamento-label">Appartamento/i *</label>
+              <div class="apartment-options" id="appartamento-group" role="group" aria-labelledby="appartamento-label">
+                <label class="apartment-chip">
+                  <input type="checkbox" class="apartment-checkbox" name="appartamento"
+                         value="La Columbera - Torre, Appartamento con 2 camere da letto">
+                  <span class="apartment-chip-icon" aria-hidden="true">🏰</span>
+                  <span class="apartment-chip-text">
+                    <strong>Torre</strong>
+                    <small>2 camere da letto</small>
+                  </span>
+                </label>
+                <label class="apartment-chip">
+                  <input type="checkbox" class="apartment-checkbox" name="appartamento"
+                         value="La Columbera - Corte, Appartamento con 1 camera da letto">
+                  <span class="apartment-chip-icon" aria-hidden="true">🏡</span>
+                  <span class="apartment-chip-text">
+                    <strong>Corte</strong>
+                    <small>1 camera da letto</small>
+                  </span>
+                </label>
+              </div>
+              <p class="field-error" id="appartamento-error" role="alert"></p>
+            </div>
 
             <div class="form-group">
               <label class="form-label" for="numero-ospiti">Numero ospiti</label>
               <select id="numero-ospiti" name="numero-ospiti" class="form-select" required>
-  <option value="">Seleziona numero</option>
-  <option value="1">1 ospite</option>
-  <option value="2">2 ospiti</option>
-  <option value="3">3 ospiti</option>
-  <option value="4">4 ospiti</option>
-  <option value="5">5 ospiti</option>
-  <option value="6">6 ospiti</option>
-  <option value="7">7 ospiti</option>
-  <option value="8">8 ospiti</option>
-  <option value="9">9 ospiti</option>
-</select>
+                <option value="">Seleziona numero</option>
+                <option value="1">1 ospite</option>
+                <option value="2">2 ospiti</option>
+                <option value="3">3 ospiti</option>
+                <option value="4">4 ospiti</option>
+                <option value="5">5 ospiti</option>
+                <option value="6">6 ospiti</option>
+                <option value="7">7 ospiti</option>
+                <option value="8">8 ospiti</option>
+                <option value="9">9 ospiti</option>
+              </select>
             </div>
 
             <div class="form-group">
@@ -298,39 +157,38 @@ select[multiple].form-select option:checked {
         <!-- Step finale: Riepilogo e pagamento -->
         <div class="step" id="step-final">
           <div class="step-header">
-            <h2 class="step-title">Riepilogo e Pagamento</h2>
+            <h2 class="step-title">Riepilogo e pagamento</h2>
             <p class="step-subtitle">Verifica i dati e procedi al pagamento</p>
           </div>
 
           <div class="summary-section">
-            <h3 class="summary-title">Riepilogo Prenotazione</h3>
+            <h3 class="summary-title">Riepilogo prenotazione</h3>
             <div id="summary-content"></div>
           </div>
 
-          <!-- Sezione Privacy e Termini -->
           <div class="privacy-section">
             <div class="privacy-checkbox">
               <input type="checkbox" id="privacy-consent" name="privacy-consent" class="privacy-input" required>
               <label for="privacy-consent" class="privacy-label">
                 <span class="checkbox-custom"></span>
                 <span class="privacy-text">
-                  Dichiaro di aver letto e compreso l'informativa privacy ai sensi del Regolamento UE 2016/679 e autorizzo il trattamento dei miei dati personali per le finalità legate alla registrazione presso la struttura e alla trasmissione alla Questura, come previsto dalla normativa vigente (art. 109 TULPS).<span style="color: #e74c3c; font-weight: bold;">*</span>
+                  Dichiaro di aver letto e compreso l'informativa privacy ai sensi del Regolamento UE 2016/679 e autorizzo il trattamento dei miei dati personali per le finalità legate alla registrazione presso la struttura e alla trasmissione alla Questura, come previsto dalla normativa vigente (art. 109 TULPS).
+                  <span class="required-mark">*</span>
                 </span>
               </label>
             </div>
           </div>
 
-          <!-- Bottoni statici -->
           <div class="button-group">
-  <button type="button" class="btn btn-secondary" onclick="indietroStep()">← Indietro</button>
-  <button type="button" class="btn btn-success" id="btn-procedi-pagamento" disabled onclick="procediAlPagamento()">Procedi al Pagamento</button>
-</div>
+            <button type="button" class="btn btn-secondary" onclick="indietroStep()">← Indietro</button>
+            <button type="button" class="btn btn-success" id="btn-procedi-pagamento" disabled onclick="procediAlPagamento()">Procedi al pagamento</button>
+          </div>
         </div>
 
         <!-- Step successo -->
         <div class="step" id="step-success">
           <div class="success-message">
-            <h3>✅ Check-in Completato!</h3>
+            <h3>✅ Check-in completato!</h3>
             <p>Grazie per aver completato la registrazione.</p>
             <p>Ti auguriamo un soggiorno piacevole!</p>
             <p><strong>Riferimento pratica:</strong> <span id="booking-reference"></span></p>
@@ -341,6 +199,5 @@ select[multiple].form-select option:checked {
   </div>
 
   <script src="checkin.js"></script>
-  <!--<script src="checkin-optimized.js"></script>-->
 </body>
 </html>
