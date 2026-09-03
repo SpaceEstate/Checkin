@@ -2,6 +2,36 @@ import Stripe from "stripe";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
+// Età a partire dalla data di nascita — stessa logica di calcolaEta() in checkin.js
+function calcolaEtaServer(dataNascita) {
+  if (!dataNascita) return 0;
+  const nascita = new Date(dataNascita);
+  if (isNaN(nascita.getTime())) return 0;
+  const oggi = new Date();
+  let eta = oggi.getFullYear() - nascita.getFullYear();
+  const meseCompleanno = oggi.getMonth() - nascita.getMonth();
+  if (meseCompleanno < 0 || (meseCompleanno === 0 && oggi.getDate() < nascita.getDate())) {
+    eta--;
+  }
+  return Math.max(0, eta);
+}
+
+// Ricalcola il totale — stessa regola di calcolaTotale() in checkin.js:
+// €1,50 a notte per ogni ospite di almeno 4 anni.
+//
+// IMPORTANTE: questo è il valore che va usato per l'addebito. Il campo "totale"
+// che arriva dal client va nella richiesta POST insieme al resto dei dati, quindi
+// chiunque può modificarlo (es. dagli strumenti sviluppatore del browser) prima
+// dell'invio. In precedenza veniva passato direttamente a Stripe come
+// unit_amount: bastava cambiare quel numero per pagare qualsiasi cifra,
+// indipendentemente da ospiti/notti reali.
+function calcolaTotaleServer(ospiti, numeroNotti) {
+  const notti = parseInt(numeroNotti, 10) || 0;
+  const TASSA_PER_NOTTE = 1.50;
+  const ospitiSoggetti = (ospiti || []).filter(o => calcolaEtaServer(o?.nascita) >= 4).length;
+  return Math.round(ospitiSoggetti * notti * TASSA_PER_NOTTE * 100) / 100;
+}
+
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "https://spaceestate.github.io");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
@@ -32,11 +62,12 @@ export default async function handler(req, res) {
       cancelUrl
     } = req.body;
 
-    // Validazione dati essenziali
-    if (!dataCheckin || !appartamento || !numeroOspiti || !ospiti.length || !totale) {
+    // Validazione dati essenziali (il totale non è più tra i campi richiesti dal
+    // client: si calcola qui sotto e quel valore, non il suo, è quello usato)
+    if (!dataCheckin || !appartamento || !numeroOspiti || !ospiti.length) {
       return res.status(400).json({ 
         error: "Dati mancanti",
-        details: "dataCheckin, appartamento, numeroOspiti, ospiti e totale sono obbligatori"
+        details: "dataCheckin, appartamento, numeroOspiti e ospiti sono obbligatori"
       });
     }
 
@@ -46,12 +77,30 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Dati del responsabile mancanti" });
     }
 
+    // ⚠️ SICUREZZA: totale ricalcolato qui, MAI usato quello ricevuto dal client
+    // per l'addebito effettivo (vedi calcolaTotaleServer sopra).
+    const totaleServer = calcolaTotaleServer(ospiti, numeroNotti);
+
+    if (totaleServer <= 0) {
+      return res.status(400).json({
+        error: "Importo non valido",
+        details: "Il totale calcolato è zero: verifica il numero di notti e le date di nascita degli ospiti"
+      });
+    }
+
+    if (typeof totale === "number" && Math.abs(totale - totaleServer) > 0.01) {
+      console.warn("⚠️ Totale ricevuto dal client diverso da quello ricalcolato dal server", {
+        totaleClient: totale,
+        totaleServer
+      });
+    }
+
     console.log("📋 Dati validati:", {
       dataCheckin,
       appartamento,
       numeroOspiti,
-      totale,
-      responsabile: `${responsabile.nome} ${responsabile.cognome}`,
+      totale: totaleServer,
+      responsabilePresente: !!(responsabile.nome && responsabile.cognome),
       tempSessionId: tempSessionId || 'N/A'
     });
 
@@ -62,7 +111,7 @@ export default async function handler(req, res) {
       numeroOspiti: numeroOspiti.toString(),
       numeroNotti: numeroNotti.toString(),
       tipoGruppo: tipoGruppo || '',
-      totale: totale.toString(),
+      totale: totaleServer.toString(),
       timestamp: timestamp || new Date().toISOString(),
       
       // ⭐ CHIAVE: Salva solo il temp_session_id (circa 30 caratteri)
@@ -120,7 +169,7 @@ export default async function handler(req, res) {
               name: `Tassa soggiorno - ${appartamento}`,
               description: `Check-in: ${dataCheckin} | Ospiti: ${numeroOspiti} | Notti: ${numeroNotti}`,
             },
-            unit_amount: Math.round(totale * 100),
+            unit_amount: Math.round(totaleServer * 100),
           },
           quantity: 1,
         },
