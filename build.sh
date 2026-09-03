@@ -35,3 +35,4 @@ ls -la public/images/ 2>/dev/null || echo "⚠️ Directory public/images/ non t
 
 echo "📂 Contenuto public/images/cassetta/:"
 ls -la public/images/cassetta/ 2>/dev/null || echo "⚠️ Directory public/images/cassetta/ non trovata"
+
