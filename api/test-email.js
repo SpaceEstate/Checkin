@@ -11,6 +11,22 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
+  // Endpoint amministrativo: richiede un secret. Senza questo controllo chiunque
+  // potrebbe usarlo come relay per far inviare email dal dominio a un indirizzo
+  // arbitrario tramite ?email_test=. Accetta sia header (per curl/script) sia
+  // query param (comodo per uso manuale da browser).
+  if (!process.env.ADMIN_SECRET) {
+    console.error('❌ ADMIN_SECRET non configurato sul server');
+    return res.status(500).json({ error: 'Configurazione server incompleta' });
+  }
+
+  const providedSecret = req.headers['x-admin-secret'] || req.query.key;
+
+  if (providedSecret !== process.env.ADMIN_SECRET) {
+    console.warn('🚫 Tentativo di accesso non autorizzato a test-email');
+    return res.status(401).json({ error: 'Non autorizzato' });
+  }
+
   console.log('\n🧪 === TEST EMAIL SYSTEM ===\n');
   const startTime = Date.now();
 
