@@ -10,6 +10,15 @@ import { dirname } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// Stesso criterio usato in stripeWebhook.js: mascherare l'indirizzo nei log
+// mantenendo visibile solo il dominio.
+function maskEmail(email) {
+  if (!email || typeof email !== 'string' || !email.includes('@')) return 'N/A';
+  const [user, domain] = email.split('@');
+  const maskedUser = user.length <= 2 ? `${user[0]}*` : `${user.slice(0, 2)}${'*'.repeat(user.length - 2)}`;
+  return `${maskedUser}@${domain}`;
+}
+
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
@@ -34,11 +43,11 @@ export default async function handler(req, res) {
       });
     }
 
-    console.log('📬 Destinatario:', emailOspite);
+    console.log('📬 Destinatario:', maskEmail(emailOspite));
     console.log('📊 Appartamento:', datiPrenotazione.appartamento);
 
     const codiciCassetta = determinaCodiciCassetta(datiPrenotazione.appartamento);
-    console.log('🔑 Codici cassetta generati:', codiciCassetta);
+    console.log('🔑 Codici cassetta generati:', codiciCassetta.length);
 
     if (typeof datiPrenotazione.totale === 'string') {
       datiPrenotazione.totale = parseFloat(datiPrenotazione.totale);
@@ -473,5 +482,5 @@ async function inviaEmailConNodemailer(emailDestinatario, dati, htmlContent, all
   };
 
   await transporter.sendMail(mailOptions);
-  console.log(`✅ Email inviata a ${emailDestinatario}${allegati.length > 0 ? ' con ' + allegati.length + ' foto allegate' : ' senza foto'}`);
+  console.log(`✅ Email inviata a ${maskEmail(emailDestinatario)}${allegati.length > 0 ? ' con ' + allegati.length + ' foto allegate' : ' senza foto'}`);
 }
