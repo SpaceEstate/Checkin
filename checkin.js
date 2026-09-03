@@ -244,6 +244,61 @@ function showNotification(message, type = 'info') {
   setTimeout(() => { if (notification.parentNode) notification.remove(); }, 4000);
 }
 
+// Modale di conferma personalizzata, al posto del confirm() nativo del
+// browser (incoerente tra i browser mobile, in particolare quelli in-app
+// come Gmail/Booking/Airbnb). Ritorna una Promise<boolean>.
+function showConfirm(message, { confermaLabel = 'Conferma', annullaLabel = 'Annulla' } = {}) {
+  return new Promise(resolve => {
+    document.querySelectorAll('.confirm-overlay').forEach(el => el.remove());
+
+    const overlay = document.createElement('div');
+    overlay.className = 'confirm-overlay';
+
+    const box = document.createElement('div');
+    box.className = 'confirm-box';
+
+    const text = document.createElement('p');
+    text.className = 'confirm-message';
+    text.textContent = message;
+
+    const actions = document.createElement('div');
+    actions.className = 'button-group';
+
+    const btnAnnulla = document.createElement('button');
+    btnAnnulla.type = 'button';
+    btnAnnulla.className = 'btn btn-secondary';
+    btnAnnulla.textContent = annullaLabel;
+
+    const btnConferma = document.createElement('button');
+    btnConferma.type = 'button';
+    btnConferma.className = 'btn btn-primary';
+    btnConferma.textContent = confermaLabel;
+
+    function chiudi(risultato) {
+      overlay.remove();
+      document.removeEventListener('keydown', onKeydown);
+      resolve(risultato);
+    }
+    function onKeydown(e) {
+      if (e.key === 'Escape') chiudi(false);
+    }
+
+    btnAnnulla.addEventListener('click', () => chiudi(false));
+    btnConferma.addEventListener('click', () => chiudi(true));
+    overlay.addEventListener('click', e => { if (e.target === overlay) chiudi(false); });
+    document.addEventListener('keydown', onKeydown);
+
+    actions.appendChild(btnAnnulla);
+    actions.appendChild(btnConferma);
+    box.appendChild(text);
+    box.appendChild(actions);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    btnConferma.focus();
+  });
+}
+
 // === GESTIONE TOGGLE ===
 window.toggleComuneProvincia = function(ospiteNum) {
   const luogoNascitaSelect = document.querySelector(`select[name="ospite${ospiteNum}_luogo_nascita"]`);
@@ -337,10 +392,13 @@ window.saltaVerifica = function() {
 }
 
 // Funzione per tornare alla verifica
-window.tornaAVerifica = function() {
+window.tornaAVerifica = async function() {
   if (window.datiPrecompilati) {
     // Se i dati erano pre-compilati, chiedi conferma
-    if (confirm('Vuoi tornare alla schermata di verifica? I dati precompilati rimarranno.')) {
+    const confermato = await showConfirm(
+      'Vuoi tornare alla schermata di verifica? I dati precompilati rimarranno.'
+    );
+    if (confermato) {
       currentStep = 0;
       mostraStepCorrente();
     }
@@ -1673,11 +1731,10 @@ function ottimizzaFormMobile() {
     }
   });
 
-  const metaViewport = document.querySelector('meta[name="viewport"]');
-  if (metaViewport) {
-    metaViewport.setAttribute('content', 
-      'width=device-width, initial-scale=1.0, user-scalable=yes, maximum-scale=5');
-  }
+  // NOTA: qui prima veniva riscritto anche il tag <meta name="viewport">,
+  // ma la stringa non includeva "viewport-fit=cover" e quindi disattivava
+  // env(safe-area-inset-*) usato in checkin.css per il notch. Il viewport
+  // è già impostato correttamente in index.html: non va toccato via JS.
 }
 
 function gestisciKeyboardVirtuale() {
