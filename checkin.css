@@ -1152,7 +1152,10 @@ body {
   justify-content: center;
   transition: all 0.3s ease;
   box-shadow: 0 2px 8px rgba(var(--color-accent-200-rgb), 0.3);
-  line-height: 1;
+  /* line-height:1 tagliava il glifo emoji su alcuni mobile browser
+     (le emoji a colori hanno un box verticale più alto del normale) */
+  line-height: 1.4;
+  overflow: visible;
 }
 
 .date-input-wrapper.mobile-date-input .date-picker-btn:hover {
