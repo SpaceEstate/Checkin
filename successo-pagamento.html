@@ -325,7 +325,7 @@
         console.log("✅ Dati sessione ricevuti:", sessionData);
 
         mostraDettagliPrenotazione(sessionData);
-        mostraCodiciCassetta(sessionData.appartamento); // ✅ USA LA NUOVA FUNZIONE
+        mostraCodiciCassetta(sessionData.codiciCassetta);
 
         sessionStorage.removeItem('datiPrenotazione');
         sessionStorage.removeItem('paymentTimestamp');
@@ -336,7 +336,7 @@
     }
 }
 
-        function tentaRecuperoDaSessionStorage() {
+        async function tentaRecuperoDaSessionStorage() {
     try {
         const datiSalvati = sessionStorage.getItem('datiPrenotazione');
         
@@ -345,7 +345,25 @@
             console.log("✅ Dati recuperati da sessionStorage:", datiPrenotazione);
             
             mostraDettagliPrenotazione(datiPrenotazione);
-            mostraCodiciCassetta(datiPrenotazione.appartamento); // ✅ USA LA NUOVA FUNZIONE
+
+            // I codici non vengono più calcolati qui (erano in chiaro nel file
+            // pubblico). Se la prima chiamata a get-session è fallita, ci
+            // riproviamo solo per i codici; se fallisce anche questa,
+            // mostriamo un messaggio sicuro invece di inventare un codice.
+            const sessionId = new URLSearchParams(window.location.search).get("session_id");
+            let codici = null;
+            if (sessionId) {
+                try {
+                    const resp = await fetch(`https://checkin-six-coral.vercel.app/api/get-session?session_id=${sessionId}`);
+                    if (resp.ok) {
+                        const dati = await resp.json();
+                        codici = dati.codiciCassetta;
+                    }
+                } catch (e) {
+                    console.warn("⚠️ Secondo tentativo di recupero codici fallito:", e);
+                }
+            }
+            mostraCodiciCassetta(codici);
             
             sessionStorage.removeItem('datiPrenotazione');
             sessionStorage.removeItem('paymentTimestamp');
@@ -411,36 +429,16 @@
             `;
         }
 
-        function mostraCodiciCassetta(appartamento) {
+        // I codici arrivano già calcolati dal backend (api/get-session.js),
+        // che li legge dalle variabili d'ambiente solo dopo aver verificato
+        // il pagamento. Qui ci limitiamo a mostrarli: prima venivano
+        // ricalcolati in chiaro anche qui, in un file pubblico scaricabile
+        // da chiunque anche senza aver pagato.
+        function mostraCodiciCassetta(codici) {
     const codiceElement = document.getElementById('codice-cassetta');
-    
-    if (!appartamento) {
-        codiceElement.innerHTML = '<div class="error">N/A</div>';
-        return;
-    }
 
-    const appartamentoLower = appartamento.toLowerCase();
-    const codici = [];
-
-    // Determina quali appartamenti sono stati prenotati
-    if (appartamentoLower.includes('corte')) {
-        codici.push({
-            codice: '1933',
-            nome: 'Corte',
-            descrizione: 'Appartamento con 1 camera da letto'
-        });
-    }
-
-    if (appartamentoLower.includes('torre')) {
-        codici.push({
-            codice: '1935',
-            nome: 'Torre',
-            descrizione: 'Appartamento con 2 camere da letto'
-        });
-    }
-
-    if (codici.length === 0) {
-        codiceElement.innerHTML = '<div class="error">Codice non disponibile</div>';
+    if (!codici || codici.length === 0 || !codici.some(c => c.codice)) {
+        codiceElement.innerHTML = '<div class="error">Codice non disponibile, contatta il proprietario</div>';
         return;
     }
 
@@ -466,7 +464,7 @@
         codiceElement.style.fontSize = '1.2rem'; // Riduci font per contenere entrambi
     }
 
-    console.log(`🔑 Codici cassetta per "${appartamento}":`, codici.map(c => c.codice).join(', '));
+    console.log('🔑 Codici cassetta mostrati:', codici.map(c => c.nome).join(', '));
 }
 
         function mostraErrore(messaggio) {
