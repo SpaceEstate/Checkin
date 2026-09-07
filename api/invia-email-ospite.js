@@ -20,9 +20,9 @@ function maskEmail(email) {
 }
 
 export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Origin", "https://spaceestate.github.io");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Internal-Secret");
   
   if (req.method === "OPTIONS") {
     return res.status(200).end();
@@ -30,6 +30,25 @@ export default async function handler(req, res) {
 
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Metodo non consentito' });
+  }
+
+  // ✅ FIX SICUREZZA: questo endpoint viene chiamato solo da stripeWebhook.js
+  // dopo un pagamento confermato. Senza questo controllo, chiunque conoscesse
+  // l'URL poteva ottenere i codici reali delle cassette (Torre/Corte) nella
+  // risposta JSON e farseli inviare via email con foto, senza aver pagato
+  // né avere una prenotazione reale. Stesso criterio già usato per il GET
+  // di salva-dati-temporanei.js.
+  const secretAtteso = process.env.INTERNAL_API_SECRET;
+  const secretRicevuto = req.headers['x-internal-secret'];
+
+  if (!secretAtteso) {
+    console.error('❌ INTERNAL_API_SECRET non configurato nelle variabili d\'ambiente');
+    return res.status(500).json({ error: "Configurazione server incompleta" });
+  }
+
+  if (secretRicevuto !== secretAtteso) {
+    console.warn('⚠️ Tentativo di invio email senza secret valido, apartamento:', req.body?.datiPrenotazione?.appartamento);
+    return res.status(401).json({ error: "Non autorizzato" });
   }
 
   console.log('📧 === INIZIO INVIO EMAIL OSPITE ===');
