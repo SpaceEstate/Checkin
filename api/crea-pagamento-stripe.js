@@ -141,8 +141,8 @@ export default async function handler(req, res) {
     console.log("🔑 Metadata temp_session_id:", metadata.temp_session_id);
     console.log("📏 Metadata size:", JSON.stringify(metadata).length, "chars");
 
-    const finalSuccessUrl = successUrl || "https://spaceestate.github.io/checkin/successo-pagamento.html?session_id={CHECKOUT_SESSION_ID}";
-    const finalCancelUrl = cancelUrl || "https://spaceestate.github.io/checkin/index.html?canceled=true";
+    const finalSuccessUrl = successUrl || "https://spaceestate.github.io/Checkin/successo-pagamento.html?session_id={CHECKOUT_SESSION_ID}";
+    const finalCancelUrl = cancelUrl || "https://spaceestate.github.io/Checkin/index.html?canceled=true";
 
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
