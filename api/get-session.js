@@ -2,6 +2,35 @@ import Stripe from "stripe";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
+// Codici cassetta: letti SOLO qui, lato server, e restituiti solo dopo aver
+// verificato che il pagamento sia "paid" (vedi sotto). Prima erano scritti in
+// chiaro nel frontend pubblico — chiunque poteva leggerli senza pagare.
+function determinaCodiciCassetta(appartamento) {
+  const fallback = [{ codice: null, nome: 'N/A', descrizione: 'Codice non disponibile, contatta il proprietario' }];
+  if (!appartamento) return fallback;
+
+  const appartamentoLower = appartamento.toLowerCase();
+  const codici = [];
+
+  if (appartamentoLower.includes('corte')) {
+    codici.push({
+      codice: process.env.CODICE_CASSETTA_CORTE || null,
+      nome: 'Corte',
+      descrizione: 'Appartamento con 1 camera da letto'
+    });
+  }
+
+  if (appartamentoLower.includes('torre')) {
+    codici.push({
+      codice: process.env.CODICE_CASSETTA_TORRE || null,
+      nome: 'Torre',
+      descrizione: 'Appartamento con 2 camere da letto'
+    });
+  }
+
+  return codici.length > 0 ? codici : fallback;
+}
+
 export default async function handler(req, res) {
   // CORS Headers
   res.setHeader("Access-Control-Allow-Origin", "https://spaceestate.github.io");
@@ -38,7 +67,8 @@ export default async function handler(req, res) {
         numeroOspiti: "2",
         numeroNotti: "3", 
         totale: "9.00",
-        status: "complete"
+        status: "complete",
+        codiciCassetta: determinaCodiciCassetta("Appartamento Test")
       };
       
       return res.status(200).json(testData);
@@ -75,6 +105,9 @@ export default async function handler(req, res) {
       status: session.status,
       payment_status: session.payment_status,
       amount_total: (session.amount_total / 100).toFixed(2),
+      // Calcolati qui, dopo la verifica payment_status === 'paid' sopra:
+      // non arrivano mai al client prima che il pagamento sia confermato.
+      codiciCassetta: determinaCodiciCassetta(metadata.appartamento),
       
       // Dati responsabile
       responsabile: {
