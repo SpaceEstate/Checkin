@@ -140,14 +140,20 @@ async function caricaAllegatiFoto() {
   return allegati;
 }
 
+// I valori arrivano da CODICE_CASSETTA_TORRE / CODICE_CASSETTA_CORTE (env var,
+// solo server). Prima erano scritti qui in chiaro E duplicati anche nel
+// frontend pubblico (checkin.js, successo-pagamento.html) — vedi anche
+// api/get-session.js, che ora è l'unica altra copia di questa logica.
 function determinaCodiciCassetta(appartamento) {
+  const generico = [{
+    codice: null,
+    nome: 'Generico',
+    descrizione: 'Codice non disponibile, contatta il proprietario'
+  }];
+
   if (!appartamento) {
     console.warn('⚠️ Appartamento non specificato, uso codice generico');
-    return [{
-      codice: '0000',
-      nome: 'Generico',
-      descrizione: 'Appartamento non specificato'
-    }];
+    return generico;
   }
 
   const appartamentoLower = appartamento.toLowerCase();
@@ -155,7 +161,7 @@ function determinaCodiciCassetta(appartamento) {
 
   if (appartamentoLower.includes('corte')) {
     codici.push({
-      codice: '1933',
+      codice: process.env.CODICE_CASSETTA_CORTE || null,
       nome: 'Corte',
       descrizione: 'Appartamento con 1 camera da letto'
     });
@@ -163,7 +169,7 @@ function determinaCodiciCassetta(appartamento) {
 
   if (appartamentoLower.includes('torre')) {
     codici.push({
-      codice: '1935',
+      codice: process.env.CODICE_CASSETTA_TORRE || null,
       nome: 'Torre',
       descrizione: 'Appartamento con 2 camere da letto'
     });
@@ -171,11 +177,7 @@ function determinaCodiciCassetta(appartamento) {
 
   if (codici.length === 0) {
     console.warn('⚠️ Appartamento non riconosciuto:', appartamento);
-    return [{
-      codice: '0000',
-      nome: 'Generico',
-      descrizione: 'Appartamento non specificato'
-    }];
+    return generico;
   }
 
   return codici;
