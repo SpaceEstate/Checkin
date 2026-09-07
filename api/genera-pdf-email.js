@@ -21,8 +21,35 @@ function escapeHtml(value) {
 }
 
 export default async function handler(req, res) {
+  res.setHeader("Access-Control-Allow-Origin", "https://spaceestate.github.io");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Internal-Secret");
+
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Metodo non consentito' });
+  }
+
+  // ✅ FIX SICUREZZA: endpoint chiamato solo da stripeWebhook.js dopo un
+  // pagamento confermato. Prima non c'era alcun controllo: chiunque poteva
+  // generare PDF e far inviare email a proprio piacimento (costo su
+  // Browserless/SMTP, rischio di uso come relay di spam/phishing). Stesso
+  // secret già usato per invia-email-ospite.js e per il GET di
+  // salva-dati-temporanei.js.
+  const secretAtteso = process.env.INTERNAL_API_SECRET;
+  const secretRicevuto = req.headers['x-internal-secret'];
+
+  if (!secretAtteso) {
+    console.error('❌ INTERNAL_API_SECRET non configurato nelle variabili d\'ambiente');
+    return res.status(500).json({ error: "Configurazione server incompleta" });
+  }
+
+  if (secretRicevuto !== secretAtteso) {
+    console.warn('⚠️ Tentativo di generazione PDF senza secret valido');
+    return res.status(401).json({ error: "Non autorizzato" });
   }
 
   console.log('📧 Inizio generazione PDF e invio email');
