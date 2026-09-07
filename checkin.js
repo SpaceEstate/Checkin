@@ -19,6 +19,44 @@ function getAppartamentiSelezionati() {
     .map(cb => cb.value);
 }
 
+// === Numero massimo ospiti per appartamento/i selezionato/i ===
+// Torre: max 5 · Corte: max 4 · entrambi: max 9
+function getMaxOspitiPerSelezione() {
+  const appartamenti = getAppartamentiSelezionati();
+  const haTorre = appartamenti.some(a => a.toLowerCase().includes('torre'));
+  const haCorte = appartamenti.some(a => a.toLowerCase().includes('corte'));
+
+  if (haTorre && haCorte) return 9;
+  if (haTorre) return 5;
+  if (haCorte) return 4;
+  return 9; // nessun appartamento ancora selezionato: nessun limite finché non sceglie
+}
+
+function aggiornaMaxOspiti() {
+  const select = document.getElementById('numero-ospiti');
+  if (!select) return;
+
+  const max = getMaxOspitiPerSelezione();
+  let valoreResettato = false;
+
+  Array.from(select.options).forEach(opt => {
+    if (!opt.value) return; // "Seleziona numero"
+    const val = parseInt(opt.value, 10);
+    const troppiOspiti = val > max;
+    opt.disabled = troppiOspiti;
+    opt.hidden = troppiOspiti;
+  });
+
+  if (select.value && parseInt(select.value, 10) > max) {
+    select.value = '';
+    valoreResettato = true;
+  }
+
+  if (valoreResettato && typeof showNotification === 'function') {
+    showNotification(`Con l'appartamento selezionato il massimo è ${max} ospiti. Seleziona di nuovo il numero.`, 'info');
+  }
+}
+
 // === MODIFICA: precompilaDatiPrenotazione ===
 function precompilaDatiPrenotazione(dati) {
   console.log('📝 Pre-compilazione dati:', dati);
@@ -101,33 +139,10 @@ function precompilaDatiPrenotazione(dati) {
   
   console.log('✅ Dati pre-compilati con successo');
 }
-// === FUNZIONE: Determina codici cassetta (MULTIPLI) ===
-function determinaCodiciCassetta(appartamento) {
-  if (!appartamento) {
-    console.warn('⚠️ Appartamento non specificato');
-    return ['0000'];
-  }
-
-  const appartamentoLower = appartamento.toLowerCase();
-  const codici = [];
-
-  // Verifica entrambi gli appartamenti
-  if (appartamentoLower.includes('corte')) {
-    codici.push('1933');
-  }
-  
-  if (appartamentoLower.includes('torre')) {
-    codici.push('1935');
-  }
-
-  if (codici.length === 0) {
-    console.warn('⚠️ Appartamento non riconosciuto:', appartamento);
-    return ['0000'];
-  }
-
-  console.log(`🔑 Codici cassetta per "${appartamento}":`, codici);
-  return codici;
-}
+// (I codici cassetta NON vengono più calcolati né tenuti qui: prima erano
+// hardcoded in chiaro in questo file pubblico, scaricabile da chiunque anche
+// senza aver pagato. Ora arrivano solo dal backend, dopo verifica del
+// pagamento — vedi api/get-session.js)
 // === ARRAY DATI ===
 const stati = ["Afghanistan", "Albania", "Algeria", "Andorra", "Angola", "Antigua e Barbuda", "Arabia Saudita", "Argentina", "Armenia", "Australia", "Austria", "Azerbaigian", "Bahamas", "Bahrain", "Bangladesh", "Barbados", "Belgio", "Belize", "Benin", "Bhutan", "Bielorussia", "Birmania", "Bolivia", "Bosnia ed Erzegovina", "Botswana", "Brasile", "Brunei", "Bulgaria", "Burkina Faso", "Burundi", "Cambogia", "Camerun", "Canada", "Capo Verde", "Ciad", "Cile", "Cina", "Cipro", "Comore", "Corea del Nord", "Corea del Sud", "Costa d'Avorio", "Costa Rica", "Croazia", "Cuba", "Danimarca", "Dominica", "Ecuador", "Egitto", "El Salvador", "Emirati Arabi Uniti", "Eritrea", "Estonia", "Etiopia", "Figi", "Filippine", "Finlandia", "Francia", "Gabon", "Gambia", "Georgia", "Germania", "Ghana", "Giamaica", "Giappone", "Gibuti", "Giordania", "Grecia", "Grenada", "Guatemala", "Guinea", "Guinea-Bissau", "Guinea Equatoriale", "Guyana", "Haiti", "Honduras", "India", "Indonesia", "Iran", "Iraq", "Irlanda", "Islanda", "Israele", "Italia", "Kazakistan", "Kenya", "Kirghizistan", "Kiribati", "Kuwait", "Laos", "Lesotho", "Lettonia", "Libano", "Liberia", "Libia", "Liechtenstein", "Lituania", "Lussemburgo", "Macedonia del Nord", "Madagascar", "Malawi", "Malaysia", "Maldive", "Mali", "Malta", "Marocco", "Isole Marshall", "Mauritania", "Mauritius", "Messico", "Micronesia", "Moldavia", "Monaco", "Mongolia", "Montenegro", "Mozambico", "Namibia", "Nauru", "Nepal", "Nicaragua", "Niger", "Nigeria", "Norvegia", "Nuova Zelanda", "Oman", "Paesi Bassi", "Pakistan", "Palau", "Panama", "Papua Nuova Guinea", "Paraguay", "Peru", "Polonia", "Portogallo", "Qatar", "Regno Unito", "Repubblica Ceca", "Repubblica Centrafricana", "Repubblica del Congo", "Repubblica Democratica del Congo", "Repubblica Dominicana", "Romania", "Ruanda", "Russia", "Saint Kitts e Nevis", "Saint Lucia", "Saint Vincent e Grenadine", "Samoa", "San Marino", "São Tomé e Príncipe", "Senegal", "Serbia", "Seychelles", "Sierra Leone", "Singapore", "Siria", "Slovacchia", "Slovenia", "Somalia", "Spagna", "Sri Lanka", "Stati Uniti", "Sudafrica", "Sudan", "Sudan del Sud", "Suriname", "Svezia", "Svizzera", "Swaziland", "Tagikistan", "Tanzania", "Thailandia", "Timor Est", "Togo", "Tonga", "Trinidad e Tobago", "Tunisia", "Turchia", "Turkmenistan", "Tuvalu", "Ucraina", "Uganda", "Ungheria", "Uruguay", "Uzbekistan", "Vanuatu", "Vaticano", "Venezuela", "Vietnam", "Yemen", "Zambia", "Zimbabwe"];
 
@@ -717,7 +732,7 @@ function generaStepOspiti() {
         </div>
         <div class="document-section" style="grid-column: 1 / -1;">
           <h3 class="document-title">📄 Documento di identità</h3>
-          <p class="document-subtitle">Carica una foto o scansione del documento (max 2 MB)</p>
+          <p class="document-subtitle">Carica una foto o una scansione PDF del documento (JPG, PNG o PDF)</p>
           <div class="document-upload">
             <div class="upload-group">
               <label for="ospite1_documento_file" class="upload-label">📎 Scegli file</label>
@@ -1014,9 +1029,9 @@ window.handleFileUpload = function(input, ospiteNum) {
       return;
     }
     
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
     if (!allowedTypes.includes(file.type)) {
-      showNotification('Formato file non supportato. Usa: JPG, PNG o WebP', 'error');
+      showNotification('Formato file non supportato. Usa: JPG, PNG, WebP o PDF', 'error');
       input.value = '';
       return;
     }
@@ -1404,12 +1419,18 @@ async function raccogliDatiPrenotazioneConCompressione() {
       console.log(`📸 Documento responsabile: ${file.name} - ${originalSizeMB} MB (originale)`);
       
       const base64 = await fileToBase64(file);
-      const base64Finale = await comprimiImmagineBase64(base64, 400);
+      // Target 700KB (prima 400) e tetto 1200KB (prima 500): il limite reale
+      // è quello di Vercel su tutta la richiesta (~4.5MB), qui c'è un solo
+      // documento quindi c'è ampio margine per tenerlo più leggibile.
+      const base64Finale = await comprimiImmagineBase64(base64, 700);
       
       sizeKB = (base64Finale.split(',')[1].length * 0.75) / 1024;
       
-      if (sizeKB > 500) {
-        throw new Error(`Documento troppo grande anche dopo compressione (${sizeKB.toFixed(0)} KB). Usa una foto con risoluzione più bassa.`);
+      if (sizeKB > 1200) {
+        const suggerimento = file.type === 'application/pdf'
+          ? 'Prova con una scansione più leggera, o fai una foto del documento invece del PDF.'
+          : 'Usa una foto con risoluzione più bassa.';
+        throw new Error(`Documento troppo grande anche dopo compressione (${sizeKB.toFixed(0)} KB). ${suggerimento}`);
       }
       
       console.log(`✅ Documento responsabile compresso: ${sizeKB.toFixed(2)} KB`);
@@ -1796,6 +1817,12 @@ document.addEventListener('DOMContentLoaded', function() {
   // Gestisci ritorno da Stripe
   gestisciRitornoStripe();
   
+  // Limite ospiti in base all'appartamento/i selezionato/i (Torre 5 · Corte 4 · entrambi 9)
+  document.querySelectorAll('.apartment-checkbox').forEach(cb => {
+    cb.addEventListener('change', aggiornaMaxOspiti);
+  });
+  aggiornaMaxOspiti();
+
   // Event listener per numero ospiti
   const numeroOspitiSelect = document.getElementById('numero-ospiti');
   if (numeroOspitiSelect) {
