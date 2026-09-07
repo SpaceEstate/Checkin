@@ -464,6 +464,18 @@ body {
   display: none;
 }
 
+/* Prima si notava solo la piccola icona; ora si scurisce anche il resto del
+   riquadro, utile soprattutto quando la selezione arriva in automatico dalla
+   verifica del numero di prenotazione (checkbox checked + disabled insieme:
+   "opacity: 1" qui sotto sovrascrive l'opacity: 0.7 della regola "bloccata"
+   sopra, così il riquadro selezionato resta ben visibile anche da bloccato). */
+.apartment-chip:has(input:checked) {
+  background: rgba(var(--color-accent-300-rgb), 0.14);
+  border-color: var(--color-accent-300);
+  box-shadow: 0 2px 8px rgba(var(--color-accent-300-rgb), 0.25);
+  opacity: 1;
+}
+
 .apartment-chip-icon {
   width: 24px;
   height: 24px;
