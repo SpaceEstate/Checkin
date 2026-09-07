@@ -309,7 +309,12 @@ async function sendEmailWithRetry(url, body, timeoutMs, requestId) {
 
       const response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          // Richiesto da genera-pdf-email.js e invia-email-ospite.js dopo il
+          // fix di sicurezza: senza questo header rispondono 401.
+          'x-internal-secret': process.env.INTERNAL_API_SECRET
+        },
         body: JSON.stringify(body),
         signal: controller.signal
       });
