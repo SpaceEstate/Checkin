@@ -432,7 +432,11 @@ function generaHTMLEmailOspite(dati, codiciCassetta) {
             </div>
 
             <p style="margin-top: 20px;">
-              • Quando arrivi alla proprietà, ${codiciCassetta.length > 1 ? 'le cassette di sicurezza sono situate' : 'la cassetta di sicurezza è situata'} in una nicchia dietro allo scuro ${codiciCassetta.length > 1 ? 'degli appartamenti al' : 'dell\'appartamento al'} piano terra (vedi foto sotto).
+              • Entrando dal cancello principale, dirigiti verso la palazzina sulla sinistra. Troverai due porte-finestre al piano terra, come mostrato in foto.
+            </p>
+
+            <p>
+              • La cassetta si trova nella nicchia accanto all'ultimo scuro in legno sulla destra della facciata (vedi foto cerchiata in giallo).
             </p>
 
             <p>
