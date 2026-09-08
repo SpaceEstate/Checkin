@@ -274,18 +274,17 @@ function generaHTMLRiepilogo(dati) {
 
   console.log(`📄 Generazione HTML: ${ospiti.length} ospiti, ${documentiValidi.length} documenti`);
 
-  // ✅ Genera HTML per TUTTI gli ospiti (non solo ospite 1)
-  const ospitiHTML = ospiti.map((ospite, index) => {
+  // ✅ Genera HTML per TUTTI gli ospiti (non solo ospite 1), uno dietro l'altro:
+  // nessun page-break forzato ogni 2 ospiti. "page-break-inside: avoid" su
+  // .ospite (vedi CSS sotto) evita solo che UNA scheda venga tagliata a metà
+  // tra due pagine; il resto del flusso lo decide il renderer in base allo
+  // spazio disponibile, come per qualunque contenuto continuo.
+  const ospitiHTML = ospiti.map((ospite) => {
     // Cerca documento per questo ospite specifico
     const documento = documentiValidi.find(d => d && d.ospiteNumero === ospite.numero);
 
-    // Gestione page break:
-    // Pag 1: Dettagli soggiorno + Ospite 1
-    // Pag 2+: Ospiti 2-3, poi 4-5, poi 6-7, poi 8-9
-    const needsPageBreak = index === 1 || index === 3 || index === 5 || index === 7;
-
     return `
-      <div class="ospite ${ospite.isResponsabile ? 'responsabile' : ''}" ${needsPageBreak ? 'style="page-break-before: always;"' : ''}>
+      <div class="ospite ${ospite.isResponsabile ? 'responsabile' : ''}">
         <div class="ospite-header">
           <div class="ospite-nome">${escapeHtml(ospite.cognome) || 'N/A'} ${escapeHtml(ospite.nome) || 'N/A'}</div>
           ${ospite.isResponsabile
