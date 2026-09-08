@@ -138,7 +138,12 @@ export default async function handler(req, res) {
 
         const emailResponse = await fetch(`${baseUrl}/api/genera-pdf-email`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            // Richiesto da genera-pdf-email.js dopo il fix di sicurezza:
+            // senza questo header risponde 401 (vedi stripeWebhook.js).
+            'x-internal-secret': process.env.INTERNAL_API_SECRET
+          },
           body: JSON.stringify({
             datiPrenotazione: datiCompleti,
             emailDestinatario: emailProprietario
@@ -188,7 +193,12 @@ export default async function handler(req, res) {
 
         const emailResponse = await fetch(`${baseUrl}/api/invia-email-ospite`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            // Richiesto da invia-email-ospite.js dopo il fix di sicurezza:
+            // senza questo header risponde 401 (vedi stripeWebhook.js).
+            'x-internal-secret': process.env.INTERNAL_API_SECRET
+          },
           body: JSON.stringify({
             emailOspite: emailOspite,
             datiPrenotazione: datiCompleti
