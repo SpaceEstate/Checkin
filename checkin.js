@@ -1001,6 +1001,19 @@ function aggiornaBottonePagamento(totale) {
 // === GESTIONE FOTOCAMERA ===
 let currentStream = null;
 
+// I telefoni generano spesso nomi file molto lunghi (es. screenshot,
+// foto della galleria). Senza accorciarli, il testo mandava in overflow
+// la label e "spingeva" fuori schermo la colonna accanto nella griglia
+// fronte/retro documento.
+function accorciaNomeFile(nome, maxLen = 22) {
+  if (!nome || nome.length <= maxLen) return nome;
+  const puntoIdx = nome.lastIndexOf('.');
+  const estensione = puntoIdx > 0 ? nome.slice(puntoIdx) : '';
+  const base = puntoIdx > 0 ? nome.slice(0, puntoIdx) : nome;
+  const maxBase = Math.max(maxLen - estensione.length - 1, 3);
+  return base.slice(0, maxBase) + '…' + estensione;
+}
+
 window.handleFileUpload = function(input, ospiteNum) {
   const file = input.files?.[0];
   const label = input.previousElementSibling;
@@ -1036,7 +1049,7 @@ window.handleFileUpload = function(input, ospiteNum) {
       return;
     }
     
-    label.textContent = `✅ ${file.name}`;
+    label.textContent = `✅ ${accorciaNomeFile(file.name)}`;
     label.classList.add('has-file');
     showNotification('Documento caricato correttamente', 'success');
   } else {
@@ -1604,16 +1617,16 @@ function creaCustomDateInput(originalInput) {
   textInput.inputMode = 'numeric';
 
   // Il campo nativo resta type="date" (serve al bottone calendario per aprire
-  // il picker del browser) ma è reso invisibile e non cliccabile: il campo
-  // che l'ospite vede e usa per scrivere è textInput, qui sotto.
+  // il picker del browser) ma è reso invisibile e non cliccabile. Copre SOLO
+  // l'area del bottone calendario, non il campo di testo: se coprisse anche
+  // quello, cliccandoci sopra per scrivere a mano il calendario nativo
+  // rimarrebbe ancorato lì e non si chiuderebbe, bloccando la digitazione.
   originalInput.style.cssText = `
     position: absolute;
     top: 0;
-    left: 0;
     right: 0;
     bottom: 0;
-    width: 100%;
-    height: 100%;
+    width: 60px;
     opacity: 0;
     pointer-events: none;
     border: 0;
