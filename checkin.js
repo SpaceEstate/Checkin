@@ -1603,8 +1603,23 @@ function creaCustomDateInput(originalInput) {
   textInput.pattern = '[0-9/]*';
   textInput.inputMode = 'numeric';
 
-  originalInput.style.display = 'none';
-  originalInput.type = 'hidden';
+  // Il campo nativo resta type="date" (serve al bottone calendario per aprire
+  // il picker del browser) ma è reso invisibile e non cliccabile: il campo
+  // che l'ospite vede e usa per scrivere è textInput, qui sotto.
+  originalInput.style.cssText = `
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    pointer-events: none;
+    border: 0;
+    margin: 0;
+    padding: 0;
+  `;
 
   textInput.addEventListener('input', function(e) {
     let value = this.value.replace(/\D/g, '');
@@ -1660,26 +1675,18 @@ function creaCustomDateInput(originalInput) {
   pickerBtn.addEventListener('click', function(e) {
     e.preventDefault();
     e.stopPropagation();
-    
-    originalInput.type = 'date';
-    originalInput.style.cssText = `
-      position: absolute;
-      left: -9999px;
-      width: 1px;
-      height: 1px;
-      opacity: 0.01;
-      pointer-events: auto;
-    `;
-    
-    setTimeout(() => {
-      originalInput.focus();
-      originalInput.click();
-      
-      setTimeout(() => {
-        originalInput.style.cssText = '';
-        originalInput.type = 'hidden';
-      }, 500);
-    }, 50);
+
+    originalInput.focus();
+    if (typeof originalInput.showPicker === 'function') {
+      try {
+        originalInput.showPicker();
+        return;
+      } catch (err) {
+        // showPicker può non essere invocabile in certi contesti:
+        // si prosegue con il fallback qui sotto.
+      }
+    }
+    originalInput.click();
   });
 
   originalInput.addEventListener('change', function() {
@@ -1696,15 +1703,20 @@ function creaCustomDateInput(originalInput) {
 }
 
 function potenziaTuosDateInput() {
-  if (!isMobile) return;
-  
   const dateInputs = document.querySelectorAll('input[type="date"]');
   
   dateInputs.forEach(input => {
-    if (isOldAndroid || !supportaDateInput()) {
-      creaCustomDateInput(input);
+    if (isMobile) {
+      if (isOldAndroid || !supportaDateInput()) {
+        creaCustomDateInput(input);
+      } else {
+        miglioraDateInputNativo(input);
+      }
     } else {
-      miglioraDateInputNativo(input);
+      // Desktop: campo digitabile GG/MM/AAAA + bottone calendario,
+      // invece del solo <input type="date"> nativo (scomodo da scrivere
+      // e da navigare manualmente).
+      creaCustomDateInput(input);
     }
   });
 }
@@ -1842,22 +1854,24 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
   
-  // Ottimizzazioni mobile
+  // Campo data digitabile (GG/MM/AAAA + bottone calendario): su tutti i dispositivi
+  potenziaTuosDateInput();
+  
+  setTimeout(() => {
+    const originalForm = document.getElementById('checkin-form');
+    if (originalForm) {
+      const observer = new MutationObserver(() => {
+        potenziaTuosDateInput();
+      });
+      observer.observe(originalForm, { childList: true, subtree: true });
+    }
+  }, 100);
+  
+  // Altre ottimizzazioni specifiche mobile
   if (isMobile) {
-    potenziaTuosDateInput();
     ottimizzaSelectMobile();
     ottimizzaFormMobile();
     gestisciKeyboardVirtuale();
-    
-    setTimeout(() => {
-      const originalForm = document.getElementById('checkin-form');
-      if (originalForm) {
-        const observer = new MutationObserver(() => {
-          potenziaTuosDateInput();
-        });
-        observer.observe(originalForm, { childList: true, subtree: true });
-      }
-    }, 100);
   }
   
   // Cleanup fotocamera prima di chiudere
