@@ -1036,14 +1036,9 @@ window.handleFileUpload = function(input, ospiteNum) {
       return;
     }
     
-    const fileSizeKB = (file.size / 1024).toFixed(0);
-    const sizeText = file.size > 1024 * 1024 
-      ? `${(file.size / 1024 / 1024).toFixed(1)} MB`
-      : `${fileSizeKB} KB`;
-    
-    label.textContent = `✅ ${file.name} (${sizeText})`;
+    label.textContent = `✅ ${file.name}`;
     label.classList.add('has-file');
-    showNotification(`Documento caricato: ${sizeText}`, 'success');
+    showNotification('Documento caricato correttamente', 'success');
   } else {
     label.textContent = '📎 Scegli file';
     label.classList.remove('has-file');
@@ -1110,11 +1105,9 @@ window.capturePhoto = function(ospiteNum) {
       return;
     }
     
-    const blobSizeKB = (blob.size / 1024).toFixed(0);
-    
     if (blob.size > 1 * 1024 * 1024) {
       showNotification(
-        `⚠️ Foto troppo grande (${blobSizeKB} KB)\n` +
+        `⚠️ Foto troppo pesante\n` +
         `Prova a scattare da più lontano o con meno luce`,
         'error'
       );
@@ -1133,13 +1126,12 @@ window.capturePhoto = function(ospiteNum) {
       
       const label = fileInput.previousElementSibling;
       if (label) {
-        const sizeKB = (blob.size / 1024).toFixed(0);
-        label.textContent = `📷 ${fileName} (${sizeKB} KB)`;
+        label.textContent = `📷 ${fileName}`;
         label.classList.add('has-file');
       }
     }
     
-    showNotification(`✅ Foto acquisita: ${blobSizeKB} KB`, 'success');
+    showNotification('✅ Foto acquisita', 'success');
   }, 'image/jpeg', 0.7);
   
   closeCamera(ospiteNum);
@@ -1224,7 +1216,7 @@ window.procediAlPagamento = async function() {
       if (!salvataggioResponse.ok) {
         const errorText = await salvataggioResponse.text();
         console.error('❌ Errore HTTP salvataggio:', salvataggioResponse.status, errorText);
-        throw new Error(`Errore nel salvataggio (${salvataggioResponse.status}): ${errorText}`);
+        throw new Error('Non è stato possibile salvare i dati. Riprova tra qualche istante.');
       }
       
       const result = await salvataggioResponse.json();
@@ -1259,7 +1251,7 @@ window.procediAlPagamento = async function() {
       payButton.innerHTML = `💳 Paga €${calcolaTotale().toFixed(2)} con Stripe`;
     }
     
-    let errorMessage = 'Errore: ' + error.message;
+    let errorMessage = 'Si è verificato un problema durante il salvataggio. Riprova tra qualche istante o contatta l\'assistenza se il problema persiste.';
     
     if (error.message.includes('Timeout') || error.message.includes('timeout')) {
       errorMessage = '⏱️ Il salvataggio dei documenti sta richiedendo troppo tempo. Prova a:\n' +
@@ -1445,7 +1437,10 @@ async function raccogliDatiPrenotazioneConCompressione() {
       
     } catch (error) {
       console.error(`❌ Errore conversione documento:`, error);
-      throw new Error(error.message || `Impossibile processare il documento. Riprova con un'immagine diversa.`);
+      if (error.message && error.message.includes('troppo grande')) {
+        throw error;
+      }
+      throw new Error(`Impossibile processare il documento. Riprova con un'immagine diversa.`);
     }
   }
   
@@ -1466,7 +1461,7 @@ async function raccogliDatiPrenotazioneConCompressione() {
   }
   
   if (sizeKB !== null) {
-    showNotification(`✅ Documento responsabile caricato (${sizeKB.toFixed(0)} KB)`, 'success');
+    showNotification('✅ Documento responsabile caricato', 'success');
   }
   
   return datiPrenotazione;
@@ -1509,7 +1504,8 @@ async function creaLinkPagamentoConSessionId(datiPrenotazione, tempSessionId) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Errore server (${response.status}): ${errorText}`);
+      console.error(`❌ Errore server (${response.status}):`, errorText);
+      throw new Error('Non è stato possibile avviare il pagamento. Riprova tra qualche istante.');
     }
 
     const result = await response.json();
@@ -1522,7 +1518,6 @@ async function creaLinkPagamentoConSessionId(datiPrenotazione, tempSessionId) {
 
   } catch (error) {
     console.error("💥 Errore creazione pagamento:", error);
-    showNotification("Errore: " + error.message, "error");
     throw error;
   }
 }
