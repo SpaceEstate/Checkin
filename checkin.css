@@ -118,6 +118,46 @@ body {
 }
 
 /* ============================================================
+   SELETTORE LINGUA — bandierine in alto nell'header, popolate da
+   i18n.js (inizializzaSelettoreLingua). Restano visibili e cliccabili
+   per tutta la durata del check-in, non solo nello step iniziale.
+   ============================================================ */
+.language-selector {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.lang-flag {
+  font-size: 1.4rem;
+  line-height: 1;
+  background: rgba(255, 255, 255, 0.18);
+  border: 2px solid transparent;
+  border-radius: 10px;
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.lang-flag:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+.lang-flag:active {
+  transform: translateY(0) scale(0.96);
+}
+
+.lang-flag.active {
+  border-color: var(--color-white);
+  background: rgba(255, 255, 255, 0.35);
+}
+
+/* ============================================================
    PROGRESS BAR — nuovo, valori aggiornati via JS
    ============================================================ */
 .progress-wrapper {
