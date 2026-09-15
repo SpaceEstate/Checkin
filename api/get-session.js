@@ -2,11 +2,37 @@ import Stripe from "stripe";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
+// Testi guest-facing in IT/EN/DE. Il valore di "appartamento" (e quindi
+// "nome": Torre/Corte, nomi propri) resta sempre quello italiano: qui si
+// traduce solo la descrizione mostrata all'ospite sulla pagina di successo.
+const TESTI = {
+  it: {
+    fallback: 'Codice non disponibile, contatta il proprietario',
+    corte: 'Appartamento con 1 camera da letto',
+    torre: 'Appartamento con 2 camere da letto'
+  },
+  en: {
+    fallback: 'Code not available, please contact the owner',
+    corte: 'Apartment with 1 bedroom',
+    torre: 'Apartment with 2 bedrooms'
+  },
+  de: {
+    fallback: 'Code nicht verfügbar, bitte kontaktieren Sie den Eigentümer',
+    corte: 'Wohnung mit 1 Schlafzimmer',
+    torre: 'Wohnung mit 2 Schlafzimmern'
+  }
+};
+
+function testiLingua(lang) {
+  return TESTI[lang] || TESTI.it;
+}
+
 // Codici cassetta: letti SOLO qui, lato server, e restituiti solo dopo aver
 // verificato che il pagamento sia "paid" (vedi sotto). Prima erano scritti in
 // chiaro nel frontend pubblico — chiunque poteva leggerli senza pagare.
-function determinaCodiciCassetta(appartamento) {
-  const fallback = [{ codice: null, nome: 'N/A', descrizione: 'Codice non disponibile, contatta il proprietario' }];
+function determinaCodiciCassetta(appartamento, lang) {
+  const T = testiLingua(lang);
+  const fallback = [{ codice: null, nome: 'N/A', descrizione: T.fallback }];
   if (!appartamento) return fallback;
 
   const appartamentoLower = appartamento.toLowerCase();
@@ -16,7 +42,7 @@ function determinaCodiciCassetta(appartamento) {
     codici.push({
       codice: process.env.CODICE_CASSETTA_CORTE || null,
       nome: 'Corte',
-      descrizione: 'Appartamento con 1 camera da letto'
+      descrizione: T.corte
     });
   }
 
@@ -24,7 +50,7 @@ function determinaCodiciCassetta(appartamento) {
     codici.push({
       codice: process.env.CODICE_CASSETTA_TORRE || null,
       nome: 'Torre',
-      descrizione: 'Appartamento con 2 camere da letto'
+      descrizione: T.torre
     });
   }
 
@@ -47,9 +73,10 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { session_id } = req.query;
+    const { session_id, lang } = req.query;
+    const linguaRichiesta = ['it', 'en', 'de'].includes(lang) ? lang : 'it';
     
-    console.log("📡 Richiesta dati sessione:", session_id);
+    console.log("📡 Richiesta dati sessione:", session_id, "lingua:", linguaRichiesta);
 
     if (!session_id) {
       return res.status(400).json({ error: "session_id mancante" });
@@ -68,7 +95,7 @@ export default async function handler(req, res) {
         numeroNotti: "3", 
         totale: "9.00",
         status: "complete",
-        codiciCassetta: determinaCodiciCassetta("Appartamento Test")
+        codiciCassetta: determinaCodiciCassetta("Appartamento Test", linguaRichiesta)
       };
       
       return res.status(200).json(testData);
@@ -107,7 +134,7 @@ export default async function handler(req, res) {
       amount_total: (session.amount_total / 100).toFixed(2),
       // Calcolati qui, dopo la verifica payment_status === 'paid' sopra:
       // non arrivano mai al client prima che il pagamento sia confermato.
-      codiciCassetta: determinaCodiciCassetta(metadata.appartamento),
+      codiciCassetta: determinaCodiciCassetta(metadata.appartamento, linguaRichiesta),
       
       // Dati responsabile
       responsabile: {
