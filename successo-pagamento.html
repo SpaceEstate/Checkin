@@ -462,6 +462,11 @@
                     <span class="info-value">€${parseFloat(totale).toFixed(2)}</span>
                 </div>
             `;
+            // ✅ FIX: stesso bug di checkin.js — le etichette qui sopra hanno
+            // già gli attributi data-i18n, ma vanno effettivamente tradotte
+            // dopo l'inserimento nel DOM (lo sweep di impostaLingua() è già
+            // passato prima che questo blocco esistesse).
+            applicaTraduzioni(container);
         }
 
         // I codici arrivano già calcolati dal backend (api/get-session.js),
