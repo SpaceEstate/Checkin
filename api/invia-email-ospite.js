@@ -19,6 +19,163 @@ function maskEmail(email) {
   return `${maskedUser}@${domain}`;
 }
 
+// ------------------------------------------------------------------
+// i18n email ospite (IT/EN/DE). Questa è l'UNICA email tradotta: quella al
+// proprietario (api/genera-pdf-email.js) resta sempre in italiano, così
+// come Google Sheets e il PDF per la Questura — la lingua qui sotto riguarda
+// solo cosa legge l'ospite.
+// ------------------------------------------------------------------
+const LINGUE_VALIDE = ['it', 'en', 'de'];
+
+const EMAIL_TESTI = {
+  it: {
+    headerTitle: 'Benvenuto a Space Estate!',
+    headerSubtitle: 'Il tuo soggiorno sta per iniziare',
+    guestFallback: 'Ospite',
+    thanksText: 'Grazie per aver completato il check-in e il pagamento della tassa di soggiorno. Siamo felici di accoglierti nella nostra struttura!',
+    codeTitleSingle: '🔑 Codice Cassetta Sicurezza',
+    codeTitleMulti: '🔑 Codici Cassette Sicurezza',
+    codeNoteSingle: 'Conserva questo codice con cura',
+    bothApartmentsNote: 'Hai prenotato entrambi gli appartamenti',
+    infoTitle: '📋 Dettagli della tua prenotazione',
+    labelCheckin: 'Data Check-in:',
+    labelApartment: 'Appartamento:',
+    labelGuests: 'Numero Ospiti:',
+    labelNights: 'Numero Notti:',
+    labelTaxPaid: 'Tassa Soggiorno Pagata:',
+    instructionsTitle: '📍 Come accedere alla struttura',
+    addressPropertyLabel: '📍 Indirizzo Struttura:',
+    addressParkingLabel: '📍 Indirizzo Parcheggio:',
+    hoursLabel: '⏰ Orari:',
+    checkinHoursText: (open, close) => `Check-in: dalle ${open} alle ${close}`,
+    checkoutHoursText: (close) => `Check-out: entro le ${close}`,
+    instruction1: 'Entrando dal cancello principale, dirigiti verso la palazzina sulla sinistra. Troverai due porte-finestre al piano terra, come mostrato in foto.',
+    instruction2: "La cassetta si trova nella nicchia accanto all'ultimo scuro in legno sulla destra della facciata (vedi foto cerchiata in giallo).",
+    instruction3: 'La sosta all\'interno della proprietà è consentita esclusivamente per le operazioni di carico e scarico dei bagagli.',
+    galleryTitle: "📸 Foto di riferimento per l'accesso",
+    photo1Caption: '1. Ingresso della proprietà',
+    photo2Caption: (multi, codes) => `2. Cassetta di sicurezza con ${multi ? 'codici' : 'codice'} ${codes}`,
+    photo3Caption: (multi) => `3. Ubicazione esatta ${multi ? 'delle cassette' : 'della cassetta'}`,
+    closingText: 'Per qualsiasi necessità o domanda, non esitare a contattarci. Ti auguriamo un soggiorno piacevole e confortevole! 🌟',
+    footerTagline: 'La Columbera - Appartamenti turistici',
+    footerAutomated: 'Questa è una email automatica, per favore non rispondere direttamente.',
+    footerGenerated: (data) => `Generata il ${data}`,
+    subjectLine: (appartamento, data) => `Benvenuto a Space Estate - ${appartamento} - Check-in ${data}`,
+    genericName: 'Generico',
+    fallbackDescrizione: 'Codice non disponibile, contatta il proprietario',
+    corteDescrizione: 'Appartamento con 1 camera da letto',
+    torreDescrizione: 'Appartamento con 2 camere da letto',
+    corteNomeCompleto: 'La Columbera - Corte',
+    torreNomeCompleto: 'La Columbera - Torre'
+  },
+  en: {
+    headerTitle: 'Welcome to Space Estate!',
+    headerSubtitle: 'Your stay is about to begin',
+    guestFallback: 'Guest',
+    thanksText: "Thank you for completing check-in and paying the tourist tax. We're delighted to welcome you to our property!",
+    codeTitleSingle: '🔑 Security Lockbox Code',
+    codeTitleMulti: '🔑 Security Lockbox Codes',
+    codeNoteSingle: 'Keep this code somewhere safe',
+    bothApartmentsNote: 'You have booked both apartments',
+    infoTitle: '📋 Your booking details',
+    labelCheckin: 'Check-in date:',
+    labelApartment: 'Apartment:',
+    labelGuests: 'Number of guests:',
+    labelNights: 'Number of nights:',
+    labelTaxPaid: 'Tourist tax paid:',
+    instructionsTitle: '📍 How to get into the property',
+    addressPropertyLabel: '📍 Property address:',
+    addressParkingLabel: '📍 Parking address:',
+    hoursLabel: '⏰ Hours:',
+    checkinHoursText: (open, close) => `Check-in: from ${open} to ${close}`,
+    checkoutHoursText: (close) => `Check-out: by ${close}`,
+    instruction1: "Through the main gate, head to the building on the left. You'll find two French doors on the ground floor, as shown in the photo.",
+    instruction2: 'The lockbox is in the recess next to the last wooden shutter on the right side of the façade (see the photo, circled in yellow).',
+    instruction3: 'Parking inside the property is allowed only for loading and unloading luggage.',
+    galleryTitle: '📸 Reference photos for access',
+    photo1Caption: '1. Entrance to the property',
+    photo2Caption: (multi, codes) => `2. Lockbox with ${multi ? 'codes' : 'code'} ${codes}`,
+    photo3Caption: (multi) => `3. Exact location of the ${multi ? 'lockboxes' : 'lockbox'}`,
+    closingText: "If you need anything or have any questions, please don't hesitate to contact us. We wish you a pleasant and comfortable stay! 🌟",
+    footerTagline: 'La Columbera - Holiday apartments',
+    footerAutomated: 'This is an automated email, please do not reply directly to it.',
+    footerGenerated: (data) => `Generated on ${data}`,
+    subjectLine: (appartamento, data) => `Welcome to Space Estate - ${appartamento} - Check-in ${data}`,
+    genericName: 'Generic',
+    fallbackDescrizione: 'Code not available, please contact the owner',
+    corteDescrizione: 'Apartment with 1 bedroom',
+    torreDescrizione: 'Apartment with 2 bedrooms',
+    corteNomeCompleto: 'La Columbera - Corte',
+    torreNomeCompleto: 'La Columbera - Torre'
+  },
+  de: {
+    headerTitle: 'Willkommen bei Space Estate!',
+    headerSubtitle: 'Ihr Aufenthalt beginnt bald',
+    guestFallback: 'Gast',
+    thanksText: 'Vielen Dank für den Abschluss des Check-ins und die Zahlung der Kurtaxe. Wir freuen uns, Sie in unserer Unterkunft begrüßen zu dürfen!',
+    codeTitleSingle: '🔑 Code für die Sicherheitsbox',
+    codeTitleMulti: '🔑 Codes für die Sicherheitsboxen',
+    codeNoteSingle: 'Bewahren Sie diesen Code sorgfältig auf',
+    bothApartmentsNote: 'Sie haben beide Wohnungen gebucht',
+    infoTitle: '📋 Details Ihrer Buchung',
+    labelCheckin: 'Check-in-Datum:',
+    labelApartment: 'Wohnung:',
+    labelGuests: 'Anzahl der Gäste:',
+    labelNights: 'Anzahl der Nächte:',
+    labelTaxPaid: 'Bezahlte Kurtaxe:',
+    instructionsTitle: '📍 So gelangen Sie zur Unterkunft',
+    addressPropertyLabel: '📍 Adresse der Unterkunft:',
+    addressParkingLabel: '📍 Adresse des Parkplatzes:',
+    hoursLabel: '⏰ Zeiten:',
+    checkinHoursText: (open, close) => `Check-in: von ${open} bis ${close}`,
+    checkoutHoursText: (close) => `Check-out: bis ${close}`,
+    instruction1: 'Gehen Sie durch das Haupttor zum Gebäude auf der linken Seite. Im Erdgeschoss finden Sie zwei Fenstertüren, wie auf dem Foto gezeigt.',
+    instruction2: 'Die Box befindet sich in der Nische neben dem letzten Holzfensterladen auf der rechten Seite der Fassade (siehe gelb umkreistes Foto).',
+    instruction3: 'Das Parken innerhalb des Grundstücks ist ausschließlich zum Be- und Entladen von Gepäck gestattet.',
+    galleryTitle: '📸 Referenzfotos für den Zugang',
+    photo1Caption: '1. Eingang zur Unterkunft',
+    photo2Caption: (multi, codes) => `2. Sicherheitsbox mit ${multi ? 'Codes' : 'Code'} ${codes}`,
+    photo3Caption: (multi) => `3. Genaue Lage der ${multi ? 'Sicherheitsboxen' : 'Sicherheitsbox'}`,
+    closingText: 'Bei Fragen oder Anliegen jeglicher Art zögern Sie nicht, uns zu kontaktieren. Wir wünschen Ihnen einen angenehmen und komfortablen Aufenthalt! 🌟',
+    footerTagline: 'La Columbera - Ferienwohnungen',
+    footerAutomated: 'Dies ist eine automatische E-Mail, bitte antworten Sie nicht direkt darauf.',
+    footerGenerated: (data) => `Erstellt am ${data}`,
+    subjectLine: (appartamento, data) => `Willkommen bei Space Estate - ${appartamento} - Check-in ${data}`,
+    genericName: 'Allgemein',
+    fallbackDescrizione: 'Code nicht verfügbar, bitte kontaktieren Sie den Eigentümer',
+    corteDescrizione: 'Wohnung mit 1 Schlafzimmer',
+    torreDescrizione: 'Wohnung mit 2 Schlafzimmern',
+    corteNomeCompleto: 'La Columbera - Corte',
+    torreNomeCompleto: 'La Columbera - Torre'
+  }
+};
+
+function linguaValida(lingua) {
+  return LINGUE_VALIDE.includes(lingua) ? lingua : 'it';
+}
+
+// Locale BCP47 per Intl/toLocaleDateString (usato per Data Check-in e per il
+// timestamp "Generata il" in fondo all'email).
+function localeEmail(lingua) {
+  return { it: 'it-IT', en: 'en-GB', de: 'de-DE' }[lingua] || 'it-IT';
+}
+
+// Nome appartamento mostrato all'ospite nell'email. Il valore che arriva in
+// dati.appartamento resta sempre quello italiano (coerente con Google
+// Sheets e il PDF per il proprietario): qui si traduce solo l'etichetta.
+function nomeAppartamentoEmail(valoreOriginale, lingua) {
+  const T = EMAIL_TESTI[linguaValida(lingua)];
+  if (lingua === 'it' || !valoreOriginale) return valoreOriginale;
+  const parti = valoreOriginale.includes(' + ') ? valoreOriginale.split(' + ') : [valoreOriginale];
+  const traduciSingolo = (val) => {
+    const v = val.toLowerCase();
+    if (v.includes('torre')) return `${T.torreNomeCompleto}, ${T.torreDescrizione}`;
+    if (v.includes('corte')) return `${T.corteNomeCompleto}, ${T.corteDescrizione}`;
+    return val.trim();
+  };
+  return parti.map(p => traduciSingolo(p.trim())).join(' + ');
+}
+
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "https://spaceestate.github.io");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -65,19 +222,22 @@ export default async function handler(req, res) {
     console.log('📬 Destinatario:', maskEmail(emailOspite));
     console.log('📊 Appartamento:', datiPrenotazione.appartamento);
 
-    const codiciCassetta = determinaCodiciCassetta(datiPrenotazione.appartamento);
+    const lingua = linguaValida(datiPrenotazione.lingua);
+    console.log('🌐 Lingua email ospite:', lingua);
+
+    const codiciCassetta = determinaCodiciCassetta(datiPrenotazione.appartamento, lingua);
     console.log('🔑 Codici cassetta generati:', codiciCassetta.length);
 
     if (typeof datiPrenotazione.totale === 'string') {
       datiPrenotazione.totale = parseFloat(datiPrenotazione.totale);
     }
 
-    const htmlContent = generaHTMLEmailOspite(datiPrenotazione, codiciCassetta);
+    const htmlContent = generaHTMLEmailOspite(datiPrenotazione, codiciCassetta, lingua);
 
     const allegati = await caricaAllegatiFoto();
     console.log(`📎 Foto caricate: ${allegati.length}`);
 
-    await inviaEmailConNodemailer(emailOspite, datiPrenotazione, htmlContent, allegati);
+    await inviaEmailConNodemailer(emailOspite, datiPrenotazione, htmlContent, allegati, lingua);
 
     console.log('✅ Email ospite inviata con successo');
     console.log('📧 === FINE INVIO EMAIL OSPITE ===');
@@ -163,11 +323,12 @@ async function caricaAllegatiFoto() {
 // solo server). Prima erano scritti qui in chiaro E duplicati anche nel
 // frontend pubblico (checkin.js, successo-pagamento.html) — vedi anche
 // api/get-session.js, che ora è l'unica altra copia di questa logica.
-function determinaCodiciCassetta(appartamento) {
+function determinaCodiciCassetta(appartamento, lingua) {
+  const T = EMAIL_TESTI[linguaValida(lingua)];
   const generico = [{
     codice: null,
-    nome: 'Generico',
-    descrizione: 'Codice non disponibile, contatta il proprietario'
+    nome: T.genericName,
+    descrizione: T.fallbackDescrizione
   }];
 
   if (!appartamento) {
@@ -182,7 +343,7 @@ function determinaCodiciCassetta(appartamento) {
     codici.push({
       codice: process.env.CODICE_CASSETTA_CORTE || null,
       nome: 'Corte',
-      descrizione: 'Appartamento con 1 camera da letto'
+      descrizione: T.corteDescrizione
     });
   }
 
@@ -190,7 +351,7 @@ function determinaCodiciCassetta(appartamento) {
     codici.push({
       codice: process.env.CODICE_CASSETTA_TORRE || null,
       nome: 'Torre',
-      descrizione: 'Appartamento con 2 camere da letto'
+      descrizione: T.torreDescrizione
     });
   }
 
@@ -202,8 +363,11 @@ function determinaCodiciCassetta(appartamento) {
   return codici;
 }
 
-function generaHTMLEmailOspite(dati, codiciCassetta) {
-  const dataFormattata = new Date(dati.dataCheckin).toLocaleDateString('it-IT', {
+function generaHTMLEmailOspite(dati, codiciCassetta, lingua) {
+  const L = linguaValida(lingua);
+  const T = EMAIL_TESTI[L];
+
+  const dataFormattata = new Date(dati.dataCheckin).toLocaleDateString(localeEmail(L), {
     weekday: 'long',
     year: 'numeric',
     month: 'long',
@@ -221,17 +385,17 @@ function generaHTMLEmailOspite(dati, codiciCassetta) {
   if (codiciCassetta.length === 1) {
     codiciHTML = `
       <div class="code-section">
-        <div class="code-title">🔑 Codice Cassetta Sicurezza</div>
+        <div class="code-title">${T.codeTitleSingle}</div>
         <div class="code-subtitle">${codiciCassetta[0].nome}</div>
         <div class="code-box">${codiciCassetta[0].codice}</div>
-        <div class="code-note">Conserva questo codice con cura</div>
+        <div class="code-note">${T.codeNoteSingle}</div>
       </div>
     `;
   } else {
     codiciHTML = `
       <div class="code-section">
-        <div class="code-title">🔑 Codici Cassette Sicurezza</div>
-        <div class="code-note" style="margin-bottom: 20px;">Hai prenotato entrambi gli appartamenti</div>
+        <div class="code-title">${T.codeTitleMulti}</div>
+        <div class="code-note" style="margin-bottom: 20px;">${T.bothApartmentsNote}</div>
         
         ${codiciCassetta.map(cassetta => `
           <div class="code-sub-section">
@@ -248,7 +412,7 @@ function generaHTMLEmailOspite(dati, codiciCassetta) {
 
   return `
     <!DOCTYPE html>
-    <html lang="it">
+    <html lang="${L}">
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -364,51 +528,50 @@ function generaHTMLEmailOspite(dati, codiciCassetta) {
     <body>
       <div class="container">
         <div class="header">
-          <h1>Benvenuto a Space Estate!</h1>
-          <p>Il tuo soggiorno sta per iniziare</p>
+          <h1>${T.headerTitle}</h1>
+          <p>${T.headerSubtitle}</p>
         </div>
         
         <div class="content">
           <p class="welcome-text">
-            Gentile <strong>${dati.ospiti?.[0]?.nome || 'Ospite'} ${dati.ospiti?.[0]?.cognome || ''}</strong>,
+            Gentile <strong>${dati.ospiti?.[0]?.nome || T.guestFallback} ${dati.ospiti?.[0]?.cognome || ''}</strong>,
           </p>
           
           <p>
-            Grazie per aver completato il check-in e il pagamento della tassa di soggiorno. 
-            Siamo felici di accoglierti nella nostra struttura!
+            ${T.thanksText}
           </p>
           
           ${codiciHTML}
           
           <div class="info-section">
-            <div class="info-title">📋 Dettagli della tua prenotazione</div>
+            <div class="info-title">${T.infoTitle}</div>
             <div class="info-item">
-              <span class="info-label">Data Check-in:</span>
+              <span class="info-label">${T.labelCheckin}</span>
               <span class="info-value">${dataFormattata}</span>
             </div>
             <div class="info-item">
-              <span class="info-label">Appartamento:</span>
-              <span class="info-value">${dati.appartamento || 'N/A'}</span>
+              <span class="info-label">${T.labelApartment}</span>
+              <span class="info-value">${nomeAppartamentoEmail(dati.appartamento, L) || 'N/A'}</span>
             </div>
             <div class="info-item">
-              <span class="info-label">Numero Ospiti:</span>
+              <span class="info-label">${T.labelGuests}</span>
               <span class="info-value">${dati.numeroOspiti || 0}</span>
             </div>
             <div class="info-item">
-              <span class="info-label">Numero Notti:</span>
+              <span class="info-label">${T.labelNights}</span>
               <span class="info-value">${dati.numeroNotti || 0}</span>
             </div>
             <div class="info-item">
-              <span class="info-label">Tassa Soggiorno Pagata:</span>
+              <span class="info-label">${T.labelTaxPaid}</span>
               <span class="info-value">€${totale.toFixed(2)}</span>
             </div>
           </div>
           
           <div class="instructions">
-            <h3>📍 Come accedere alla struttura</h3>
+            <h3>${T.instructionsTitle}</h3>
             
             <div class="address-block">
-              <strong>📍 Indirizzo Struttura:</strong>
+              <strong>${T.addressPropertyLabel}</strong>
               <p style="margin: 5px 0;">
                 Via Centrale, 48<br>
                 38123 Trento (TN)
@@ -416,7 +579,7 @@ function generaHTMLEmailOspite(dati, codiciCassetta) {
             </div>
 
             <div class="address-block">
-              <strong>📍 Indirizzo Parcheggio:</strong>
+              <strong>${T.addressParkingLabel}</strong>
               <p style="margin: 5px 0;">
                 Via Val Gola, 22<br>
                 38123 Trento (TN)
@@ -424,59 +587,58 @@ function generaHTMLEmailOspite(dati, codiciCassetta) {
             </div>
 
             <div class="address-block">
-              <strong>⏰ Orari:</strong>
+              <strong>${T.hoursLabel}</strong>
               <p style="margin: 5px 0;">
-                Check-in: dalle ${CHECKIN_OPEN_TIME} alle ${CHECKIN_CLOSE_TIME}<br>
-                Check-out: entro le ${CHECKOUT_CLOSE_TIME}
+                ${T.checkinHoursText(CHECKIN_OPEN_TIME, CHECKIN_CLOSE_TIME)}<br>
+                ${T.checkoutHoursText(CHECKOUT_CLOSE_TIME)}
               </p>
             </div>
 
             <p style="margin-top: 20px;">
-              • Entrando dal cancello principale, dirigiti verso la palazzina sulla sinistra. Troverai due porte-finestre al piano terra, come mostrato in foto.
+              • ${T.instruction1}
             </p>
 
             <p>
-              • La cassetta si trova nella nicchia accanto all'ultimo scuro in legno sulla destra della facciata (vedi foto cerchiata in giallo).
+              • ${T.instruction2}
             </p>
 
             <p>
-              • La sosta all'interno della proprietà è consentita esclusivamente per le operazioni di carico e scarico dei bagagli.
+              • ${T.instruction3}
             </p>
           </div>
 
           <div class="photo-gallery">
-            <h3>📸 Foto di riferimento per l'accesso</h3>
+            <h3>${T.galleryTitle}</h3>
             
             <div class="photo-item">
               <img src="cid:ingresso_proprieta" alt="Ingresso Proprietà">
-              <p class="photo-caption">1. Ingresso della proprietà</p>
+              <p class="photo-caption">${T.photo1Caption}</p>
             </div>
 
             <div class="photo-item">
               <img src="cid:cassetta_sicurezza" alt="Cassetta di Sicurezza">
-              <p class="photo-caption">2. Cassetta di sicurezza con ${codiciCassetta.length > 1 ? 'codici' : 'codice'} ${codiciCassetta.map(c => c.codice).join(' e ')}</p>
+              <p class="photo-caption">${T.photo2Caption(codiciCassetta.length > 1, codiciCassetta.map(c => c.codice).join(' / '))}</p>
             </div>
 
             <div class="photo-item">
               <img src="cid:ubicazione_cassetta" alt="Ubicazione Cassetta">
-              <p class="photo-caption">3. Ubicazione esatta ${codiciCassetta.length > 1 ? 'delle cassette' : 'della cassetta'}</p>
+              <p class="photo-caption">${T.photo3Caption(codiciCassetta.length > 1)}</p>
             </div>
           </div>
           
           <p style="margin-top: 30px; color: #8b7d6b;">
-            Per qualsiasi necessità o domanda, non esitare a contattarci. 
-            Ti auguriamo un soggiorno piacevole e confortevole! 🌟
+            ${T.closingText}
           </p>
         </div>
         
         <div class="footer">
           <p><strong>Space Estate</strong></p>
-          <p>La Columbera - Appartamenti turistici</p>
+          <p>${T.footerTagline}</p>
           <p style="margin-top: 15px; font-size: 12px;">
-            Questa è una email automatica, per favore non rispondere direttamente.
+            ${T.footerAutomated}
           </p>
           <p style="font-size: 12px;">
-            Generata il ${new Date().toLocaleString('it-IT')}
+            ${T.footerGenerated(new Date().toLocaleString(localeEmail(L)))}
           </p>
         </div>
       </div>
@@ -485,7 +647,7 @@ function generaHTMLEmailOspite(dati, codiciCassetta) {
   `;
 }
 
-async function inviaEmailConNodemailer(emailDestinatario, dati, htmlContent, allegati) {
+async function inviaEmailConNodemailer(emailDestinatario, dati, htmlContent, allegati, lingua) {
   const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
@@ -494,9 +656,14 @@ async function inviaEmailConNodemailer(emailDestinatario, dati, htmlContent, all
     }
   });
 
+  const L = linguaValida(lingua);
+  const T = EMAIL_TESTI[L];
   const totale = typeof dati.totale === 'string' ? parseFloat(dati.totale) : (dati.totale || 0);
 
-  const oggetto = `Benvenuto a Space Estate - ${dati.appartamento || 'Appartamento'} - Check-in ${new Date(dati.dataCheckin).toLocaleDateString('it-IT')}`;
+  const oggetto = T.subjectLine(
+    nomeAppartamentoEmail(dati.appartamento, L) || 'Appartamento',
+    new Date(dati.dataCheckin).toLocaleDateString(localeEmail(L))
+  );
 
   const mailOptions = {
     from: process.env.EMAIL_USER,
