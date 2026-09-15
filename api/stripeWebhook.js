@@ -151,6 +151,7 @@ async function processPayment(event, requestId) {
       tipoGruppo: metadata.tipoGruppo || null,
       totale: parseFloat(metadata.totale) || 0,
       timestamp: metadata.timestamp || new Date().toISOString(),
+      lingua: metadata.lingua || 'it',
       ospiti: [{
         numero: 1,
         cognome: metadata.resp_cognome || '',
@@ -174,6 +175,9 @@ async function processPayment(event, requestId) {
   }
   if (!Array.isArray(datiCompleti.documenti)) {
     datiCompleti.documenti = [];
+  }
+  if (!['it', 'en', 'de'].includes(datiCompleti.lingua)) {
+    datiCompleti.lingua = metadata.lingua || 'it';
   }
 
   console.log(`\n📊 [${requestId}] Dati pronti per invio:`);
