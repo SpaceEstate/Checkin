@@ -956,6 +956,15 @@ function preparaRiepilogo(mantieniPosizione) {
   console.log('📋 === FINE PREPARAZIONE RIEPILOGO ===');
   
   aggiornaBottonePagamento(totale);
+
+  // ✅ FIX: i blocchi appena inseriti (dettagli soggiorno, ospiti, totale,
+  // pulsante indietro) hanno gli attributi data-i18n già pronti, ma finché
+  // nessuno passa a ritradurre il DOM restano con il testo italiano scritto
+  // nel template. Per gli step ospite questo sweep veniva già fatto in
+  // generaStepOspiti(); qui mancava, quindi al primo caricamento del
+  // riepilogo (non solo al cambio lingua) il testo statico restava in
+  // italiano anche con EN/DE selezionato.
+  applicaTraduzioni(document);
   
   if (!mantieniPosizione) {
     setTimeout(() => {
