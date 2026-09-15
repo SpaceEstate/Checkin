@@ -58,9 +58,17 @@ export default async function handler(req, res) {
       ospiti = [],
       timestamp,
       tempSessionId, // ✅ ID sessione temporanea per recuperare documenti
+      lingua, // Lingua scelta dall'ospite nel form (it/en/de): guida la lingua
+              // della pagina di pagamento Stripe e, più avanti, dell'email di
+              // benvenuto. Non tocca in alcun modo Google Sheets, il PDF per
+              // il proprietario o la comunicazione alla Questura, che restano
+              // sempre in italiano.
       successUrl,
       cancelUrl
     } = req.body;
+
+    const LINGUE_VALIDE = ['it', 'en', 'de'];
+    const linguaOspite = LINGUE_VALIDE.includes(lingua) ? lingua : 'it';
 
     // Validazione dati essenziali (il totale non è più tra i campi richiesti dal
     // client: si calcola qui sotto e quel valore, non il suo, è quello usato)
@@ -113,6 +121,7 @@ export default async function handler(req, res) {
       tipoGruppo: tipoGruppo || '',
       totale: totaleServer.toString(),
       timestamp: timestamp || new Date().toISOString(),
+      lingua: linguaOspite,
       
       // ⭐ CHIAVE: Salva solo il temp_session_id (circa 30 caratteri)
       temp_session_id: tempSessionId || '',
@@ -148,7 +157,7 @@ export default async function handler(req, res) {
       payment_method_types: ["card"],
       mode: "payment",
       customer_email: responsabile.email || undefined,
-      locale: 'it',
+      locale: linguaOspite, // Stripe accetta 'it' | 'en' | 'de' come codici di locale diretti
       billing_address_collection: 'auto',
       
       payment_intent_data: {
