@@ -53,7 +53,7 @@ function aggiornaMaxOspiti() {
   }
 
   if (valoreResettato && typeof showNotification === 'function') {
-    showNotification(`Con l'appartamento selezionato il massimo è ${max} ospiti. Seleziona di nuovo il numero.`, 'info');
+    showNotification(t('notif.maxOspiti', { max }), 'info');
   }
 }
 
@@ -129,12 +129,14 @@ function precompilaDatiPrenotazione(dati) {
   
   const stepHeader = document.querySelector('#step-1 .step-subtitle');
   if (stepHeader) {
+    const sottoChiave = dati.numeroOspiti > 1 ? 'verify.selectGroupType' : 'verify.reviewAndProceed';
     stepHeader.innerHTML = `
-      <span style="color: #27ae60; font-weight: 600;">✓ Dati prenotazione verificati</span><br>
-      <span style="font-size: 0.9rem; color: #a0927f;">
-        ${dati.numeroOspiti > 1 ? 'Seleziona il tipo di gruppo' : 'Verifica i dati e prosegui'}
+      <span style="color: #27ae60; font-weight: 600;" data-i18n="verify.confirmed">✓ Dati prenotazione verificati</span><br>
+      <span style="font-size: 0.9rem; color: #a0927f;" data-i18n="${sottoChiave}">
+        ${t(sottoChiave)}
       </span>
     `;
+    applicaTraduzioni(stepHeader);
   }
   
   console.log('✅ Dati pre-compilati con successo');
@@ -178,7 +180,9 @@ function aggiornaProgressBar() {
 
   const percent = Math.round((currentIndex / totalSteps) * 100);
   progressFill.style.width = `${percent}%`;
-  progressLabel.textContent = `Passo ${currentIndex} di ${totalSteps}`;
+  progressLabel.setAttribute('data-i18n-key', 'progress.label');
+  progressLabel.setAttribute('data-i18n-params', JSON.stringify({ current: currentIndex, total: totalSteps }));
+  progressLabel.textContent = t('progress.label', { current: currentIndex, total: totalSteps });
 }
 
 // === FUNZIONI UTILITÀ ===
@@ -222,9 +226,12 @@ function calcolaTotale() {
 }
 
 function formatDataItaliana(dataISO) {
+  // Nome storico invariato per non toccare gli altri punti di chiamata;
+  // il formato ora segue la lingua selezionata dall'ospite (vedi i18n.js).
   if (!dataISO) return 'N/A';
   const data = new Date(dataISO);
-  return data.toLocaleDateString('it-IT', {
+  if (isNaN(data.getTime())) return 'N/A';
+  return data.toLocaleDateString(localeCorrente(), {
     weekday: 'long',
     year: 'numeric',
     month: 'long',
@@ -262,7 +269,7 @@ function showNotification(message, type = 'info') {
 // Modale di conferma personalizzata, al posto del confirm() nativo del
 // browser (incoerente tra i browser mobile, in particolare quelli in-app
 // come Gmail/Booking/Airbnb). Ritorna una Promise<boolean>.
-function showConfirm(message, { confermaLabel = 'Conferma', annullaLabel = 'Annulla' } = {}) {
+function showConfirm(message, { confermaLabel = t('confirm.conferma'), annullaLabel = t('confirm.annulla') } = {}) {
   return new Promise(resolve => {
     document.querySelectorAll('.confirm-overlay').forEach(el => el.remove());
 
@@ -342,20 +349,20 @@ window.verificaPrenotazione = async function() {
   const numeroPrenotazione = input?.value?.trim();
   
   if (!numeroPrenotazione) {
-    showNotification('Inserisci un numero di prenotazione', 'error');
+    showNotification(t('notif.numeroMancante'), 'error');
     input?.focus();
     return;
   }
   
   const btn = document.querySelector('#step-0 .btn-primary');
-  const originalText = btn?.innerHTML || 'Verifica e continua →';
+  const originalText = btn?.innerHTML || t('step0.verifyBtn');
   if (btn) {
     btn.disabled = true;
-    btn.innerHTML = '⏳ Verifica in corso...';
+    btn.innerHTML = t('step0.verifyingBtn');
   }
   
   try {
-    showNotification('🔍 Ricerca prenotazione in corso...', 'info');
+    showNotification(t('notif.ricercaInCorso'), 'info');
     
     const response = await fetch(`${API_BASE_URL}/verifica-prenotazione`, {
       method: 'POST',
@@ -368,14 +375,14 @@ window.verificaPrenotazione = async function() {
     const result = await response.json();
     
     if (result.found && result.dati) {
-      showNotification('✅ Prenotazione trovata!', 'success');
+      showNotification(t('notif.prenotazioneTrovata'), 'success');
       precompilaDatiPrenotazione(result.dati);
       window.datiPrecompilati = true;
       currentStep = 1;
       mostraStepCorrente();
     } else {
       // RESTA SULLA SCHERMATA - NON VA AVANTI
-      showNotification('❌ Numero di prenotazione non trovato. Verifica il codice o procedi con inserimento manuale.', 'error');
+      showNotification(t('notif.prenotazioneNonTrovata'), 'error');
       if (btn) {
         btn.disabled = false;
         btn.innerHTML = originalText;
@@ -384,7 +391,7 @@ window.verificaPrenotazione = async function() {
     }
   } catch (error) {
     console.error('Errore verifica prenotazione:', error);
-    showNotification('Errore nella verifica. Riprova o procedi con inserimento manuale.', 'error');
+    showNotification(t('notif.erroreVerifica'), 'error');
     if (btn) {
       btn.disabled = false;
       btn.innerHTML = originalText;
@@ -403,7 +410,7 @@ window.saltaVerifica = function() {
   window.datiPrecompilati = false;
   currentStep = 1;
   mostraStepCorrente();
-  showNotification('Compila manualmente i dati della prenotazione', 'info');
+  showNotification(t('notif.compilaManualmente'), 'info');
 }
 
 // Funzione per tornare alla verifica
@@ -411,7 +418,7 @@ window.tornaAVerifica = async function() {
   if (window.datiPrecompilati) {
     // Se i dati erano pre-compilati, chiedi conferma
     const confermato = await showConfirm(
-      'Vuoi tornare alla schermata di verifica? I dati precompilati rimarranno.'
+      t('confirm.tornaVerifica')
     );
     if (confermato) {
       currentStep = 0;
@@ -449,7 +456,7 @@ window.prossimoStep = function() {
       const summaryContent = document.getElementById('summary-content');
       if (!summaryContent) {
         console.error('❌ ERRORE CRITICO: #summary-content non trovato!');
-        showNotification('Errore nel caricamento del riepilogo. Ricarica la pagina.', 'error');
+        showNotification(t('notif.erroreRiepilogoCaricamento'), 'error');
         return;
       }
       
@@ -460,7 +467,7 @@ window.prossimoStep = function() {
       setTimeout(() => {
         if (summaryContent.children.length === 0) {
           console.error('❌ RIEPILOGO VUOTO DOPO preparaRiepilogo()!');
-          showNotification('Errore nella visualizzazione del riepilogo', 'error');
+          showNotification(t('notif.erroreRiepilogoVisualizzazione'), 'error');
         } else {
           console.log('✅ Riepilogo visualizzato con successo:', summaryContent.children.length, 'sezioni');
         }
@@ -493,7 +500,7 @@ function validaStep1() {
   const numNottiInput = document.getElementById("numero-notti");
   
   if (!dataCheckinInput?.value) {
-    showNotification("Seleziona la data di check-in", "error");
+    showNotification(t('valid.dataRichiesta'), "error");
     dataCheckinInput?.focus();
     return false;
   }
@@ -503,27 +510,27 @@ function validaStep1() {
   oggi.setHours(0, 0, 0, 0);
   
   if (!window.datiPrecompilati && dataScelta < oggi) {
-    showNotification("La data di check-in non può essere nel passato", "error");
+    showNotification(t('valid.dataPassato'), "error");
     dataCheckinInput?.focus();
     return false;
   }
 
   const appartamentiSelezionati = getAppartamentiSelezionati();
   if (appartamentiSelezionati.length === 0) {
-    showNotification("Seleziona almeno un appartamento", "error");
+    showNotification(t('valid.appartamentoRichiesto'), "error");
     document.getElementById('appartamento-group')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return false;
   }
 
   if (!numOspitiSelect?.value) {
-    showNotification("Seleziona il numero di ospiti", "error");
+    showNotification(t('valid.ospitiRichiesti'), "error");
     numOspitiSelect?.focus();
     return false;
   }
 
   const notti = parseInt(numNottiInput?.value) || 0;
   if (notti < 1) {
-    showNotification("Inserisci un numero di notti valido (minimo 1)", "error");
+    showNotification(t('valid.nottiNonValide'), "error");
     numNottiInput?.focus();
     return false;
   }
@@ -535,7 +542,7 @@ function validaStep1() {
   if (numeroOspiti > 1) {
     const tipoGruppoSelect = document.getElementById("tipo-gruppo");
     if (!tipoGruppoSelect?.value) {
-      showNotification("Seleziona il tipo di gruppo", "error");
+      showNotification(t('valid.tipoGruppoRichiesto'), "error");
       tipoGruppoSelect?.focus();
       return false;
     }
@@ -547,27 +554,27 @@ function validaStep1() {
 
 function validaStepOspite(numOspite) {
   const requiredFields = [
-    { name: `ospite${numOspite}_cognome`, label: "Cognome" },
-    { name: `ospite${numOspite}_nome`, label: "Nome" },
-    { name: `ospite${numOspite}_genere`, label: "Genere" },
-    { name: `ospite${numOspite}_nascita`, label: "Data di nascita" },
-    { name: `ospite${numOspite}_cittadinanza`, label: "Cittadinanza" },
-    { name: `ospite${numOspite}_luogo_nascita`, label: "Luogo di nascita" }
+    { name: `ospite${numOspite}_cognome`, label: t('field.cognome') },
+    { name: `ospite${numOspite}_nome`, label: t('field.nome') },
+    { name: `ospite${numOspite}_genere`, label: t('field.genere') },
+    { name: `ospite${numOspite}_nascita`, label: t('field.dataNascita') },
+    { name: `ospite${numOspite}_cittadinanza`, label: t('field.cittadinanza') },
+    { name: `ospite${numOspite}_luogo_nascita`, label: t('field.luogoNascita') }
   ];
 
   // ✅ CAMPI DOCUMENTO SOLO PER OSPITE 1
   if (numOspite === 1) {
     requiredFields.push(
-      { name: `ospite1_tipo_documento`, label: "Tipo documento" },
-      { name: `ospite1_numero_documento`, label: "Numero documento" },
-      { name: `ospite1_luogo_rilascio`, label: "Luogo rilascio documento" }
+      { name: `ospite1_tipo_documento`, label: t('field.tipoDocumento') },
+      { name: `ospite1_numero_documento`, label: t('field.numeroDocumento') },
+      { name: `ospite1_luogo_rilascio`, label: t('field.luogoRilascio') }
     );
   }
 
   for (const field of requiredFields) {
     const input = document.querySelector(`[name="${field.name}"]`);
     if (!input?.value?.trim()) {
-      showNotification(`${field.label} è obbligatorio per l'ospite ${numOspite}`, 'error');
+      showNotification(t('valid.campoObbligatorio', { campo: field.label, n: numOspite }), 'error');
       input?.focus();
       return false;
     }
@@ -578,7 +585,7 @@ function validaStepOspite(numOspite) {
     const comune = document.querySelector(`input[name="ospite${numOspite}_comune"]`)?.value?.trim();
     const provincia = document.querySelector(`select[name="ospite${numOspite}_provincia"]`)?.value;
     if (!comune || !provincia) {
-      showNotification(`Comune e provincia sono obbligatori per ospiti nati in Italia`, 'error');
+      showNotification(t('valid.comuneProvinciaObbligatori'), 'error');
       return false;
     }
   }
@@ -589,14 +596,14 @@ function validaStepOspite(numOspite) {
     if (nascita) {
       const eta = calcolaEta(nascita);
       if (eta < 18) {
-        showNotification("Il responsabile deve essere maggiorenne (18+ anni)", "error");
+        showNotification(t('valid.maggiorenne'), "error");
         return false;
       }
     }
     
     const fileInput = document.querySelector(`input[name="ospite1_documento_file"]`);
     if (!fileInput?.files?.length) {
-      showNotification(`È necessario caricare un documento per il responsabile`, 'error');
+      showNotification(t('valid.documentoRichiesto'), 'error');
       return false;
     }
   }
@@ -611,17 +618,17 @@ function validaPrenotazioneCompleta() {
   
   // Verifica dati base prenotazione
   if (!dataCheckin) {
-    showNotification('Data di check-in mancante', 'error');
+    showNotification(t('valid.dataMancante'), 'error');
     return false;
   }
   
   if (getAppartamentiSelezionati().length === 0) {
-    showNotification('Nessun appartamento selezionato', 'error');
+    showNotification(t('valid.appartamentoMancante'), 'error');
     return false;
   }
   
   if (!numeroOspiti || numeroOspiti < 1) {
-    showNotification('Numero ospiti non valido', 'error');
+    showNotification(t('valid.ospitiNonValidi'), 'error');
     return false;
   }
   
@@ -635,27 +642,27 @@ function validaPrenotazioneCompleta() {
     const luogoNascita = document.querySelector(`select[name="ospite${i}_luogo_nascita"]`)?.value;
     
     if (!cognome || !nome) {
-      showNotification(`Nome/cognome mancante per ospite ${i}`, 'error');
+      showNotification(t('valid.nomeCognomeMancante', { n: i }), 'error');
       return false;
     }
     
     if (!nascita) {
-      showNotification(`Data di nascita mancante per ${nome} ${cognome}`, 'error');
+      showNotification(t('valid.dataNascitaMancante', { nome, cognome }), 'error');
       return false;
     }
     
     if (!genere) {
-      showNotification(`Genere mancante per ${nome} ${cognome}`, 'error');
+      showNotification(t('valid.genereMancante', { nome, cognome }), 'error');
       return false;
     }
     
     if (!cittadinanza) {
-      showNotification(`Cittadinanza mancante per ${nome} ${cognome}`, 'error');
+      showNotification(t('valid.cittadinanzaMancante', { nome, cognome }), 'error');
       return false;
     }
     
     if (!luogoNascita) {
-      showNotification(`Luogo di nascita mancante per ${nome} ${cognome}`, 'error');
+      showNotification(t('valid.luogoNascitaMancante', { nome, cognome }), 'error');
       return false;
     }
     
@@ -665,7 +672,7 @@ function validaPrenotazioneCompleta() {
       const provincia = document.querySelector(`select[name="ospite${i}_provincia"]`)?.value;
       
       if (!comune || !provincia) {
-        showNotification(`Comune e provincia mancanti per ${nome} ${cognome} (nato in Italia)`, 'error');
+        showNotification(t('valid.comuneProvinciaMancanti', { nome, cognome }), 'error');
         return false;
       }
     }
@@ -677,14 +684,14 @@ function validaPrenotazioneCompleta() {
       const luogoRilascio = document.querySelector(`select[name="ospite1_luogo_rilascio"]`)?.value;
       
       if (!tipoDocumento || !numeroDocumento || !luogoRilascio) {
-        showNotification('Dati documento del responsabile incompleti', 'error');
+        showNotification(t('valid.documentoIncompleto'), 'error');
         return false;
       }
       
       // ✅ VERIFICA FILE CARICATO SOLO PER OSPITE 1
       const fileInput = document.querySelector(`input[name="ospite1_documento_file"]`);
       if (!fileInput?.files?.length) {
-        showNotification(`Documento mancante per il responsabile`, 'error');
+        showNotification(t('valid.documentoMancanteResponsabile'), 'error');
         return false;
       }
     }
@@ -709,106 +716,121 @@ function generaStepOspiti() {
     // ✅ CAMPI DOCUMENTO SOLO PER OSPITE 1
     let campiDocumento = '';
     
+    // Opzioni Paese/documento: il value inviato al backend resta SEMPRE il
+    // nome italiano (coerente con Google Sheets, PDF proprietario, Stripe);
+    // data-i18n-country/doctype permette a applicaTraduzioni() di aggiornare
+    // solo l'etichetta visibile se l'ospite cambia lingua più avanti.
+    const opzioniStati = stati.map(stato =>
+      `<option value="${stato}" data-i18n-country="${stato}">${traduciPaese(stato)}</option>`
+    ).join('');
+    const opzioniProvince = province.map(prov => `<option value="${prov}">${prov}</option>`).join('');
+
     if (i === 1) {
+      const opzioniDocumenti = tipiDocumento.map(tipo =>
+        `<option value="${tipo}" data-i18n-doctype="${tipo}">${traduciDocumento(tipo)}</option>`
+      ).join('');
+
       campiDocumento = `
         <div class="form-group">
-          <label class="form-label" for="ospite1_tipo_documento">Tipo documento *</label>
+          <label class="form-label" for="ospite1_tipo_documento" data-i18n="guest.tipoDocumento">Tipo documento *</label>
           <select id="ospite1_tipo_documento" name="ospite1_tipo_documento" class="form-select" required>
-            <option value="">Seleziona tipo documento</option>
-            ${tipiDocumento.map(tipo => `<option value="${tipo}">${tipo}</option>`).join('')}
+            <option value="" data-i18n="guest.selezionaTipoDocumento">Seleziona tipo documento</option>
+            ${opzioniDocumenti}
           </select>
         </div>
         <div class="form-group">
-          <label class="form-label" for="ospite1_numero_documento">Numero documento *</label>
+          <label class="form-label" for="ospite1_numero_documento" data-i18n="guest.numeroDocumento">Numero documento *</label>
           <input type="text" id="ospite1_numero_documento" name="ospite1_numero_documento" 
                  class="form-input" required placeholder="Es. AA1234567" maxlength="20" pattern="[A-Za-z0-9]+">
         </div>
         <div class="form-group">
-          <label class="form-label" for="ospite1_luogo_rilascio">Luogo rilascio documento *</label>
+          <label class="form-label" for="ospite1_luogo_rilascio" data-i18n="guest.luogoRilascio">Luogo rilascio documento *</label>
           <select id="ospite1_luogo_rilascio" name="ospite1_luogo_rilascio" class="form-select" required>
-            <option value="">Seleziona luogo rilascio</option>
-            ${stati.map(stato => `<option value="${stato}">${stato}</option>`).join('')}
+            <option value="" data-i18n="guest.selezionaLuogoRilascio">Seleziona luogo rilascio</option>
+            ${opzioniStati}
           </select>
         </div>
         <div class="document-section" style="grid-column: 1 / -1;">
-          <h3 class="document-title">📄 Documento di identità</h3>
-          <p class="document-subtitle">Carica una foto o una scansione PDF del documento (JPG, PNG o PDF)</p>
+          <h3 class="document-title" data-i18n="guest.documentoTitolo">📄 Documento di identità</h3>
+          <p class="document-subtitle" data-i18n="guest.documentoSottotitolo">Carica una foto o una scansione PDF del documento (JPG, PNG o PDF)</p>
           <div class="document-upload">
             <div class="upload-group">
-              <label for="ospite1_documento_file" class="upload-label">📎 Scegli file</label>
+              <label for="ospite1_documento_file" class="upload-label" data-i18n="guest.scegliFile">📎 Scegli file</label>
               <input type="file" id="ospite1_documento_file" name="ospite1_documento_file" 
                      class="upload-input" accept="image/*,.pdf" onchange="handleFileUpload(this, 1)">
             </div>
             <div class="camera-group">
-              <button type="button" class="camera-btn" onclick="openCamera(1)">📷 Fotografa documento</button>
+              <button type="button" class="camera-btn" onclick="openCamera(1)" data-i18n="guest.fotografaDocumento">📷 Fotografa documento</button>
             </div>
           </div>
           <div id="camera-preview-1" class="camera-preview" style="display: none;">
             <video id="camera-video-1" autoplay playsinline></video>
             <canvas id="camera-canvas-1" style="display: none;"></canvas>
             <div class="camera-controls">
-              <button type="button" class="capture-btn" onclick="capturePhoto(1)">📸 Scatta</button>
-              <button type="button" class="close-camera-btn" onclick="closeCamera(1)">✕ Chiudi</button>
+              <button type="button" class="capture-btn" onclick="capturePhoto(1)" data-i18n="guest.scatta">📸 Scatta</button>
+              <button type="button" class="close-camera-btn" onclick="closeCamera(1)" data-i18n="guest.chiudi">✕ Chiudi</button>
             </div>
           </div>
         </div>
       `;
     }
 
+    const titoloOspite = t('guest.title', { n: i }) + (i === 1 ? t('guest.responsabileTag') : '');
+
     stepDiv.innerHTML = `
       <div class="step-header">
-        <h2 class="step-title">Ospite ${i}${i === 1 ? ' (Responsabile)' : ''}</h2>
-        <p class="step-subtitle">Inserisci i dati dell'ospite</p>
+        <h2 class="step-title" data-i18n-key="guest.title" data-i18n-params='${JSON.stringify({ n: i })}'${i === 1 ? ' data-i18n-suffix="guest.responsabileTag"' : ''}>${titoloOspite}</h2>
+        <p class="step-subtitle" data-i18n="guest.subtitle">Inserisci i dati dell'ospite</p>
       </div>
       <div class="form-grid">
         <div class="form-group">
-          <label class="form-label" for="ospite${i}_cognome">Cognome *</label>
+          <label class="form-label" for="ospite${i}_cognome" data-i18n="guest.cognome">Cognome *</label>
           <input type="text" id="ospite${i}_cognome" name="ospite${i}_cognome" class="form-input" required maxlength="50">
         </div>
         <div class="form-group">
-          <label class="form-label" for="ospite${i}_nome">Nome *</label>
+          <label class="form-label" for="ospite${i}_nome" data-i18n="guest.nome">Nome *</label>
           <input type="text" id="ospite${i}_nome" name="ospite${i}_nome" class="form-input" required maxlength="50">
         </div>
         <div class="form-group">
-          <label class="form-label" for="ospite${i}_genere">Genere *</label>
+          <label class="form-label" for="ospite${i}_genere" data-i18n="guest.genere">Genere *</label>
           <select id="ospite${i}_genere" name="ospite${i}_genere" class="form-select" required>
-            <option value="">Seleziona genere</option>
-            <option value="M">Maschio</option>
-            <option value="F">Femmina</option>
+            <option value="" data-i18n="guest.selezionaGenere">Seleziona genere</option>
+            <option value="M" data-i18n="guest.maschio">Maschio</option>
+            <option value="F" data-i18n="guest.femmina">Femmina</option>
           </select>
         </div>
         <div class="form-group">
-          <label class="form-label" for="ospite${i}_nascita">Data di nascita *</label>
+          <label class="form-label" for="ospite${i}_nascita" data-i18n="guest.dataNascita">Data di nascita *</label>
           <input type="date" id="ospite${i}_nascita" name="ospite${i}_nascita" 
                  class="form-input" required max="${new Date().toISOString().split('T')[0]}" min="1900-01-01">
         </div>
         <div class="form-group">
-          <label class="form-label" for="ospite${i}_cittadinanza">Cittadinanza *</label>
+          <label class="form-label" for="ospite${i}_cittadinanza" data-i18n="guest.cittadinanza">Cittadinanza *</label>
           <select id="ospite${i}_cittadinanza" name="ospite${i}_cittadinanza" class="form-select" required>
-            <option value="">Seleziona cittadinanza</option>
-            ${stati.map(stato => `<option value="${stato}">${stato}</option>`).join('')}
+            <option value="" data-i18n="guest.selezionaCittadinanza">Seleziona cittadinanza</option>
+            ${opzioniStati}
           </select>
         </div>
         <div class="form-group">
-          <label class="form-label" for="ospite${i}_luogo_nascita">Luogo di nascita *</label>
+          <label class="form-label" for="ospite${i}_luogo_nascita" data-i18n="guest.luogoNascita">Luogo di nascita *</label>
           <select id="ospite${i}_luogo_nascita" name="ospite${i}_luogo_nascita" 
                   class="form-select" required onchange="toggleComuneProvincia(${i})">
-            <option value="">Seleziona luogo nascita</option>
-            ${stati.map(stato => `<option value="${stato}">${stato}</option>`).join('')}
+            <option value="" data-i18n="guest.selezionaLuogoNascita">Seleziona luogo nascita</option>
+            ${opzioniStati}
           </select>
         </div>
         <div id="comune-provincia-wrapper-${i}" style="display: none;" class="form-group full-width">
           <div class="form-row">
             <div class="form-group">
-              <label class="form-label" for="ospite${i}_comune">Comune *</label>
+              <label class="form-label" for="ospite${i}_comune" data-i18n="guest.comune">Comune *</label>
               <input type="text" id="ospite${i}_comune" name="ospite${i}_comune" 
-                     class="form-input" placeholder="Es. Napoli" maxlength="50">
+                     class="form-input" placeholder="Es. Napoli" data-i18n-placeholder="guest.comunePlaceholder" maxlength="50">
             </div>
             <div class="form-group">
-              <label class="form-label" for="ospite${i}_provincia">Provincia *</label>
+              <label class="form-label" for="ospite${i}_provincia" data-i18n="guest.provincia">Provincia *</label>
               <select id="ospite${i}_provincia" name="ospite${i}_provincia" class="form-select">
-                <option value="">Seleziona provincia</option>
-                ${province.map(prov => `<option value="${prov}">${prov}</option>`).join('')}
+                <option value="" data-i18n="guest.selezionaProvincia">Seleziona provincia</option>
+                ${opzioniProvince}
               </select>
             </div>
           </div>
@@ -817,18 +839,22 @@ function generaStepOspiti() {
       </div>
       
       <div class="button-group">
-        <button type="button" class="btn btn-secondary" onclick="indietroStep()">← Indietro</button>
-        <button type="button" class="btn btn-primary" onclick="prossimoStep()">
-          ${i === numeroOspiti ? 'Vai al riepilogo →' : 'Prossimo ospite →'}
+        <button type="button" class="btn btn-secondary" onclick="indietroStep()" data-i18n="guest.backBtn">← Indietro</button>
+        <button type="button" class="btn btn-primary" onclick="prossimoStep()" data-i18n="${i === numeroOspiti ? 'guest.nextBtnSummary' : 'guest.nextBtnMore'}">
+          ${i === numeroOspiti ? t('guest.nextBtnSummary') : t('guest.nextBtnMore')}
         </button>
       </div>
     `;
     form.insertBefore(stepDiv, stepFinal);
+    applicaTraduzioni(stepDiv);
   }
 }
 
 // === RIEPILOGO ===
-function preparaRiepilogo() {
+// mantieniPosizione=true viene usato quando la funzione è richiamata per
+// ri-tradurre il riepilogo dopo un cambio lingua (in quel caso non ha senso
+// far scattare di nuovo lo scroll automatico verso lo step).
+function preparaRiepilogo(mantieniPosizione) {
   console.log('📋 === PREPARAZIONE RIEPILOGO ===');
   
   const totale = calcolaTotale();
@@ -852,29 +878,29 @@ function preparaRiepilogo() {
   
   const appartamenti = getAppartamentiSelezionati();
   const appartamentoDisplay = appartamenti.length === 1 
-    ? appartamenti[0]
-    : appartamenti.join('<br>➕ ');
+    ? nomeAppartamentoTradotto(appartamenti[0])
+    : appartamenti.map(a => nomeAppartamentoTradotto(a)).join('<br>➕ ');
   
   const dataFormatted = formatDataItaliana(dataCheckin);
   
   console.log('📍 Dettagli:', { dataCheckin, appartamenti, numeroOspiti, numeroNotti });
   
   dettagliSection.innerHTML = `
-    <h3 style="font-size: 1.5rem; color: #8b7d6b; margin-bottom: 20px;">📍 Dettagli soggiorno</h3>
+    <h3 style="font-size: 1.5rem; color: #8b7d6b; margin-bottom: 20px;" data-i18n="summary.dettagliTitle">📍 Dettagli soggiorno</h3>
     <div class="summary-item">
-      <span>Data Check-in:</span>
+      <span data-i18n="summary.dataCheckin">Data Check-in:</span>
       <span><strong>${dataFormatted}</strong></span>
     </div>
     <div class="summary-item">
-      <span>Appartamento/i:</span>
+      <span data-i18n="summary.appartamenti">Appartamento/i:</span>
       <span><strong>${appartamentoDisplay}</strong></span>
     </div>
     <div class="summary-item">
-      <span>Numero ospiti:</span>
+      <span data-i18n="summary.numeroOspiti">Numero ospiti:</span>
       <span><strong>${numeroOspiti}</strong></span>
     </div>
     <div class="summary-item">
-      <span>Numero notti:</span>
+      <span data-i18n="summary.numeroNotti">Numero notti:</span>
       <span><strong>${numeroNotti}</strong></span>
     </div>
   `;
@@ -885,20 +911,22 @@ function preparaRiepilogo() {
   ospitiSection.className = 'summary-section';
   ospitiSection.style.marginTop = '20px';
   
-  let ospitiHTML = '<h3 style="font-size: 1.5rem; color: #8b7d6b; margin-bottom: 20px;">👥 Ospiti</h3>';
+  let ospitiHTML = '<h3 style="font-size: 1.5rem; color: #8b7d6b; margin-bottom: 20px;" data-i18n="summary.ospitiTitle">👥 Ospiti</h3>';
   
   for (let i = 1; i <= numeroOspiti; i++) {
     const cognome = document.querySelector(`input[name="ospite${i}_cognome"]`)?.value || '';
     const nome = document.querySelector(`input[name="ospite${i}_nome"]`)?.value || '';
     const nascita = document.querySelector(`input[name="ospite${i}_nascita"]`)?.value || '';
     const eta = nascita ? calcolaEta(nascita) : 0;
+    const etaChiave = eta >= 4 ? 'summary.etaSoggetta' : 'summary.etaEsente';
     
     ospitiHTML += `
       <div class="guest-summary" style="background: white; padding: 15px; border-radius: 10px; margin-bottom: 12px; border: 1px solid #e8dcc0;">
         <strong style="color: #8b7d6b; font-size: 1.05rem; display: block;">${cognome} ${nome}</strong>
-        ${i === 1 ? '<span style="color: #a67c52; font-size: 0.9rem; display: block;">(Responsabile)</span>' : ''}
-        <span class="age" style="color: #a0927f; font-size: 0.9rem; display: block; margin-top: 5px;">
-          Età: ${eta} anni ${eta >= 4 ? '(soggetto a tassa)' : '(esente)'}
+        ${i === 1 ? `<span style="color: #a67c52; font-size: 0.9rem; display: block;" data-i18n="summary.responsabile">(Responsabile)</span>` : ''}
+        <span class="age" style="color: #a0927f; font-size: 0.9rem; display: block; margin-top: 5px;"
+              data-i18n-key="${etaChiave}" data-i18n-params='${JSON.stringify({ eta })}'>
+          ${t(etaChiave, { eta })}
         </span>
       </div>
     `;
@@ -912,11 +940,11 @@ function preparaRiepilogo() {
   totaleSection.className = 'summary-section';
   totaleSection.style.marginTop = '20px';
   totaleSection.innerHTML = `
-    <h3 style="font-size: 1.5rem; color: #8b7d6b; margin-bottom: 20px;">💰 Totale tassa di soggiorno</h3>
+    <h3 style="font-size: 1.5rem; color: #8b7d6b; margin-bottom: 20px;" data-i18n="summary.totaleTitle">💰 Totale tassa di soggiorno</h3>
     <div class="total-amount" style="font-size: 2rem; font-weight: 700; color: #a67c52; text-align: center; margin: 20px 0; padding: 20px; background: linear-gradient(135deg, rgba(184, 153, 104, 0.1) 0%, rgba(166, 124, 82, 0.1) 100%); border-radius: 12px;">
       €${totale.toFixed(2)}
     </div>
-    <small class="tax-note" style="display: block; text-align: center; color: #a0927f; font-size: 0.85rem; font-style: italic; margin-top: 10px;">
+    <small class="tax-note" style="display: block; text-align: center; color: #a0927f; font-size: 0.85rem; font-style: italic; margin-top: 10px;" data-i18n="summary.totaleNota">
       Tassa di €1,50 per notte per ospiti dai 4 anni in su
     </small>
   `;
@@ -929,12 +957,14 @@ function preparaRiepilogo() {
   
   aggiornaBottonePagamento(totale);
   
-  setTimeout(() => {
-    const finalStep = document.getElementById('step-final');
-    if (finalStep) {
-      finalStep.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  }, 100);
+  if (!mantieniPosizione) {
+    setTimeout(() => {
+      const finalStep = document.getElementById('step-final');
+      if (finalStep) {
+        finalStep.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 100);
+  }
 }
 
 // === FUNZIONE DI DEBUG ===
@@ -973,10 +1003,12 @@ function aggiornaBottonePagamento(totale) {
   const finalStep = document.getElementById('step-final');
   const buttonGroup = finalStep?.querySelector('.button-group');
   if (!buttonGroup) return;
+  const importo = totale.toFixed(2);
   buttonGroup.innerHTML = `
-    <button type="button" class="btn btn-secondary" onclick="indietroStep()">← Indietro</button>
-    <button type="button" class="btn btn-primary btn-payment" id="btn-procedi-pagamento" disabled onclick="procediAlPagamento()">
-      💳 Paga €${totale.toFixed(2)} con Stripe
+    <button type="button" class="btn btn-secondary" onclick="indietroStep()" data-i18n="stepFinal.backBtn">← Indietro</button>
+    <button type="button" class="btn btn-primary btn-payment" id="btn-procedi-pagamento" disabled onclick="procediAlPagamento()"
+            data-i18n-key="payment.payButton" data-i18n-params='${JSON.stringify({ amount: importo })}'>
+      ${t('payment.payButton', { amount: importo })}
     </button>
   `;
   
@@ -988,12 +1020,21 @@ function aggiornaBottonePagamento(totale) {
     if (privacyCheckbox && paymentBtn) {
       paymentBtn.disabled = !privacyCheckbox.checked;
       
-      privacyCheckbox.addEventListener('change', function() {
-        paymentBtn.disabled = !this.checked;
-        if (this.checked) {
-          showNotification('✅ Privacy accettata', 'success');
-        }
-      });
+      // La funzione può essere richiamata più volte (es. dopo un cambio
+      // lingua, per ritradurre l'importo): l'input privacy invece resta
+      // sempre lo stesso elemento del DOM, quindi il listener va agganciato
+      // una volta sola, altrimenti si accumulano copie duplicate e la
+      // notifica "Privacy accettata" comparirebbe più volte.
+      if (privacyCheckbox.dataset.listenerAgganciato !== 'true') {
+        privacyCheckbox.addEventListener('change', function() {
+          const btn = document.getElementById('btn-procedi-pagamento');
+          if (btn) btn.disabled = !this.checked;
+          if (this.checked) {
+            showNotification(t('notif.privacyAccettata'), 'success');
+          }
+        });
+        privacyCheckbox.dataset.listenerAgganciato = 'true';
+      }
     }
   }, 100);
 }
@@ -1030,30 +1071,23 @@ window.handleFileUpload = function(input, ospiteNum) {
     
     if (file.size > MAX_FILE_SIZE) {
       const fileSizeMB = (file.size / 1024 / 1024).toFixed(2);
-      showNotification(
-        `📦 File troppo grande: ${fileSizeMB} MB\n` +
-        `Limite massimo: 20 MB\n\n` +
-        `💡 Suggerimenti:\n` +
-        `• Scatta una nuova foto invece di scegliere un file esistente\n` +
-        `• Comprimi la foto prima di caricarla`,
-        'error'
-      );
+      showNotification(t('notif.fileTroppoGrande', { size: fileSizeMB }), 'error');
       input.value = '';
       return;
     }
     
     const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
     if (!allowedTypes.includes(file.type)) {
-      showNotification('Formato file non supportato. Usa: JPG, PNG, WebP o PDF', 'error');
+      showNotification(t('notif.formatoNonSupportato'), 'error');
       input.value = '';
       return;
     }
     
     label.textContent = `✅ ${accorciaNomeFile(file.name)}`;
     label.classList.add('has-file');
-    showNotification('Documento caricato correttamente', 'success');
+    showNotification(t('notif.documentoCaricato'), 'success');
   } else {
-    label.textContent = '📎 Scegli file';
+    label.textContent = t('guest.scegliFile');
     label.classList.remove('has-file');
   }
 }
@@ -1069,16 +1103,16 @@ window.openCamera = async function(ospiteNum) {
     currentStream = await navigator.mediaDevices.getUserMedia(constraints);
     video.srcObject = currentStream;
     preview.style.display = 'block';
-    showNotification('Fotocamera attivata. Posiziona il documento nel riquadro', 'info');
+    showNotification(t('notif.fotocameraAttivata'), 'info');
   } catch (err) {
     try {
       const fallbackConstraints = { video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } } };
       currentStream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
       video.srcObject = currentStream;
       preview.style.display = 'block';
-      showNotification('Fotocamera frontale attivata', 'info');
+      showNotification(t('notif.fotocameraFrontale'), 'info');
     } catch (fallbackErr) {
-      showNotification('Impossibile accedere alla fotocamera: ' + fallbackErr.message, 'error');
+      showNotification(t('notif.fotocameraErrore', { msg: fallbackErr.message }), 'error');
     }
   }
 }
@@ -1114,16 +1148,12 @@ window.capturePhoto = function(ospiteNum) {
   // ✅ COMPRESSIONE AGGRESSIVA: qualità 0.7
   canvas.toBlob((blob) => {
     if (!blob) {
-      showNotification('Errore nella cattura della foto', 'error');
+      showNotification(t('notif.erroreCattura'), 'error');
       return;
     }
     
     if (blob.size > 1 * 1024 * 1024) {
-      showNotification(
-        `⚠️ Foto troppo pesante\n` +
-        `Prova a scattare da più lontano o con meno luce`,
-        'error'
-      );
+      showNotification(t('notif.fotoTroppoPesante'), 'error');
       return;
     }
     
@@ -1144,7 +1174,7 @@ window.capturePhoto = function(ospiteNum) {
       }
     }
     
-    showNotification('✅ Foto acquisita', 'success');
+    showNotification(t('notif.fotoAcquisita'), 'success');
   }, 'image/jpeg', 0.7);
   
   closeCamera(ospiteNum);
@@ -1163,7 +1193,7 @@ window.closeCamera = function(ospiteNum) {
 window.procediAlPagamento = async function() {
   const privacyCheckbox = document.getElementById('privacy-consent');
   if (!privacyCheckbox?.checked) {
-    showNotification('⚠️ Devi accettare l\'informativa privacy per procedere', 'error');
+    showNotification(t('notif.privacyRichiesta'), 'error');
     privacyCheckbox?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return;
   }
@@ -1173,11 +1203,11 @@ window.procediAlPagamento = async function() {
   const payButton = document.querySelector('.btn-payment');
   if (payButton) {
     payButton.disabled = true;
-    payButton.innerHTML = '⏳ Preparazione dati...';
+    payButton.innerHTML = t('payment.preparazioneDati');
   }
   
   try {
-    showNotification('📦 Raccolta documenti in corso...', 'info');
+    showNotification(t('notif.raccoltaDocumenti'), 'info');
     
     // ✅ Raccogli dati completi
     const datiCompleti = await raccogliDatiPrenotazioneConCompressione();
@@ -1201,10 +1231,10 @@ window.procediAlPagamento = async function() {
     console.log(`📦 Dimensione payload: ${payloadSizeMB} MB (${payloadSize} bytes)`);
     
     if (payloadSize > 4 * 1024 * 1024) {
-      showNotification('⚠️ Documenti molto grandi, il salvataggio potrebbe richiedere più tempo...', 'info');
+      showNotification(t('notif.documentiGrandi'), 'info');
     }
     
-    if (payButton) payButton.innerHTML = '⏳ Salvataggio dati (questo può richiedere fino a 30 secondi)...';
+    if (payButton) payButton.innerHTML = t('payment.salvataggioDati');
     
     // ✅ Salvataggio con timeout aumentato
     const controller = new AbortController();
@@ -1250,7 +1280,7 @@ window.procediAlPagamento = async function() {
       throw fetchError;
     }
     
-    if (payButton) payButton.innerHTML = '⏳ Creazione pagamento...';
+    if (payButton) payButton.innerHTML = t('payment.creazionePagamento');
     
     // ✅ Passa tempSessionId a Stripe
     await creaLinkPagamentoConSessionId(datiCompleti, tempSessionId);
@@ -1261,21 +1291,15 @@ window.procediAlPagamento = async function() {
     
     if (payButton) {
       payButton.disabled = false;
-      payButton.innerHTML = `💳 Paga €${calcolaTotale().toFixed(2)} con Stripe`;
+      payButton.innerHTML = t('payment.payButton', { amount: calcolaTotale().toFixed(2) });
     }
     
-    let errorMessage = 'Si è verificato un problema durante il salvataggio. Riprova tra qualche istante o contatta l\'assistenza se il problema persiste.';
+    let errorMessage = t('payment.erroreGenerico');
     
     if (error.message.includes('Timeout') || error.message.includes('timeout')) {
-      errorMessage = '⏱️ Il salvataggio dei documenti sta richiedendo troppo tempo. Prova a:\n' +
-                     '1. Ridurre la qualità delle foto dei documenti\n' +
-                     '2. Scattare foto più piccole\n' +
-                     '3. Ricaricare la pagina e riprovare';
+      errorMessage = t('payment.erroreTimeout');
     } else if (error.message.includes('Too large') || error.message.includes('troppo grande')) {
-      errorMessage = '📦 I documenti caricati sono troppo grandi. Prova a:\n' +
-                     '1. Comprimere le immagini\n' +
-                     '2. Usare foto con risoluzione inferiore\n' +
-                     '3. Caricare solo i documenti essenziali';
+      errorMessage = t('payment.erroreTroppoGrande');
     }
     
     showNotification(errorMessage, 'error');
@@ -1374,6 +1398,10 @@ async function raccogliDatiPrenotazioneConCompressione() {
     numeroNotti: numeroNotti,
     tipoGruppo: document.getElementById('tipo-gruppo')?.value || null,
     totale: calcolaTotale(),
+    lingua: getLingua(), // Lingua scelta dall'ospite: usata da crea-pagamento-stripe.js
+                          // (locale pagina Stripe) e da invia-email-ospite.js (email finale).
+                          // Google Sheets, il PDF al proprietario e la Questura ricevono
+                          // sempre i dati in italiano, indipendentemente da questo campo.
     ospiti: [],
     documenti: [],
     timestamp: new Date().toISOString()
@@ -1411,7 +1439,7 @@ async function raccogliDatiPrenotazioneConCompressione() {
   }
   
   // Raccogli documento responsabile
-  showNotification('📄 Caricamento documento responsabile...', 'info');
+  showNotification(t('notif.caricamentoDocResponsabile'), 'info');
   
   const fileInput = document.querySelector(`input[name="ospite1_documento_file"]`);
   let sizeKB = null;
@@ -1474,7 +1502,7 @@ async function raccogliDatiPrenotazioneConCompressione() {
   }
   
   if (sizeKB !== null) {
-    showNotification('✅ Documento responsabile caricato', 'success');
+    showNotification(t('notif.docResponsabileCaricato'), 'success');
   }
   
   return datiPrenotazione;
@@ -1491,7 +1519,7 @@ async function creaLinkPagamentoConSessionId(datiPrenotazione, tempSessionId) {
     console.log("🧪 MODALITÀ TEST");
     await new Promise(resolve => setTimeout(resolve, 2000));
     const sessionId = 'test_session_' + Date.now();
-    window.location.href = `successo-pagamento.html?session_id=${sessionId}&temp_session=${tempSessionId}&success=true`;
+    window.location.href = `successo-pagamento.html?session_id=${sessionId}&temp_session=${tempSessionId}&success=true&lang=${getLingua()}`;
     return;
   }
 
@@ -1502,7 +1530,7 @@ async function creaLinkPagamentoConSessionId(datiPrenotazione, tempSessionId) {
     const datiConMetadata = {
       ...datiPrenotazione,
       tempSessionId: tempSessionId,
-      successUrl: `https://spaceestate.github.io/Checkin/successo-pagamento.html?session_id={CHECKOUT_SESSION_ID}&temp_session=${tempSessionId}`,
+      successUrl: `https://spaceestate.github.io/Checkin/successo-pagamento.html?session_id={CHECKOUT_SESSION_ID}&temp_session=${tempSessionId}&lang=${getLingua()}`,
       cancelUrl: `${window.location.href}?canceled=true`
     };
     
@@ -1541,14 +1569,14 @@ function gestisciRitornoStripe() {
   
   if (canceled === 'true') {
     console.log("👈 Pagamento annullato");
-    showNotification('Pagamento annullato. Puoi riprovare quando vuoi.', 'info');
+    showNotification(t('notif.pagamentoAnnullato'), 'info');
     const url = new URL(window.location);
     url.searchParams.delete('canceled');
     window.history.replaceState({}, document.title, url.toString());
     const payButton = document.querySelector('.btn-payment');
     if (payButton) {
       payButton.disabled = false;
-      payButton.innerHTML = `💳 Paga €${calcolaTotale().toFixed(2)} con Stripe`;
+      payButton.innerHTML = t('payment.payButton', { amount: calcolaTotale().toFixed(2) });
     }
   }
 }
@@ -1569,7 +1597,7 @@ function miglioraDateInputNativo(input) {
   input.addEventListener('change', function() {
     if (this.value) {
       const date = new Date(this.value + 'T00:00:00');
-      const formatted = date.toLocaleDateString('it-IT', {
+      const formatted = date.toLocaleDateString(localeCorrente(), {
         weekday: 'short',
         year: 'numeric',
         month: 'numeric',
@@ -1810,6 +1838,21 @@ function gestisciKeyboardVirtuale() {
 document.addEventListener('DOMContentLoaded', function() {
   console.log('🚀 Check-in form inizializzato');
   console.log(`📱 Dispositivo: ${isMobile ? 'Mobile' : 'Desktop'}, Android: ${isAndroid}, Vecchio Android: ${isOldAndroid}`);
+
+  // Se l'ospite cambia lingua mentre è già avanti nel check-in, la maggior
+  // parte del testo si aggiorna da sola tramite applicaTraduzioni() (vedi
+  // i18n.js), perché sia il markup statico che quello generato dinamicamente
+  // usano gli stessi attributi data-i18n*. Le uniche eccezioni sono la label
+  // della progress bar (sempre aggiornata) e — solo se il riepilogo finale è
+  // già a schermo — il riepilogo stesso, che viene ricostruito da zero per
+  // tradurre correttamente il nome degli appartamenti e le note sull'età,
+  // che non sono semplici sostituzioni di placeholder.
+  onCambioLingua(() => {
+    aggiornaProgressBar();
+    if (currentStep === 99) {
+      preparaRiepilogo(true); // true = non fare lo scroll automatico
+    }
+  });
   
   // Imposta data minima per check-in
   const dataCheckinInput = document.getElementById('data-checkin');
