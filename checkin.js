@@ -601,9 +601,13 @@ function validaStepOspite(numOspite) {
       }
     }
     
-    const fileInput = document.querySelector(`input[name="ospite1_documento_file"]`);
-    if (!fileInput?.files?.length) {
-      showNotification(t('valid.documentoRichiesto'), 'error');
+    // Servono entrambi i lati: si segnala il primo mancante e lo si porta
+    // a schermo, così l'ospite vede subito dove intervenire.
+    const mancanti = latiMancanti(1);
+    if (mancanti.length > 0) {
+      showNotification(t('valid.latoMancante', { lato: nomeLato(mancanti[0]) }), 'error');
+      document.getElementById(`upload-side-1-${mancanti[0]}`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return false;
     }
   }
@@ -688,10 +692,10 @@ function validaPrenotazioneCompleta() {
         return false;
       }
       
-      // ✅ VERIFICA FILE CARICATO SOLO PER OSPITE 1
-      const fileInput = document.querySelector(`input[name="ospite1_documento_file"]`);
-      if (!fileInput?.files?.length) {
-        showNotification(t('valid.documentoMancanteResponsabile'), 'error');
+      // ✅ VERIFICA FILE CARICATI (FRONTE + RETRO) SOLO PER OSPITE 1
+      const latiDaCaricare = latiMancanti(1);
+      if (latiDaCaricare.length > 0) {
+        showNotification(t('valid.latoMancanteResponsabile', { lato: nomeLato(latiDaCaricare[0]) }), 'error');
         return false;
       }
     }
@@ -701,7 +705,182 @@ function validaPrenotazioneCompleta() {
   return true;
 }
 
-// === GENERAZIONE STEP OSPITI ===
+// === DOCUMENTO RESPONSABILE: FRONTE + RETRO ===
+// Il responsabile deve fornire SEMPRE due file distinti: fronte e retro del
+// documento. Vale sia per l'upload da dispositivo sia per le foto scattate
+// dalla fotocamera (due scatti separati, uno per lato). Ogni lato ha il
+// proprio input file: `ospite1_documento_fronte` e `ospite1_documento_retro`.
+const LATI_DOCUMENTO = ['fronte', 'retro'];
+
+// Unica eccezione all'obbligo dei due file: il passaporto non ha un retro da
+// fotografare, la pagina con i dati e la foto è una sola. Il confronto è per
+// sottostringa in maiuscolo, così copre tutte le voci dell'elenco
+// (PASSAPORTO ORDINARIO / DIPLOMATICO / DI SERVIZIO). Per aggiungere altri
+// documenti senza retro basta estendere questo array.
+const DOCUMENTI_SENZA_RETRO = ['PASSAPORTO'];
+
+function inputDocumento(ospiteNum, lato) {
+  return document.getElementById(`ospite${ospiteNum}_documento_${lato}`);
+}
+
+function tipoDocumentoSelezionato(ospiteNum) {
+  return document.querySelector(`select[name="ospite${ospiteNum}_tipo_documento"]`)?.value || '';
+}
+
+function retroObbligatorio(ospiteNum) {
+  const tipo = tipoDocumentoSelezionato(ospiteNum).toUpperCase();
+  return !DOCUMENTI_SENZA_RETRO.some(senzaRetro => tipo.includes(senzaRetro));
+}
+
+// Lati effettivamente richiesti per il documento scelto.
+function latiRichiesti(ospiteNum) {
+  return retroObbligatorio(ospiteNum) ? LATI_DOCUMENTO : ['fronte'];
+}
+
+// Nome del lato nella lingua scelta dall'ospite (usato nelle notifiche e
+// nei messaggi di errore, dove non basta l'attributo data-i18n).
+function nomeLato(lato) {
+  return t(lato === 'fronte' ? 'guest.latoFronte' : 'guest.latoRetro');
+}
+
+// Lati ancora da caricare, nell'ordine fronte -> retro.
+function latiMancanti(ospiteNum) {
+  return latiRichiesti(ospiteNum).filter(lato => !inputDocumento(ospiteNum, lato)?.files?.length);
+}
+
+// Messaggio di "caricamento completato": cambia se il retro non serve.
+function chiaveCompletamento(ospiteNum) {
+  return latiRichiesti(ospiteNum).length === 1 ? 'guest.documentoCompleto' : 'guest.documentiCompleti';
+}
+
+// Aggiorna la label del singolo riquadro (nome file o testo tradotto).
+function aggiornaLabelUpload(ospiteNum, lato) {
+  const input = inputDocumento(ospiteNum, lato);
+  if (!input) return;
+  const label = document.querySelector(`label[for="${input.id}"]`) || input.previousElementSibling;
+  const riquadro = document.getElementById(`upload-side-${ospiteNum}-${lato}`);
+  const file = input.files?.[0];
+
+  if (file) {
+    // Il nome del file non è una stringa traducibile: si toglie data-i18n,
+    // altrimenti al cambio lingua applicaTraduzioni() riscriverebbe
+    // "Scegli file" sopra un file in realtà già allegato.
+    if (label) {
+      label.removeAttribute('data-i18n');
+      label.textContent = `✅ ${accorciaNomeFile(file.name)}`;
+      label.classList.add('has-file');
+    }
+    riquadro?.classList.add('completo');
+  } else {
+    if (label) {
+      label.setAttribute('data-i18n', 'guest.scegliFile');
+      label.textContent = t('guest.scegliFile');
+      label.classList.remove('has-file');
+    }
+    riquadro?.classList.remove('completo');
+  }
+}
+
+// Contatore "X di 2 file caricati" sotto al titolo della sezione documento.
+function aggiornaStatoDocumenti(ospiteNum) {
+  const stato = document.getElementById(`upload-status-${ospiteNum}`);
+  if (!stato) return;
+  const richiesti = latiRichiesti(ospiteNum);
+  const caricati = richiesti.length - latiMancanti(ospiteNum).length;
+  const completo = caricati === richiesti.length;
+  const chiave = completo ? chiaveCompletamento(ospiteNum) : 'guest.statoDocumenti';
+  const params = { n: caricati, tot: richiesti.length };
+  // data-i18n-key/params: così il contatore si ritraduce da solo se
+  // l'ospite cambia lingua a documento già caricato.
+  stato.setAttribute('data-i18n-key', chiave);
+  stato.setAttribute('data-i18n-params', JSON.stringify(params));
+  stato.textContent = t(chiave, params);
+  stato.classList.toggle('completo', completo);
+}
+
+// Notifica unica dopo ogni caricamento: conferma il lato appena caricato e,
+// se manca ancora l'altro, dice subito quale.
+function notificaLatoCaricato(ospiteNum, lato) {
+  const mancanti = latiMancanti(ospiteNum);
+  if (mancanti.length === 0) {
+    showNotification(t(chiaveCompletamento(ospiteNum) === 'guest.documentoCompleto'
+      ? 'notif.documentoCompleto'
+      : 'notif.documentiCompleti'), 'success');
+  } else {
+    showNotification(t('notif.latoCaricatoProsegui', {
+      lato: nomeLato(lato),
+      mancante: nomeLato(mancanti[0])
+    }), 'info');
+  }
+}
+
+// Con il passaporto il retro diventa facoltativo: il riquadro resta a schermo
+// (se l'ospite vuole può comunque allegare una seconda pagina) ma perde
+// l'asterisco, cambia il testo di aiuto e non blocca più la validazione.
+// Richiamata all'onchange del tipo documento e dopo la creazione dello step.
+window.aggiornaObbligoRetro = function(ospiteNum) {
+  const riquadro = document.getElementById(`upload-side-${ospiteNum}-retro`);
+  if (!riquadro) return;
+
+  const obbligatorio = retroObbligatorio(ospiteNum);
+  riquadro.classList.toggle('facoltativo', !obbligatorio);
+
+  const asterisco = riquadro.querySelector('.required-mark');
+  if (asterisco) asterisco.style.display = obbligatorio ? '' : 'none';
+
+  const badge = riquadro.querySelector('.upload-side-badge');
+  if (badge) badge.style.display = obbligatorio ? 'none' : '';
+
+  const hint = riquadro.querySelector('.upload-side-hint');
+  if (hint) {
+    // Si aggiorna anche data-i18n, così il testo resta corretto se l'ospite
+    // cambia lingua dopo aver scelto il tipo di documento.
+    const chiave = obbligatorio ? 'guest.latoRetroHint' : 'guest.latoRetroPassaporto';
+    hint.setAttribute('data-i18n', chiave);
+    hint.textContent = t(chiave);
+  }
+
+  aggiornaStatoDocumenti(ospiteNum);
+}
+
+// Markup di un riquadro di upload (uno per lato).
+function bloccoUploadLato(ospiteNum, lato) {
+  const isFronte = lato === 'fronte';
+  const keyTitolo = isFronte ? 'guest.latoFronte' : 'guest.latoRetro';
+  const keyHint = isFronte ? 'guest.latoFronteHint' : 'guest.latoRetroHint';
+  const keyFoto = isFronte ? 'guest.fotografaFronte' : 'guest.fotografaRetro';
+  const inputId = `ospite${ospiteNum}_documento_${lato}`;
+  const suffisso = `${ospiteNum}-${lato}`;
+
+  return `
+            <div class="upload-side" id="upload-side-${suffisso}">
+              <div class="upload-side-header">
+                <span class="upload-side-step">${isFronte ? '1' : '2'}</span>
+                <span class="upload-side-title" data-i18n="${keyTitolo}">${t(keyTitolo)}</span>
+                <span class="required-mark">*</span>
+                ${isFronte ? '' : `<span class="upload-side-badge" data-i18n="guest.facoltativo" style="display: none;">${t('guest.facoltativo')}</span>`}
+              </div>
+              <p class="upload-side-hint" data-i18n="${keyHint}">${t(keyHint)}</p>
+              <div class="upload-group">
+                <label for="${inputId}" class="upload-label" data-i18n="guest.scegliFile">${t('guest.scegliFile')}</label>
+                <input type="file" id="${inputId}" name="${inputId}"
+                       class="upload-input" accept="image/*,.pdf"
+                       onchange="handleFileUpload(this, ${ospiteNum}, '${lato}')">
+              </div>
+              <div class="camera-group">
+                <button type="button" class="camera-btn" onclick="openCamera(${ospiteNum}, '${lato}')" data-i18n="${keyFoto}">${t(keyFoto)}</button>
+              </div>
+              <div id="camera-preview-${suffisso}" class="camera-preview" style="display: none;">
+                <video id="camera-video-${suffisso}" autoplay playsinline></video>
+                <canvas id="camera-canvas-${suffisso}" style="display: none;"></canvas>
+                <div class="camera-controls">
+                  <button type="button" class="capture-btn" onclick="capturePhoto(${ospiteNum}, '${lato}')" data-i18n="guest.scatta">${t('guest.scatta')}</button>
+                  <button type="button" class="close-camera-btn" onclick="closeCamera(${ospiteNum}, '${lato}')" data-i18n="guest.chiudi">${t('guest.chiudi')}</button>
+                </div>
+              </div>
+            </div>`;
+}
+
 // === GENERAZIONE STEP OSPITI ===
 function generaStepOspiti() {
   const form = document.getElementById('checkin-form');
@@ -733,7 +912,8 @@ function generaStepOspiti() {
       campiDocumento = `
         <div class="form-group">
           <label class="form-label" for="ospite1_tipo_documento" data-i18n="guest.tipoDocumento">Tipo documento *</label>
-          <select id="ospite1_tipo_documento" name="ospite1_tipo_documento" class="form-select" required>
+          <select id="ospite1_tipo_documento" name="ospite1_tipo_documento" class="form-select" required
+                  onchange="aggiornaObbligoRetro(1)">
             <option value="" data-i18n="guest.selezionaTipoDocumento">Seleziona tipo documento</option>
             ${opzioniDocumenti}
           </select>
@@ -752,24 +932,11 @@ function generaStepOspiti() {
         </div>
         <div class="document-section" style="grid-column: 1 / -1;">
           <h3 class="document-title" data-i18n="guest.documentoTitolo">📄 Documento di identità</h3>
-          <p class="document-subtitle" data-i18n="guest.documentoSottotitolo">Carica una foto o una scansione PDF del documento (JPG, PNG o PDF)</p>
+          <p class="document-subtitle" data-i18n="guest.documentoSottotitolo">Servono due file: il fronte e il retro del documento (foto o PDF). Con il passaporto basta la pagina con i dati.</p>
+          <p class="upload-status" id="upload-status-1" data-i18n-key="guest.statoDocumenti" data-i18n-params='{"n":0}'>${t('guest.statoDocumenti', { n: 0 })}</p>
           <div class="document-upload">
-            <div class="upload-group">
-              <label for="ospite1_documento_file" class="upload-label" data-i18n="guest.scegliFile">📎 Scegli file</label>
-              <input type="file" id="ospite1_documento_file" name="ospite1_documento_file" 
-                     class="upload-input" accept="image/*,.pdf" onchange="handleFileUpload(this, 1)">
-            </div>
-            <div class="camera-group">
-              <button type="button" class="camera-btn" onclick="openCamera(1)" data-i18n="guest.fotografaDocumento">📷 Fotografa documento</button>
-            </div>
-          </div>
-          <div id="camera-preview-1" class="camera-preview" style="display: none;">
-            <video id="camera-video-1" autoplay playsinline></video>
-            <canvas id="camera-canvas-1" style="display: none;"></canvas>
-            <div class="camera-controls">
-              <button type="button" class="capture-btn" onclick="capturePhoto(1)" data-i18n="guest.scatta">📸 Scatta</button>
-              <button type="button" class="close-camera-btn" onclick="closeCamera(1)" data-i18n="guest.chiudi">✕ Chiudi</button>
-            </div>
+${bloccoUploadLato(1, 'fronte')}
+${bloccoUploadLato(1, 'retro')}
           </div>
         </div>
       `;
@@ -847,6 +1014,7 @@ function generaStepOspiti() {
     `;
     form.insertBefore(stepDiv, stepFinal);
     applicaTraduzioni(stepDiv);
+    if (i === 1) aggiornaObbligoRetro(1);
   }
 }
 
@@ -1048,9 +1216,7 @@ function aggiornaBottonePagamento(totale) {
   }, 100);
 }
 
-// === GESTIONE FOTOCAMERA ===
-let currentStream = null;
-
+// === UPLOAD FILE DOCUMENTO ===
 // I telefoni generano spesso nomi file molto lunghi (es. screenshot,
 // foto della galleria). Senza accorciarli, il testo mandava in overflow
 // la label e "spingeva" fuori schermo la colonna accanto nella griglia
@@ -1064,54 +1230,80 @@ function accorciaNomeFile(nome, maxLen = 22) {
   return base.slice(0, maxBase) + '…' + estensione;
 }
 
-window.handleFileUpload = function(input, ospiteNum) {
+window.handleFileUpload = function(input, ospiteNum, lato) {
+  // `lato` arriva dal markup ('fronte' / 'retro'); in fallback lo si deduce
+  // dall'id dell'input (ospite1_documento_fronte -> fronte).
+  const latoEffettivo = lato || input?.id?.split('_').pop();
   const file = input.files?.[0];
-  const label = input.previousElementSibling;
-  if (!label) return;
-  
+
   if (file) {
     // Il limite qui era fissato a 2 MB, PRIMA che la compressione (più sotto,
     // comprimiImmagineBase64) avesse la possibilità di agire — quella riduce
-    // qualunque immagine a ~150 KB ridimensionandola a 1280px. Una foto scattata
+    // qualunque immagine a ~600 KB ridimensionandola a 1024px. Una foto scattata
     // con un telefono moderno (spesso 4-8 MB) veniva quindi rifiutata anche se
     // la pipeline di compressione l'avrebbe gestita senza problemi. Il limite
     // qui serve solo a scartare file anomali, non foto normali: alzato a 20 MB.
     const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
-    
+
     if (file.size > MAX_FILE_SIZE) {
       const fileSizeMB = (file.size / 1024 / 1024).toFixed(2);
       showNotification(t('notif.fileTroppoGrande', { size: fileSizeMB }), 'error');
       input.value = '';
+      aggiornaLabelUpload(ospiteNum, latoEffettivo);
+      aggiornaStatoDocumenti(ospiteNum);
       return;
     }
-    
+
     const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
     if (!allowedTypes.includes(file.type)) {
       showNotification(t('notif.formatoNonSupportato'), 'error');
       input.value = '';
+      aggiornaLabelUpload(ospiteNum, latoEffettivo);
+      aggiornaStatoDocumenti(ospiteNum);
       return;
     }
-    
-    label.textContent = `✅ ${accorciaNomeFile(file.name)}`;
-    label.classList.add('has-file');
-    showNotification(t('notif.documentoCaricato'), 'success');
-  } else {
-    label.textContent = t('guest.scegliFile');
-    label.classList.remove('has-file');
   }
+
+  aggiornaLabelUpload(ospiteNum, latoEffettivo);
+  aggiornaStatoDocumenti(ospiteNum);
+
+  if (file) notificaLatoCaricato(ospiteNum, latoEffettivo);
 }
 
-console.log('✅ Fix compressione documenti caricato - supporto fino a 9 ospiti');
+console.log('✅ Documento responsabile: fronte + retro obbligatori (solo fronte per il passaporto) - supporto fino a 9 ospiti');
 
-window.openCamera = async function(ospiteNum) {
-  const preview = document.getElementById(`camera-preview-${ospiteNum}`);
-  const video = document.getElementById(`camera-video-${ospiteNum}`);
+// === GESTIONE FOTOCAMERA ===
+let currentStream = null;
+// Una sola fotocamera aperta per volta: se l'ospite passa dal fronte al retro
+// senza chiudere la precedente, lo stream della prima va fermato (altrimenti
+// resta la spia della camera accesa e su alcuni Android il secondo
+// getUserMedia fallisce).
+let cameraApertaKey = null;
+
+function chiaveCamera(ospiteNum, lato) {
+  return `${ospiteNum}-${lato}`;
+}
+
+window.openCamera = async function(ospiteNum, lato) {
+  const latoEffettivo = lato || 'fronte';
+  const chiave = chiaveCamera(ospiteNum, latoEffettivo);
+
+  if (cameraApertaKey && cameraApertaKey !== chiave) {
+    const [numPrecedente, latoPrecedente] = cameraApertaKey.split('-');
+    closeCamera(numPrecedente, latoPrecedente);
+  }
+
+  const preview = document.getElementById(`camera-preview-${chiave}`);
+  const video = document.getElementById(`camera-video-${chiave}`);
   if (!preview || !video) return;
+
   try {
     const constraints = { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } };
     currentStream = await navigator.mediaDevices.getUserMedia(constraints);
     video.srcObject = currentStream;
     preview.style.display = 'block';
+    cameraApertaKey = chiave;
+    preview.scrollIntoView({ behavior: 'smooth', block: 'center' });
     showNotification(t('notif.fotocameraAttivata'), 'info');
   } catch (err) {
     try {
@@ -1119,6 +1311,7 @@ window.openCamera = async function(ospiteNum) {
       currentStream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
       video.srcObject = currentStream;
       preview.style.display = 'block';
+      cameraApertaKey = chiave;
       showNotification(t('notif.fotocameraFrontale'), 'info');
     } catch (fallbackErr) {
       showNotification(t('notif.fotocameraErrore', { msg: fallbackErr.message }), 'error');
@@ -1126,20 +1319,22 @@ window.openCamera = async function(ospiteNum) {
   }
 }
 
-window.capturePhoto = function(ospiteNum) {
-  const video = document.getElementById(`camera-video-${ospiteNum}`);
-  const canvas = document.getElementById(`camera-canvas-${ospiteNum}`);
+window.capturePhoto = function(ospiteNum, lato) {
+  const latoEffettivo = lato || 'fronte';
+  const chiave = chiaveCamera(ospiteNum, latoEffettivo);
+  const video = document.getElementById(`camera-video-${chiave}`);
+  const canvas = document.getElementById(`camera-canvas-${chiave}`);
   if (!video || !canvas) return;
-  
+
   const ctx = canvas.getContext('2d');
-  
+
   // ✅ RIDUZIONE RISOLUZIONE AUTOMATICA per rispettare limite 1 MB
   const maxWidth = 1280;
   const maxHeight = 720;
-  
+
   let width = video.videoWidth;
   let height = video.videoHeight;
-  
+
   if (width > maxWidth || height > maxHeight) {
     if (width > height) {
       height = (height / width) * maxWidth;
@@ -1149,53 +1344,61 @@ window.capturePhoto = function(ospiteNum) {
       height = maxHeight;
     }
   }
-  
+
   canvas.width = width;
   canvas.height = height;
   ctx.drawImage(video, 0, 0, width, height);
-  
+
   // ✅ COMPRESSIONE AGGRESSIVA: qualità 0.7
   canvas.toBlob((blob) => {
     if (!blob) {
       showNotification(t('notif.erroreCattura'), 'error');
       return;
     }
-    
+
     if (blob.size > 1 * 1024 * 1024) {
       showNotification(t('notif.fotoTroppoPesante'), 'error');
       return;
     }
-    
+
     const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+    // Il lato NON va nel nome file qui: viene aggiunto come prefisso in fase
+    // di raccolta dati (fronte_... / retro_...), così foto e file caricati
+    // arrivano al proprietario con la stessa convenzione di nome.
     const fileName = `documento_ospite_${ospiteNum}_${timestamp}.jpg`;
     const file = new File([blob], fileName, { type: 'image/jpeg' });
-    const fileInput = document.getElementById(`ospite${ospiteNum}_documento_file`);
-    
+    const fileInput = inputDocumento(ospiteNum, latoEffettivo);
+
     if (fileInput) {
       const dt = new DataTransfer();
       dt.items.add(file);
       fileInput.files = dt.files;
-      
-      const label = fileInput.previousElementSibling;
-      if (label) {
-        label.textContent = `📷 ${fileName}`;
-        label.classList.add('has-file');
-      }
+      aggiornaLabelUpload(ospiteNum, latoEffettivo);
+      aggiornaStatoDocumenti(ospiteNum);
     }
-    
-    showNotification(t('notif.fotoAcquisita'), 'success');
+
+    closeCamera(ospiteNum, latoEffettivo);
+    notificaLatoCaricato(ospiteNum, latoEffettivo);
+
+    // Se manca ancora un lato, si apre direttamente la fotocamera per
+    // quello: l'ospite che sta fotografando deve fare due scatti.
+    const mancanti = latiMancanti(ospiteNum);
+    if (mancanti.length > 0) {
+      setTimeout(() => openCamera(ospiteNum, mancanti[0]), 600);
+    }
   }, 'image/jpeg', 0.7);
-  
-  closeCamera(ospiteNum);
 }
 
-window.closeCamera = function(ospiteNum) {
-  const preview = document.getElementById(`camera-preview-${ospiteNum}`);
+window.closeCamera = function(ospiteNum, lato) {
+  const latoEffettivo = lato || 'fronte';
+  const chiave = chiaveCamera(ospiteNum, latoEffettivo);
+  const preview = document.getElementById(`camera-preview-${chiave}`);
   if (currentStream) {
     currentStream.getTracks().forEach(track => track.stop());
     currentStream = null;
   }
   if (preview) preview.style.display = 'none';
+  if (cameraApertaKey === chiave) cameraApertaKey = null;
 }
 
 // === PAGAMENTO ===
@@ -1322,7 +1525,10 @@ window.procediAlPagamento = async function() {
         const suggerimento = error.tipoSuggerimento === 'pdf'
           ? t('payment.suggerimentoPdf')
           : t('payment.suggerimentoFoto');
-        errorMessage = t('payment.documentoTroppoGrande', { size: error.sizeKB, suggerimento });
+        // Con due file caricati serve dire all'ospite QUALE dei due rifare.
+        errorMessage = error.lato
+          ? t('payment.latoTroppoGrande', { lato: nomeLato(error.lato), size: error.sizeKB, suggerimento })
+          : t('payment.documentoTroppoGrande', { size: error.sizeKB, suggerimento });
         break;
       }
       case 'IMPOSSIBILE_PROCESSARE':
@@ -1471,56 +1677,65 @@ async function raccogliDatiPrenotazioneConCompressione() {
     datiPrenotazione.ospiti.push(ospite);
   }
   
-  // Raccogli documento responsabile
+  // Raccogli documento responsabile: SEMPRE due file (fronte + retro).
+  // L'array `documenti` conteneva un solo elemento; ora ne contiene due,
+  // entrambi con ospiteNumero = 1 e un campo `lato` che il backend usa per
+  // nominare gli allegati (genera-pdf-email.js).
   showNotification(t('notif.caricamentoDocResponsabile'), 'info');
-  
-  const fileInput = document.querySelector(`input[name="ospite1_documento_file"]`);
-  let sizeKB = null;
-  
-  if (fileInput?.files?.[0]) {
+
+  let documentiRaccolti = 0;
+
+  for (const lato of LATI_DOCUMENTO) {
+    const fileInput = inputDocumento(1, lato);
+    const file = fileInput?.files?.[0];
+    if (!file) continue;
+
     try {
-      const file = fileInput.files[0];
       const originalSizeMB = (file.size / 1024 / 1024).toFixed(2);
-      
-      console.log(`📸 Documento responsabile: ${file.name} - ${originalSizeMB} MB (originale)`);
-      
+      console.log(`📸 Documento responsabile (${lato}): ${file.name} - ${originalSizeMB} MB (originale)`);
+
       const base64 = await fileToBase64(file);
-      // Target 700KB (prima 400) e tetto 1200KB (prima 500): il limite reale
-      // è quello di Vercel su tutta la richiesta (~4.5MB), qui c'è un solo
-      // documento quindi c'è ampio margine per tenerlo più leggibile.
-      const base64Finale = await comprimiImmagineBase64(base64, 700);
-      
-      sizeKB = (base64Finale.split(',')[1].length * 0.75) / 1024;
-      
-      if (sizeKB > 1200) {
-        const errGrande = new Error(`Documento troppo grande anche dopo compressione (${sizeKB.toFixed(0)} KB)`);
+      // Con due documenti invece di uno il target per lato scende da 700 a
+      // 600 KB e il tetto da 1200 a 900 KB: anche nel caso peggiore (due file
+      // al massimo consentito) il payload resta ben sotto il limite di ~4.5 MB
+      // che Vercel impone sull'intera richiesta.
+      const base64Finale = await comprimiImmagineBase64(base64, 600);
+      const sizeKB = (base64Finale.split(',')[1].length * 0.75) / 1024;
+
+      if (sizeKB > 900) {
+        const errGrande = new Error(`Documento ${lato} troppo grande anche dopo compressione (${sizeKB.toFixed(0)} KB)`);
         errGrande.code = 'DOCUMENTO_TROPPO_GRANDE';
         errGrande.sizeKB = sizeKB.toFixed(0);
+        errGrande.lato = lato;
         errGrande.tipoSuggerimento = file.type === 'application/pdf' ? 'pdf' : 'foto';
         throw errGrande;
       }
-      
-      console.log(`✅ Documento responsabile compresso: ${sizeKB.toFixed(2)} KB`);
-      
+
+      console.log(`✅ Documento responsabile (${lato}) compresso: ${sizeKB.toFixed(2)} KB`);
+
       datiPrenotazione.documenti.push({
         ospiteNumero: 1,
-        nomeFile: file.name,
+        lato: lato,
+        nomeFile: `${lato}_${file.name}`,
         tipo: file.type,
         dimensione: base64Finale.split(',')[1].length,
         base64: base64Finale
       });
-      
+
+      documentiRaccolti++;
+
     } catch (error) {
-      console.error(`❌ Errore conversione documento:`, error);
+      console.error(`❌ Errore conversione documento (${lato}):`, error);
       if (error.code === 'DOCUMENTO_TROPPO_GRANDE') {
         throw error;
       }
-      const errProc = new Error('Impossibile processare il documento');
+      const errProc = new Error(`Impossibile processare il documento (${lato})`);
       errProc.code = 'IMPOSSIBILE_PROCESSARE';
+      errProc.lato = lato;
       throw errProc;
     }
   }
-  
+
   // Verifica finale
   const payloadSize = JSON.stringify(datiPrenotazione).length;
   const payloadSizeMB = (payloadSize / 1024 / 1024).toFixed(2);
@@ -1540,7 +1755,9 @@ async function raccogliDatiPrenotazioneConCompressione() {
     throw errPayload;
   }
   
-  if (sizeKB !== null) {
+  // Con il passaporto il retro non è richiesto: il confronto va fatto sui lati
+  // effettivamente obbligatori, non sempre su due.
+  if (documentiRaccolti >= latiRichiesti(1).length) {
     showNotification(t('notif.docResponsabileCaricato'), 'success');
   }
   
