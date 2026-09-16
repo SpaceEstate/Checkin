@@ -553,6 +553,22 @@ function validaStep1() {
 
 
 function validaStepOspite(numOspite) {
+  // La foto del documento è la prima cosa dello step: si controlla per
+  // prima, altrimenti l'ospite riceve un errore sui campi anagrafici che
+  // si sarebbero compilati da soli scansionando.
+  // Documento: il responsabile carica fronte e retro (sono i file che
+  // arrivano al proprietario), gli altri ospiti una sola foto del lato con
+  // la MRZ, che serve solo a compilare i campi e non viene inviata.
+  const mancanti = latiMancanti(numOspite);
+  if (mancanti.length > 0) {
+    showNotification(numOspite === 1
+      ? t('valid.latoMancante', { lato: nomeLato(mancanti[0]) })
+      : t('valid.documentoScanMancante', { n: numOspite }), 'error');
+    document.getElementById(`upload-side-${numOspite}-${mancanti[0]}`)
+      ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return false;
+  }
+
   const requiredFields = [
     { name: `ospite${numOspite}_cognome`, label: t('field.cognome') },
     { name: `ospite${numOspite}_nome`, label: t('field.nome') },
@@ -601,15 +617,6 @@ function validaStepOspite(numOspite) {
       }
     }
     
-    // Servono entrambi i lati: si segnala il primo mancante e lo si porta
-    // a schermo, così l'ospite vede subito dove intervenire.
-    const mancanti = latiMancanti(1);
-    if (mancanti.length > 0) {
-      showNotification(t('valid.latoMancante', { lato: nomeLato(mancanti[0]) }), 'error');
-      document.getElementById(`upload-side-1-${mancanti[0]}`)
-        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      return false;
-    }
   }
 
   return true;
@@ -692,12 +699,15 @@ function validaPrenotazioneCompleta() {
         return false;
       }
       
-      // ✅ VERIFICA FILE CARICATI (FRONTE + RETRO) SOLO PER OSPITE 1
-      const latiDaCaricare = latiMancanti(1);
-      if (latiDaCaricare.length > 0) {
-        showNotification(t('valid.latoMancanteResponsabile', { lato: nomeLato(latiDaCaricare[0]) }), 'error');
-        return false;
-      }
+    }
+
+    // ✅ FOTO DEL DOCUMENTO: fronte+retro per il responsabile, una per gli altri
+    const latiDaCaricare = latiMancanti(i);
+    if (latiDaCaricare.length > 0) {
+      showNotification(i === 1
+        ? t('valid.latoMancanteResponsabile', { lato: nomeLato(latiDaCaricare[0]) })
+        : t('valid.documentoScanMancante', { n: i }), 'error');
+      return false;
     }
   }
   
@@ -719,6 +729,12 @@ const LATI_DOCUMENTO = ['fronte', 'retro'];
 // documenti senza retro basta estendere questo array.
 const DOCUMENTI_SENZA_RETRO = ['PASSAPORTO'];
 
+// Dal secondo ospite in poi la foto del documento serve SOLO a precompilare
+// i campi leggendo la MRZ: il file non entra nel payload e non viene inviato
+// a nessuno (scelta voluta, per non appesantire l'email al proprietario).
+// Metti false se vuoi renderla facoltativa.
+const DOCUMENTO_ALTRI_OSPITI_OBBLIGATORIO = true;
+
 function inputDocumento(ospiteNum, lato) {
   return document.getElementById(`ospite${ospiteNum}_documento_${lato}`);
 }
@@ -732,26 +748,43 @@ function retroObbligatorio(ospiteNum) {
   return !DOCUMENTI_SENZA_RETRO.some(senzaRetro => tipo.includes(senzaRetro));
 }
 
-// Lati effettivamente richiesti per il documento scelto.
+// Riquadri di upload presenti nello step: due (fronte/retro) solo per il
+// responsabile, uno solo ('scan') per gli altri ospiti.
 function latiRichiesti(ospiteNum) {
+  if (ospiteNum !== 1) return ['scan'];
   return retroObbligatorio(ospiteNum) ? LATI_DOCUMENTO : ['fronte'];
+}
+
+// Quali di quei riquadri bloccano davvero il passaggio allo step successivo.
+function latiObbligatori(ospiteNum) {
+  if (ospiteNum !== 1) return DOCUMENTO_ALTRI_OSPITI_OBBLIGATORIO ? ['scan'] : [];
+  return latiRichiesti(1);
 }
 
 // Nome del lato nella lingua scelta dall'ospite (usato nelle notifiche e
 // nei messaggi di errore, dove non basta l'attributo data-i18n).
 function nomeLato(lato) {
-  return t(lato === 'fronte' ? 'guest.latoFronte' : 'guest.latoRetro');
+  if (lato === 'fronte') return t('guest.latoFronte');
+  if (lato === 'retro') return t('guest.latoRetro');
+  return t('guest.latoScan');
 }
 
 // Lati ancora da caricare, nell'ordine fronte -> retro.
 function latiMancanti(ospiteNum) {
-  return latiRichiesti(ospiteNum).filter(lato => !inputDocumento(ospiteNum, lato)?.files?.length);
+  return latiObbligatori(ospiteNum).filter(lato => !inputDocumento(ospiteNum, lato)?.files?.length);
 }
 
 // Messaggio di "caricamento completato": cambia se il retro non serve.
 function chiaveCompletamento(ospiteNum) {
   return latiRichiesti(ospiteNum).length === 1 ? 'guest.documentoCompleto' : 'guest.documentiCompleti';
 }
+
+// Etichette e chiavi di traduzione per ciascun tipo di riquadro.
+const ETICHETTE_LATO = {
+  fronte: { titolo: 'guest.latoFronte', hint: 'guest.latoFronteHint', foto: 'guest.fotografaFronte', passo: '1' },
+  retro:  { titolo: 'guest.latoRetro',  hint: 'guest.latoRetroHint',  foto: 'guest.fotografaRetro',  passo: '2' },
+  scan:   { titolo: 'guest.latoScan',   hint: 'guest.latoScanHint',   foto: 'guest.fotografaDocumento', passo: '1' }
+};
 
 // Aggiorna la label del singolo riquadro (nome file o testo tradotto).
 function aggiornaLabelUpload(ospiteNum, lato) {
@@ -796,6 +829,97 @@ function aggiornaStatoDocumenti(ospiteNum) {
   stato.setAttribute('data-i18n-params', JSON.stringify(params));
   stato.textContent = t(chiave, params);
   stato.classList.toggle('completo', completo);
+}
+
+// Riga di stato sotto i riquadri: lettura in corso, esito, campi compilati.
+function mostraStatoLettura(ospiteNum, testo, classe) {
+  const riga = document.getElementById(`lettura-stato-${ospiteNum}`);
+  if (!riga) return;
+  if (!testo) {
+    riga.style.display = 'none';
+    riga.textContent = '';
+    return;
+  }
+  riga.style.display = '';
+  riga.textContent = testo;
+  riga.className = `lettura-stato ${classe || ''}`.trim();
+}
+
+// Scrive un campo solo se la MRZ ha prodotto un valore valido, e lo
+// evidenzia come "precompilato, da controllare".
+function impostaCampoDaDocumento(ospiteNum, campo, valore, etichetta, compilati) {
+  if (!valore) return;
+  const el = document.querySelector(`[name="ospite${ospiteNum}_${campo}"]`);
+  if (!el) return;
+  if (el.tagName === 'SELECT' && !Array.from(el.options).some(o => o.value === valore)) return;
+  el.value = valore;
+  el.closest('.form-group')?.classList.add('precompilato');
+  compilati.push(etichetta);
+}
+
+// Porta i dati letti dalla MRZ nei campi dello step.
+// NOTA: luogo di nascita, comune e provincia restano vuoti di proposito —
+// la MRZ contiene la cittadinanza, non il luogo di nascita, quindi
+// riempirli sarebbe un'invenzione. Li compila l'ospite.
+function applicaDatiDocumento(ospiteNum, dati) {
+  const compilati = [];
+
+  impostaCampoDaDocumento(ospiteNum, 'cognome', dati.cognome, t('field.cognome'), compilati);
+  impostaCampoDaDocumento(ospiteNum, 'nome', dati.nome, t('field.nome'), compilati);
+  impostaCampoDaDocumento(ospiteNum, 'genere', dati.sesso, t('field.genere'), compilati);
+  impostaCampoDaDocumento(ospiteNum, 'nascita', dati.dataNascita, t('field.dataNascita'), compilati);
+  impostaCampoDaDocumento(ospiteNum, 'cittadinanza', dati.cittadinanza, t('field.cittadinanza'), compilati);
+
+  // Solo il responsabile ha i campi del documento da compilare.
+  if (ospiteNum === 1) {
+    impostaCampoDaDocumento(1, 'tipo_documento', dati.tipoDocumento, t('field.tipoDocumento'), compilati);
+    impostaCampoDaDocumento(1, 'numero_documento', dati.numeroDocumento, t('field.numeroDocumento'), compilati);
+    impostaCampoDaDocumento(1, 'luogo_rilascio', dati.statoEmissione, t('field.luogoRilascio'), compilati);
+    aggiornaObbligoRetro(1);
+  }
+
+  if (compilati.length === 0) {
+    mostraStatoLettura(ospiteNum, t('notif.letturaFallita'), 'ko');
+    return 0;
+  }
+
+  mostraStatoLettura(ospiteNum, t('notif.letturaRiuscita', { campi: compilati.join(', ') }), 'ok');
+  showNotification(t('notif.letturaRiuscitaBreve'), 'success');
+  return compilati.length;
+}
+
+// Avvia la lettura della foto appena caricata. Non blocca mai il check-in:
+// qualunque esito negativo lascia semplicemente i campi da compilare.
+async function avviaLetturaDocumento(ospiteNum, lato) {
+  if (typeof leggiDocumento !== 'function') return;
+
+  const file = inputDocumento(ospiteNum, lato)?.files?.[0];
+  if (!file) return;
+
+  if (file.type === 'application/pdf') {
+    mostraStatoLettura(ospiteNum, t('notif.letturaPdf'), 'ko');
+    return;
+  }
+
+  const riquadro = document.getElementById(`upload-side-${ospiteNum}-${lato}`);
+  riquadro?.classList.add('in-lettura');
+  mostraStatoLettura(ospiteNum, t('notif.letturaInCorso'), 'attesa');
+
+  try {
+    const esito = await leggiDocumento(file);
+    if (esito?.dati) {
+      applicaDatiDocumento(ospiteNum, esito.dati);
+    } else if (esito?.errore === 'ocr') {
+      mostraStatoLettura(ospiteNum, t('notif.letturaNonDisponibile'), 'ko');
+    } else {
+      mostraStatoLettura(ospiteNum, t('notif.letturaFallita'), 'ko');
+    }
+  } catch (err) {
+    console.warn('⚠️ Lettura documento non riuscita:', err);
+    mostraStatoLettura(ospiteNum, t('notif.letturaFallita'), 'ko');
+  } finally {
+    riquadro?.classList.remove('in-lettura');
+  }
 }
 
 // Notifica unica dopo ogni caricamento: conferma il lato appena caricato e,
@@ -843,24 +967,22 @@ window.aggiornaObbligoRetro = function(ospiteNum) {
   aggiornaStatoDocumenti(ospiteNum);
 }
 
-// Markup di un riquadro di upload (uno per lato).
+// Markup di un riquadro di upload: fronte/retro per il responsabile,
+// riquadro unico 'scan' per gli altri ospiti.
 function bloccoUploadLato(ospiteNum, lato) {
-  const isFronte = lato === 'fronte';
-  const keyTitolo = isFronte ? 'guest.latoFronte' : 'guest.latoRetro';
-  const keyHint = isFronte ? 'guest.latoFronteHint' : 'guest.latoRetroHint';
-  const keyFoto = isFronte ? 'guest.fotografaFronte' : 'guest.fotografaRetro';
+  const etichette = ETICHETTE_LATO[lato] || ETICHETTE_LATO.scan;
   const inputId = `ospite${ospiteNum}_documento_${lato}`;
   const suffisso = `${ospiteNum}-${lato}`;
 
   return `
             <div class="upload-side" id="upload-side-${suffisso}">
               <div class="upload-side-header">
-                <span class="upload-side-step">${isFronte ? '1' : '2'}</span>
-                <span class="upload-side-title" data-i18n="${keyTitolo}">${t(keyTitolo)}</span>
+                <span class="upload-side-step">${etichette.passo}</span>
+                <span class="upload-side-title" data-i18n="${etichette.titolo}">${t(etichette.titolo)}</span>
                 <span class="required-mark">*</span>
-                ${isFronte ? '' : `<span class="upload-side-badge" data-i18n="guest.facoltativo" style="display: none;">${t('guest.facoltativo')}</span>`}
+                ${lato === 'retro' ? `<span class="upload-side-badge" data-i18n="guest.facoltativo" style="display: none;">${t('guest.facoltativo')}</span>` : ''}
               </div>
-              <p class="upload-side-hint" data-i18n="${keyHint}">${t(keyHint)}</p>
+              <p class="upload-side-hint" data-i18n="${etichette.hint}">${t(etichette.hint)}</p>
               <div class="upload-group">
                 <label for="${inputId}" class="upload-label" data-i18n="guest.scegliFile">${t('guest.scegliFile')}</label>
                 <input type="file" id="${inputId}" name="${inputId}"
@@ -868,7 +990,7 @@ function bloccoUploadLato(ospiteNum, lato) {
                        onchange="handleFileUpload(this, ${ospiteNum}, '${lato}')">
               </div>
               <div class="camera-group">
-                <button type="button" class="camera-btn" onclick="openCamera(${ospiteNum}, '${lato}')" data-i18n="${keyFoto}">${t(keyFoto)}</button>
+                <button type="button" class="camera-btn" onclick="openCamera(${ospiteNum}, '${lato}')" data-i18n="${etichette.foto}">${t(etichette.foto)}</button>
               </div>
               <div id="camera-preview-${suffisso}" class="camera-preview" style="display: none;">
                 <video id="camera-video-${suffisso}" autoplay playsinline></video>
@@ -879,6 +1001,34 @@ function bloccoUploadLato(ospiteNum, lato) {
                 </div>
               </div>
             </div>`;
+}
+
+// Sezione documento completa di uno step ospite. Sta in cima allo step:
+// l'ospite fotografa, i campi sotto si compilano da soli e lui scorre in
+// giù per controllarli.
+function sezioneDocumentoOspite(ospiteNum) {
+  const isResponsabile = ospiteNum === 1;
+  const lati = latiRichiesti(ospiteNum);
+  const keySottotitolo = isResponsabile ? 'guest.documentoSottotitolo' : 'guest.documentoSottotitoloScan';
+  const params = { n: 0, tot: lati.length };
+
+  // Per il responsabile il riquadro del retro resta comunque a schermo
+  // (diventa facoltativo con il passaporto), quindi si generano sempre
+  // entrambi i lati e ci pensa aggiornaObbligoRetro a marcarlo.
+  const blocchi = isResponsabile
+    ? `${bloccoUploadLato(1, 'fronte')}\n${bloccoUploadLato(1, 'retro')}`
+    : bloccoUploadLato(ospiteNum, 'scan');
+
+  return `
+      <div class="document-section">
+        <h3 class="document-title" data-i18n="guest.documentoTitolo">${t('guest.documentoTitolo')}</h3>
+        <p class="document-subtitle" data-i18n="${keySottotitolo}">${t(keySottotitolo)}</p>
+        <p class="upload-status" id="upload-status-${ospiteNum}" data-i18n-key="guest.statoDocumenti" data-i18n-params='${JSON.stringify(params)}'>${t('guest.statoDocumenti', params)}</p>
+        <div class="document-upload${isResponsabile ? '' : ' singolo'}">
+${blocchi}
+        </div>
+        <p class="lettura-stato" id="lettura-stato-${ospiteNum}" style="display: none;"></p>
+      </div>`;
 }
 
 // === GENERAZIONE STEP OSPITI ===
@@ -930,15 +1080,6 @@ function generaStepOspiti() {
             ${opzioniStati}
           </select>
         </div>
-        <div class="document-section" style="grid-column: 1 / -1;">
-          <h3 class="document-title" data-i18n="guest.documentoTitolo">📄 Documento di identità</h3>
-          <p class="document-subtitle" data-i18n="guest.documentoSottotitolo">Servono due file: il fronte e il retro del documento (foto o PDF). Con il passaporto basta la pagina con i dati.</p>
-          <p class="upload-status" id="upload-status-1" data-i18n-key="guest.statoDocumenti" data-i18n-params='{"n":0}'>${t('guest.statoDocumenti', { n: 0 })}</p>
-          <div class="document-upload">
-${bloccoUploadLato(1, 'fronte')}
-${bloccoUploadLato(1, 'retro')}
-          </div>
-        </div>
       `;
     }
 
@@ -949,6 +1090,7 @@ ${bloccoUploadLato(1, 'retro')}
         <h2 class="step-title" data-i18n-key="guest.title" data-i18n-params='${JSON.stringify({ n: i })}'${i === 1 ? ' data-i18n-suffix="guest.responsabileTag"' : ''}>${titoloOspite}</h2>
         <p class="step-subtitle" data-i18n="guest.subtitle">Inserisci i dati dell'ospite</p>
       </div>
+      ${sezioneDocumentoOspite(i)}
       <div class="form-grid">
         <div class="form-group">
           <label class="form-label" for="ospite${i}_cognome" data-i18n="guest.cognome">Cognome *</label>
@@ -1015,6 +1157,7 @@ ${bloccoUploadLato(1, 'retro')}
     form.insertBefore(stepDiv, stepFinal);
     applicaTraduzioni(stepDiv);
     if (i === 1) aggiornaObbligoRetro(1);
+    aggiornaStatoDocumenti(i);
   }
 }
 
@@ -1267,7 +1410,12 @@ window.handleFileUpload = function(input, ospiteNum, lato) {
   aggiornaLabelUpload(ospiteNum, latoEffettivo);
   aggiornaStatoDocumenti(ospiteNum);
 
-  if (file) notificaLatoCaricato(ospiteNum, latoEffettivo);
+  if (file) {
+    notificaLatoCaricato(ospiteNum, latoEffettivo);
+    avviaLetturaDocumento(ospiteNum, latoEffettivo);
+  } else {
+    mostraStatoLettura(ospiteNum, '');
+  }
 }
 
 console.log('✅ Documento responsabile: fronte + retro obbligatori (solo fronte per il passaporto) - supporto fino a 9 ospiti');
@@ -1379,6 +1527,7 @@ window.capturePhoto = function(ospiteNum, lato) {
 
     closeCamera(ospiteNum, latoEffettivo);
     notificaLatoCaricato(ospiteNum, latoEffettivo);
+    avviaLetturaDocumento(ospiteNum, latoEffettivo);
 
     // Se manca ancora un lato, si apre direttamente la fotocamera per
     // quello: l'ospite che sta fotografando deve fare due scatti.
