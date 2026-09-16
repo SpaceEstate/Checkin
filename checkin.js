@@ -1268,14 +1268,18 @@ window.procediAlPagamento = async function() {
       if (!salvataggioResponse.ok) {
         const errorText = await salvataggioResponse.text();
         console.error('❌ Errore HTTP salvataggio:', salvataggioResponse.status, errorText);
-        throw new Error('Non è stato possibile salvare i dati. Riprova tra qualche istante.');
+        const errHttp = new Error('Salvataggio fallito (HTTP ' + salvataggioResponse.status + ')');
+        errHttp.code = 'SALVATAGGIO_FALLITO';
+        throw errHttp;
       }
       
       const result = await salvataggioResponse.json();
       console.log('💾 Risposta salvataggio:', result);
       
       if (!result.success) {
-        throw new Error(result.error || 'Salvataggio fallito');
+        const errSalv = new Error(result.error || 'Salvataggio fallito');
+        errSalv.code = 'SALVATAGGIO_FALLITO';
+        throw errSalv;
       }
       
       console.log('✅ Dati salvati su Redis con chiave:', tempSessionId);
@@ -1284,7 +1288,9 @@ window.procediAlPagamento = async function() {
       clearTimeout(timeoutId);
       
       if (fetchError.name === 'AbortError') {
-        throw new Error('Timeout nel salvataggio dati (45s). I documenti potrebbero essere troppo grandi. Riprova con foto più piccole.');
+        const errTimeout = new Error('Timeout salvataggio dati (45s)');
+        errTimeout.code = 'TIMEOUT_SALVATAGGIO';
+        throw errTimeout;
       }
       throw fetchError;
     }
@@ -1303,12 +1309,30 @@ window.procediAlPagamento = async function() {
       payButton.innerHTML = t('payment.payButton', { amount: calcolaTotale().toFixed(2) });
     }
     
-    let errorMessage = t('payment.erroreGenerico');
+    let errorMessage;
     
-    if (error.message.includes('Timeout') || error.message.includes('timeout')) {
-      errorMessage = t('payment.erroreTimeout');
-    } else if (error.message.includes('Too large') || error.message.includes('troppo grande')) {
-      errorMessage = t('payment.erroreTroppoGrande');
+    switch (error.code) {
+      case 'TIMEOUT_SALVATAGGIO':
+        errorMessage = t('payment.timeoutSalvataggio');
+        break;
+      case 'SALVATAGGIO_FALLITO':
+        errorMessage = t('payment.salvataggioFallito');
+        break;
+      case 'DOCUMENTO_TROPPO_GRANDE': {
+        const suggerimento = error.tipoSuggerimento === 'pdf'
+          ? t('payment.suggerimentoPdf')
+          : t('payment.suggerimentoFoto');
+        errorMessage = t('payment.documentoTroppoGrande', { size: error.sizeKB, suggerimento });
+        break;
+      }
+      case 'IMPOSSIBILE_PROCESSARE':
+        errorMessage = t('payment.impossibileProcessare');
+        break;
+      case 'PAYLOAD_TROPPO_GRANDE':
+        errorMessage = t('payment.payloadTroppoGrande', { mb: error.payloadMB });
+        break;
+      default:
+        errorMessage = t('payment.erroreGenerico');
     }
     
     showNotification(errorMessage, 'error');
@@ -1469,10 +1493,11 @@ async function raccogliDatiPrenotazioneConCompressione() {
       sizeKB = (base64Finale.split(',')[1].length * 0.75) / 1024;
       
       if (sizeKB > 1200) {
-        const suggerimento = file.type === 'application/pdf'
-          ? 'Prova con una scansione più leggera, o fai una foto del documento invece del PDF.'
-          : 'Usa una foto con risoluzione più bassa.';
-        throw new Error(`Documento troppo grande anche dopo compressione (${sizeKB.toFixed(0)} KB). ${suggerimento}`);
+        const errGrande = new Error(`Documento troppo grande anche dopo compressione (${sizeKB.toFixed(0)} KB)`);
+        errGrande.code = 'DOCUMENTO_TROPPO_GRANDE';
+        errGrande.sizeKB = sizeKB.toFixed(0);
+        errGrande.tipoSuggerimento = file.type === 'application/pdf' ? 'pdf' : 'foto';
+        throw errGrande;
       }
       
       console.log(`✅ Documento responsabile compresso: ${sizeKB.toFixed(2)} KB`);
@@ -1487,10 +1512,12 @@ async function raccogliDatiPrenotazioneConCompressione() {
       
     } catch (error) {
       console.error(`❌ Errore conversione documento:`, error);
-      if (error.message && error.message.includes('troppo grande')) {
+      if (error.code === 'DOCUMENTO_TROPPO_GRANDE') {
         throw error;
       }
-      throw new Error(`Impossibile processare il documento. Riprova con un'immagine diversa.`);
+      const errProc = new Error('Impossibile processare il documento');
+      errProc.code = 'IMPOSSIBILE_PROCESSARE';
+      throw errProc;
     }
   }
   
@@ -1507,7 +1534,10 @@ async function raccogliDatiPrenotazioneConCompressione() {
   });
   
   if (payloadSize > 4 * 1024 * 1024) {
-    throw new Error(`Payload troppo grande (${payloadSizeMB} MB). Riduci la qualità del documento.`);
+    const errPayload = new Error(`Payload troppo grande (${payloadSizeMB} MB)`);
+    errPayload.code = 'PAYLOAD_TROPPO_GRANDE';
+    errPayload.payloadMB = payloadSizeMB;
+    throw errPayload;
   }
   
   if (sizeKB !== null) {
