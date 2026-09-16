@@ -7,6 +7,11 @@ echo "📦 Copiando file statici in public/..."
 cp index.html public/
 cp checkin.css public/
 cp checkin.js public/
+# i18n.js mancava: senza, la copia servita da Vercel resta senza traduzioni.
+cp i18n.js public/
+# Lettura MRZ dei documenti (parser + OCR locale)
+cp mrz.js public/
+cp documento-ocr.js public/
 cp successo-pagamento.html public/
 
 # Le immagini della cassetta sono già committate in public/images/cassetta/

@@ -140,6 +140,16 @@ export default async function handler(req, res) {
   }
 }
 
+// Il check-in invia due file per il responsabile: fronte e retro del
+// documento. Ogni elemento di `documenti` porta un campo `lato`
+// ('fronte' | 'retro'); i dati vecchi, con un solo file e senza `lato`,
+// continuano a funzionare (etichetta generica "Documento").
+function etichettaLato(lato) {
+  if (lato === 'fronte') return 'Fronte';
+  if (lato === 'retro') return 'Retro';
+  return 'Documento';
+}
+
 // ✅ FUNZIONE CORRETTA: Prepara allegati documenti con validazione robusta
 function preparaAllegatiDocumenti(documenti) {
   if (!Array.isArray(documenti) || documenti.length === 0) {
@@ -171,7 +181,9 @@ function preparaAllegatiDocumenti(documenti) {
 
     if (!doc.nomeFile) {
       console.warn(`⚠️ Documento ${index + 1} senza nomeFile, uso nome generico`);
-      doc.nomeFile = `documento_${index + 1}.jpg`;
+      doc.nomeFile = doc.lato
+        ? `${doc.lato}_documento_${index + 1}.jpg`
+        : `documento_${index + 1}.jpg`;
     }
 
     try {
@@ -280,8 +292,8 @@ function generaHTMLRiepilogo(dati) {
   // tra due pagine; il resto del flusso lo decide il renderer in base allo
   // spazio disponibile, come per qualunque contenuto continuo.
   const ospitiHTML = ospiti.map((ospite) => {
-    // Cerca documento per questo ospite specifico
-    const documento = documentiValidi.find(d => d && d.ospiteNumero === ospite.numero);
+    // Documenti di questo ospite: per il responsabile sono due (fronte + retro)
+    const documentiOspite = documentiValidi.filter(d => d && d.ospiteNumero === ospite.numero);
 
     return `
       <div class="ospite ${ospite.isResponsabile ? 'responsabile' : ''}">
@@ -339,10 +351,12 @@ function generaHTMLRiepilogo(dati) {
         </div>
         ` : ''}
 
-        ${documento ? `
+        ${documentiOspite.length > 0 ? `
         <div class="documento-note">
-          <strong>📎 Documento allegato:</strong> ${escapeHtml(documento.nomeFile) || 'Documento'}
-          (${Math.round((documento.dimensione || 0) / 1024)} KB) -
+          <strong>📎 Documenti allegati (${documentiOspite.length}):</strong>
+          ${documentiOspite.map(d =>
+            `${etichettaLato(d.lato)}: ${escapeHtml(d.nomeFile) || 'Documento'} (${Math.round((d.dimensione || 0) / 1024)} KB)`
+          ).join(' · ')} -
           <em>Vedi allegati email separati</em>
         </div>
         ` : ''}
@@ -430,7 +444,7 @@ function generaHTMLRiepilogo(dati) {
         <p style="font-size: 10px; margin: 4px 0;">I documenti di identità sono allegati separatamente a questa email:</p>
         <ul>
           ${documentiValidi.map(doc => `
-            <li><strong>Ospite ${escapeHtml(doc.ospiteNumero) || '?'}:</strong> ${escapeHtml(doc.nomeFile)} (~${Math.round((doc.dimensione || 0) / 1024)} KB)</li>
+            <li><strong>Ospite ${escapeHtml(doc.ospiteNumero) || '?'} — ${etichettaLato(doc.lato)}:</strong> ${escapeHtml(doc.nomeFile)} (~${Math.round((doc.dimensione || 0) / 1024)} KB)</li>
           `).join('')}
         </ul>
       </div>
