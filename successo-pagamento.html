@@ -517,7 +517,7 @@
             // Aggiorna codice cassetta
             const codiceElement = document.getElementById('codice-cassetta');
             if (codiceElement) {
-                codiceElement.textContent = "Errore";
+                codiceElement.textContent = t('successPage.errorLoadingTitle');
                 codiceElement.classList.remove('loading');
                 codiceElement.classList.add('error');
             }
