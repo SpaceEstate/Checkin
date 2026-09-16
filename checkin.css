@@ -605,6 +605,112 @@ body {
   margin-bottom: 20px;
 }
 
+/* ---- Fronte / retro: un riquadro per lato del documento ----
+   .document-upload resta una griglia a due colonne su desktop (fronte a
+   sinistra, retro a destra) e passa a colonna singola su mobile grazie alla
+   media query più in basso: i due riquadri si impilano senza altre modifiche. */
+.upload-side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 14px;
+  background: var(--color-white);
+  border: 1px solid var(--color-border);
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.upload-side.completo {
+  border-color: var(--color-accent-300);
+  box-shadow: 0 4px 15px rgba(var(--color-accent-200-rgb), 0.15);
+}
+
+.upload-side-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.upload-side-step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--color-accent-200);
+  color: var(--color-white);
+  font-size: 0.85rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.upload-side.completo .upload-side-step {
+  background: var(--color-accent-300-dark);
+}
+
+/* Retro con il passaporto: riquadro ancora utilizzabile ma non obbligatorio */
+.upload-side.facoltativo {
+  border-style: dashed;
+  background: var(--color-bg-cream-light);
+}
+
+.upload-side.facoltativo .upload-side-step {
+  background: var(--color-text-muted);
+}
+
+.upload-side-badge {
+  margin-left: auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--color-bg-cream);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.upload-side-title {
+  font-size: 1rem;
+}
+
+.upload-side-hint {
+  margin: -4px 0 0;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+/* Contatore "X di 2 file caricati" */
+.upload-status {
+  text-align: center;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  margin-bottom: 16px;
+}
+
+.upload-status.completo {
+  color: var(--color-accent-300-dark);
+}
+
+/* Dentro i riquadri gli elementi sono due volte tanti rispetto a prima:
+   si riduce l'altezza minima per non allungare troppo lo step. */
+.upload-side .upload-label,
+.upload-side .camera-btn {
+  min-height: 64px;
+  padding: 14px;
+  font-size: 0.95rem;
+}
+
+.upload-side .camera-preview {
+  margin-top: 0;
+  padding: 12px;
+}
+
 .upload-group {
   position: relative;
 }
