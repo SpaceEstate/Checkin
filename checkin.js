@@ -65,9 +65,18 @@ function precompilaDatiPrenotazione(dati) {
   const dataInput = document.getElementById('data-checkin');
   if (dataInput && dati.dataCheckin) {
     dataInput.value = dati.dataCheckin;
-    dataInput.readOnly = true;
-    dataInput.style.backgroundColor = '#f5f2e9';
-    dataInput.style.cursor = 'not-allowed';
+    // Un <input type="date"> rifiuta silenziosamente valori non in formato
+    // AAAA-MM-GG: se succede, .value resta "". In quel caso NON blocchiamo
+    // il campo in sola lettura (altrimenti l'ospite si ritroverebbe con un
+    // campo vuoto e anche il calendario disabilitato, senza modo di
+    // procedere). Lo blocchiamo solo se il valore è stato davvero accettato.
+    if (dataInput.value) {
+      dataInput.readOnly = true;
+      dataInput.style.backgroundColor = '#f5f2e9';
+      dataInput.style.cursor = 'not-allowed';
+    } else {
+      console.warn('⚠️ Data check-in non valida ricevuta dal server, campo lasciato modificabile:', dati.dataCheckin);
+    }
   }
   
   // Appartamenti pre-verificati: selezione + blocco delle checkbox corrispondenti
