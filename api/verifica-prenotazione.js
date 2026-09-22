@@ -4,6 +4,47 @@
 import { GoogleSpreadsheet } from 'google-spreadsheet';
 import { JWT } from 'google-auth-library';
 
+// Normalizza una data (proveniente dal foglio Google Sheets, in formato
+// potenzialmente diverso) in una stringa ISO stretta "YYYY-MM-DD", come
+// richiesto da <input type="date">. Ritorna null se non riesce a
+// riconoscere il formato, invece di restituire una stringa "quasi giusta"
+// che il campo data rifiuterebbe silenziosamente.
+function normalizzaDataISO(valore) {
+  if (!valore) return null;
+  const raw = String(valore).trim();
+
+  // Già in formato ISO (anno-mese-giorno), eventualmente con un orario
+  // attaccato (es. "2026-09-22T00:00:00.000Z" o "2026-09-22 00:00:00"):
+  // riconosciuto dal fatto che inizia con 4 cifre. In questo caso NON va
+  // toccato, va solo tagliata l'eventuale parte oraria.
+  let m = raw.match(/^(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})/);
+  if (m) {
+    const anno = m[1];
+    const mese = m[2].padStart(2, '0');
+    const giorno = m[3].padStart(2, '0');
+    return `${anno}-${mese}-${giorno}`;
+  }
+
+  // Formato giorno-primo (GG/MM/AAAA, GG-MM-AAAA, GG.MM.AAAA): riconosciuto
+  // dal fatto che l'anno (4 cifre) è l'ULTIMO pezzo, non il primo.
+  m = raw.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/);
+  if (m) {
+    const giorno = m[1].padStart(2, '0');
+    const mese = m[2].padStart(2, '0');
+    const anno = m[3];
+    return `${anno}-${mese}-${giorno}`;
+  }
+
+  // Ultima spiaggia: prova il parser nativo di Date (copre ad es. le
+  // stringhe restituite da Google Sheets come oggetto Date serializzato).
+  const d = new Date(raw);
+  if (!isNaN(d.getTime())) {
+    return d.toISOString().split('T')[0];
+  }
+
+  return null;
+}
+
 export default async function handler(req, res) {
   // CORS Headers
   res.setHeader("Access-Control-Allow-Origin", "https://spaceestate.github.io");
@@ -97,20 +138,26 @@ export default async function handler(req, res) {
       });
     }
 
-    // Converti data in formato ISO (YYYY-MM-DD)
-    let dataISO = datiPrenotazione.dataCheckin;
-    try {
-      // Gestisce vari formati di data (DD/MM/YYYY, DD-MM-YYYY, ecc.)
-      const parti = dataISO.split(/[\/\-\.]/);
-      if (parti.length === 3) {
-        // Assume formato DD/MM/YYYY o DD-MM-YYYY
-        const giorno = parti[0].padStart(2, '0');
-        const mese = parti[1].padStart(2, '0');
-        const anno = parti[2];
-        dataISO = `${anno}-${mese}-${giorno}`;
-      }
-    } catch (e) {
-      console.warn('⚠️ Errore conversione data:', e);
+    // Converti data in formato ISO (YYYY-MM-DD), qualunque sia il formato
+    // in cui è salvata nel foglio.
+    //
+    // BUG STORICO: il vecchio codice assumeva SEMPRE un formato giorno-primo
+    // (GG/MM/AAAA) e prendeva l'ultimo pezzo come anno. Ma le prenotazioni
+    // create dal sito stesso (dopo pagamento Stripe, vedi stripeWebhook.js)
+    // salvano la data già in formato ISO AAAA-MM-GG. Per una data tipo
+    // "2026-09-22", quel codice produceva "22-09-2026": non valido per un
+    // <input type="date"> (che richiede rigorosamente AAAA-MM-GG). Il campo
+    // risultava quindi vuoto e, siccome veniva comunque bloccato in sola
+    // lettura, anche il selettore calendario del browser restava disabilitato.
+    const dataISO = normalizzaDataISO(datiPrenotazione.dataCheckin);
+
+    if (!dataISO) {
+      console.warn('⚠️ Data check-in non riconosciuta:', datiPrenotazione.dataCheckin);
+      return res.status(400).json({
+        found: false,
+        error: "Data check-in non valida nel sistema",
+        message: `Formato data non riconosciuto: "${datiPrenotazione.dataCheckin}"`
+      });
     }
 
     datiPrenotazione.dataCheckin = dataISO;
