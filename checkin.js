@@ -400,7 +400,9 @@ window.verificaPrenotazione = async function() {
       // abbia già applicato il cambio di visibilità prima di scrivere il
       // valore, evitando che il bug si ripresenti per timing.
       requestAnimationFrame(() => {
+        console.log('🔧 [FIX v2] scrivo la data DOPO aver reso visibile lo step:', result.dati.dataCheckin);
         precompilaDatiPrenotazione(result.dati);
+        console.log('🔧 [FIX v2] valore letto dal campo subito dopo:', document.getElementById('data-checkin')?.value, '| readOnly:', document.getElementById('data-checkin')?.readOnly);
       });
     } else {
       // RESTA SULLA SCHERMATA - NON VA AVANTI
