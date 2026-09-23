@@ -343,16 +343,6 @@ body {
   border-color: var(--color-accent-100);
 }
 
-/* Testo statico per campi pre-verificati mostrati come testo invece che
-   come <input> (vedi data-checkin-testo): stesso ingombro/aspetto di
-   .form-input ma senza bordo interattivo, per segnalare che non è
-   modificabile. */
-.form-input-static {
-  background-color: #f5f2e9;
-  cursor: not-allowed;
-  user-select: none;
-}
-
 .form-select {
   -webkit-appearance: none;
   -moz-appearance: none;
