@@ -63,28 +63,43 @@ function precompilaDatiPrenotazione(dati) {
   
   // Data check-in
   const dataInput = document.getElementById('data-checkin');
-  const dataTesto = document.getElementById('data-checkin-testo');
   if (dataInput && dati.dataCheckin) {
     dataInput.value = dati.dataCheckin;
-    // STORIA DEL BUG (confermata su più round di test, con e senza readOnly):
-    // Chrome in questa versione non ridisegna in modo affidabile un
-    // <input type="date"> il cui valore è stato scritto via script —
-    // readOnly o meno, il campo può restare visivamente vuoto anche se
-    // .value è corretto. Riordino delle operazioni, requestAnimationFrame
-    // e forzatura del ridisegno non hanno risolto: il problema è la
-    // scrittura via script sul controllo nativo in sé.
-    // SOLUZIONE: per la data pre-verificata non si mostra più l'<input>
-    // nativo, ma un semplice testo (niente rendering nativo, niente bug).
-    // L'<input type="date"> resta nel DOM, nascosto, solo per continuare a
-    // fornire il valore a validazione e riepilogo — canali che hanno
-    // sempre letto .value correttamente, indipendentemente dal problema di
-    // rendering.
+    // CAUSA REALE (trovata leggendo creaCustomDateInput() più sotto nel
+    // file): su desktop, e su mobile senza supporto nativo, il campo
+    // visibile in pagina non è mai l'<input type="date"> nativo, ma un
+    // <input type="text"> digitabile dentro un wrapper creato da
+    // potenziaTuosDateInput(); il nativo resta nel DOM solo reso
+    // invisibile, e il testo digitabile si aggiorna SOLO tramite un
+    // listener sull'evento "change" del nativo (vedi originalInput
+    // .addEventListener('change', ...) più sotto). Scrivere dataInput.value
+    // via script non genera da solo quell'evento: per questo il campo
+    // visibile restava sempre vuoto, indipendentemente da qualunque bug di
+    // rendering Chrome sugli <input type="date"> — non era quello il
+    // problema. Il fix è semplicemente dispatchare l'evento mancante.
+    dataInput.dispatchEvent(new Event('change', { bubbles: true }));
+
     if (dataInput.value) {
-      dataInput.style.display = 'none';
-      dataInput.setAttribute('aria-hidden', 'true');
-      if (dataTesto) {
-        dataTesto.textContent = formatDataItaliana(dataInput.value);
-        dataTesto.style.display = 'block';
+      dataInput.style.backgroundColor = '#f5f2e9';
+      // Blocco del campo pre-verificato: se esiste il wrapper custom si
+      // blocca il testo digitabile (un <input type="text"> normale:
+      // readOnly qui è affidabile, nessun bug nativo dei date-input) e il
+      // bottone calendario. Sul percorso mobile con date-input nativo
+      // supportato (senza wrapper, vedi miglioraDateInputNativo) il campo
+      // resta invece modificabile, per non riesumare lo stesso bug sul
+      // controllo nativo.
+      const wrapper = dataInput.closest('.date-input-wrapper');
+      const textInput = wrapper?.querySelector('.date-text-input');
+      const pickerBtn = wrapper?.querySelector('.date-picker-btn');
+      if (textInput) {
+        textInput.readOnly = true;
+        textInput.style.backgroundColor = '#f5f2e9';
+        textInput.style.cursor = 'not-allowed';
+      }
+      if (pickerBtn) {
+        pickerBtn.disabled = true;
+        pickerBtn.style.opacity = '0.5';
+        pickerBtn.style.cursor = 'not-allowed';
       }
     } else {
       console.warn('⚠️ Data check-in non valida ricevuta dal server, campo lasciato modificabile:', dati.dataCheckin);
