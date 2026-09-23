@@ -57,25 +57,6 @@ function aggiornaMaxOspiti() {
   }
 }
 
-// Forza Chrome a "ridisegnare" un <input type="date"> il cui valore è
-// stato assegnato via JavaScript. CONFERMATO CON I LOG IN CONSOLE: dopo
-// precompilaDatiPrenotazione, dataInput.value contiene correttamente la
-// data (es. "2026-09-24") e readOnly è true, eppure il controllo nativo
-// resta visivamente vuoto (placeholder GG/MM/AAAA) finché l'utente non ci
-// clicca sopra. È un bug di ridisegno del widget nativo di Chrome quando
-// value+readOnly vengono impostati via script. Il rimedio è costringere il
-// browser a ricostruire il controllo: passare per un attimo a type="text"
-// (che forza la distruzione del widget nativo del date-picker) e tornare
-// subito a type="date" riassegnando il valore.
-function forzaRidisegnoCampoData(input) {
-  if (!input || !input.value) return;
-  const valore = input.value;
-  input.type = 'text';
-  void input.offsetHeight; // forza il browser ad applicare il cambio prima di tornare indietro
-  input.type = 'date';
-  input.value = valore;
-}
-
 // === MODIFICA: precompilaDatiPrenotazione ===
 function precompilaDatiPrenotazione(dati) {
   console.log('📝 Pre-compilazione dati:', dati);
@@ -84,17 +65,22 @@ function precompilaDatiPrenotazione(dati) {
   const dataInput = document.getElementById('data-checkin');
   if (dataInput && dati.dataCheckin) {
     dataInput.value = dati.dataCheckin;
-    // Un <input type="date"> rifiuta silenziosamente valori non in formato
-    // AAAA-MM-GG: se succede, .value resta "". In quel caso NON blocchiamo
-    // il campo in sola lettura (altrimenti l'ospite si ritroverebbe con un
-    // campo vuoto e anche il calendario disabilitato, senza modo di
-    // procedere). Lo blocchiamo solo se il valore è stato davvero accettato.
+    // STORIA DEL BUG (confermata con log + screenshot su più round di test):
+    // il valore veniva SEMPRE scritto correttamente in dataInput.value, ma
+    // Chrome si rifiutava di ridisegnare un <input type="date"> reso
+    // readOnly via script, mostrando il placeholder vuoto anche a valore
+    // corretto e con il campo di fatto bloccato (niente calendario, niente
+    // digitazione manuale). Cambiare l'ordine delle operazioni, rimandare
+    // la scrittura con requestAnimationFrame e forzare un ridisegno via
+    // type="text"→"date" non hanno risolto: il problema è la combinazione
+    // readOnly+type="date" in sé, in questa versione di Chrome.
+    // Il campo NON readOnly (percorso "non ho il codice") ha sempre
+    // funzionato perfettamente, quindi ora si lascia precompilato ma
+    // normalmente modificabile invece di bloccato, per aggirare il bug del
+    // browser. Lo sfondo colorato resta come indicazione visiva che il
+    // valore è pre-verificato.
     if (dataInput.value) {
-      dataInput.readOnly = true;
       dataInput.style.backgroundColor = '#f5f2e9';
-      dataInput.style.cursor = 'not-allowed';
-      forzaRidisegnoCampoData(dataInput);
-      console.log('🔧 [FIX v3] valore dopo ridisegno forzato:', dataInput.value);
     } else {
       console.warn('⚠️ Data check-in non valida ricevuta dal server, campo lasciato modificabile:', dati.dataCheckin);
     }
@@ -409,21 +395,13 @@ window.verificaPrenotazione = async function() {
       window.datiPrecompilati = true;
       currentStep = 1;
       mostraStepCorrente();
-      // IMPORTANTE: precompilaDatiPrenotazione va chiamata DOPO
-      // mostraStepCorrente(), cioè quando #step-1 è già visibile.
-      // Il campo <input type="date"> è dentro .step, che ha
-      // display:none + content-visibility:hidden finché non è .active:
-      // se gli si assegna un valore mentre è ancora nascosto, Chrome lo
-      // registra correttamente nel DOM (per questo la validazione passava
-      // e la data arrivava giusta nel riepilogo) ma non ridisegna il
-      // widget nativo, che resta visivamente vuoto finché non si tocca il
-      // campo. Un requestAnimationFrame in più assicura che il browser
-      // abbia già applicato il cambio di visibilità prima di scrivere il
-      // valore, evitando che il bug si ripresenti per timing.
+      // precompilaDatiPrenotazione va chiamata dopo mostraStepCorrente(),
+      // cioè a step visibile: buona norma per i controlli nativi, anche se
+      // il vero bug della data (vedi commenti nella funzione) era legato a
+      // readOnly e non alla visibilità.
       requestAnimationFrame(() => {
-        console.log('🔧 [FIX v2] scrivo la data DOPO aver reso visibile lo step:', result.dati.dataCheckin);
         precompilaDatiPrenotazione(result.dati);
-        console.log('🔧 [FIX v2] valore letto dal campo subito dopo:', document.getElementById('data-checkin')?.value, '| readOnly:', document.getElementById('data-checkin')?.readOnly);
+        console.log('✅ [FIX] campo data-checkin dopo la precompilazione:', document.getElementById('data-checkin')?.value);
       });
     } else {
       // RESTA SULLA SCHERMATA - NON VA AVANTI
