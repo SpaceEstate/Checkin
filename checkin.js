@@ -385,10 +385,23 @@ window.verificaPrenotazione = async function() {
     
     if (result.found && result.dati) {
       showNotification(t('notif.prenotazioneTrovata'), 'success');
-      precompilaDatiPrenotazione(result.dati);
       window.datiPrecompilati = true;
       currentStep = 1;
       mostraStepCorrente();
+      // IMPORTANTE: precompilaDatiPrenotazione va chiamata DOPO
+      // mostraStepCorrente(), cioè quando #step-1 è già visibile.
+      // Il campo <input type="date"> è dentro .step, che ha
+      // display:none + content-visibility:hidden finché non è .active:
+      // se gli si assegna un valore mentre è ancora nascosto, Chrome lo
+      // registra correttamente nel DOM (per questo la validazione passava
+      // e la data arrivava giusta nel riepilogo) ma non ridisegna il
+      // widget nativo, che resta visivamente vuoto finché non si tocca il
+      // campo. Un requestAnimationFrame in più assicura che il browser
+      // abbia già applicato il cambio di visibilità prima di scrivere il
+      // valore, evitando che il bug si ripresenti per timing.
+      requestAnimationFrame(() => {
+        precompilaDatiPrenotazione(result.dati);
+      });
     } else {
       // RESTA SULLA SCHERMATA - NON VA AVANTI
       showNotification(t('notif.prenotazioneNonTrovata'), 'error');
