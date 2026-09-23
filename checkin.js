@@ -63,24 +63,29 @@ function precompilaDatiPrenotazione(dati) {
   
   // Data check-in
   const dataInput = document.getElementById('data-checkin');
+  const dataTesto = document.getElementById('data-checkin-testo');
   if (dataInput && dati.dataCheckin) {
     dataInput.value = dati.dataCheckin;
-    // STORIA DEL BUG (confermata con log + screenshot su più round di test):
-    // il valore veniva SEMPRE scritto correttamente in dataInput.value, ma
-    // Chrome si rifiutava di ridisegnare un <input type="date"> reso
-    // readOnly via script, mostrando il placeholder vuoto anche a valore
-    // corretto e con il campo di fatto bloccato (niente calendario, niente
-    // digitazione manuale). Cambiare l'ordine delle operazioni, rimandare
-    // la scrittura con requestAnimationFrame e forzare un ridisegno via
-    // type="text"→"date" non hanno risolto: il problema è la combinazione
-    // readOnly+type="date" in sé, in questa versione di Chrome.
-    // Il campo NON readOnly (percorso "non ho il codice") ha sempre
-    // funzionato perfettamente, quindi ora si lascia precompilato ma
-    // normalmente modificabile invece di bloccato, per aggirare il bug del
-    // browser. Lo sfondo colorato resta come indicazione visiva che il
-    // valore è pre-verificato.
+    // STORIA DEL BUG (confermata su più round di test, con e senza readOnly):
+    // Chrome in questa versione non ridisegna in modo affidabile un
+    // <input type="date"> il cui valore è stato scritto via script —
+    // readOnly o meno, il campo può restare visivamente vuoto anche se
+    // .value è corretto. Riordino delle operazioni, requestAnimationFrame
+    // e forzatura del ridisegno non hanno risolto: il problema è la
+    // scrittura via script sul controllo nativo in sé.
+    // SOLUZIONE: per la data pre-verificata non si mostra più l'<input>
+    // nativo, ma un semplice testo (niente rendering nativo, niente bug).
+    // L'<input type="date"> resta nel DOM, nascosto, solo per continuare a
+    // fornire il valore a validazione e riepilogo — canali che hanno
+    // sempre letto .value correttamente, indipendentemente dal problema di
+    // rendering.
     if (dataInput.value) {
-      dataInput.style.backgroundColor = '#f5f2e9';
+      dataInput.style.display = 'none';
+      dataInput.setAttribute('aria-hidden', 'true');
+      if (dataTesto) {
+        dataTesto.textContent = formatDataItaliana(dataInput.value);
+        dataTesto.style.display = 'block';
+      }
     } else {
       console.warn('⚠️ Data check-in non valida ricevuta dal server, campo lasciato modificabile:', dati.dataCheckin);
     }
