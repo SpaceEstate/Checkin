@@ -57,6 +57,25 @@ function aggiornaMaxOspiti() {
   }
 }
 
+// Forza Chrome a "ridisegnare" un <input type="date"> il cui valore è
+// stato assegnato via JavaScript. CONFERMATO CON I LOG IN CONSOLE: dopo
+// precompilaDatiPrenotazione, dataInput.value contiene correttamente la
+// data (es. "2026-09-24") e readOnly è true, eppure il controllo nativo
+// resta visivamente vuoto (placeholder GG/MM/AAAA) finché l'utente non ci
+// clicca sopra. È un bug di ridisegno del widget nativo di Chrome quando
+// value+readOnly vengono impostati via script. Il rimedio è costringere il
+// browser a ricostruire il controllo: passare per un attimo a type="text"
+// (che forza la distruzione del widget nativo del date-picker) e tornare
+// subito a type="date" riassegnando il valore.
+function forzaRidisegnoCampoData(input) {
+  if (!input || !input.value) return;
+  const valore = input.value;
+  input.type = 'text';
+  void input.offsetHeight; // forza il browser ad applicare il cambio prima di tornare indietro
+  input.type = 'date';
+  input.value = valore;
+}
+
 // === MODIFICA: precompilaDatiPrenotazione ===
 function precompilaDatiPrenotazione(dati) {
   console.log('📝 Pre-compilazione dati:', dati);
@@ -74,6 +93,8 @@ function precompilaDatiPrenotazione(dati) {
       dataInput.readOnly = true;
       dataInput.style.backgroundColor = '#f5f2e9';
       dataInput.style.cursor = 'not-allowed';
+      forzaRidisegnoCampoData(dataInput);
+      console.log('🔧 [FIX v3] valore dopo ridisegno forzato:', dataInput.value);
     } else {
       console.warn('⚠️ Data check-in non valida ricevuta dal server, campo lasciato modificabile:', dati.dataCheckin);
     }
