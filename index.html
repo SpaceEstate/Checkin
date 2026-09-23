@@ -94,6 +94,10 @@
           <div class="form-group">
             <label class="form-label" for="data-checkin" data-i18n="step1.dateLabel">Data check-in</label>
             <input type="date" id="data-checkin" name="data-checkin" class="form-input" required>
+            <!-- Testo alternativo per la data pre-verificata: vedi commento in
+                 precompilaDatiPrenotazione() in checkin.js sul bug di rendering
+                 di Chrome sugli <input type="date"> scritti via script. -->
+            <div id="data-checkin-testo" class="form-input form-input-static" style="display: none;"></div>
           </div>
 
           <div class="form-grid">
