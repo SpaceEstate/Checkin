@@ -7,6 +7,7 @@ echo "📦 Copiando file statici in public/..."
 cp index.html public/
 cp checkin.css public/
 cp checkin.js public/
+cp i18n.js public/
 cp successo-pagamento.html public/
 
 # Le immagini della cassetta sono già committate in public/images/cassetta/
