@@ -478,7 +478,7 @@ Sistema Check-in Automatico
   `;
 
   await transporter.sendMail({
-    from: process.env.EMAIL_USER,
+    from: '"La Columbera" <' + process.env.EMAIL_USER + '>',
     to: emailDestinatario,
     subject: oggetto,
     text: corpoEmail,
@@ -541,7 +541,7 @@ Sistema Check-in Automatico
   `;
 
   await transporter.sendMail({
-    from: process.env.EMAIL_USER,
+    from: '"La Columbera" <' + process.env.EMAIL_USER + '>',
     to: emailDestinatario,
     subject: oggetto,
     text: corpoEmail,

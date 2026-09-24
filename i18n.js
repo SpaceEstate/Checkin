@@ -1,5 +1,5 @@
 // ============================================================
-// i18n.js — Space Estate Check-in — traduzioni IT / EN / DE
+// i18n.js — La Columbera Check-in — traduzioni IT / EN / DE
 // Caricare questo file PRIMA di checkin.js (e prima dello script
 // inline di successo-pagamento.html). Non è un modulo ES: tutte
 // le funzioni/costanti sono nello scope globale condiviso dagli
@@ -195,7 +195,7 @@ const I18N_UI = {
     "success.refLabel": "Riferimento pratica:",
     "progress.label": "Passo {current} di {total}",
 
-    "successPage.title": "Pagamento riuscito - Space Estate",
+    "successPage.title": "Pagamento riuscito - La Columbera",
     "successPage.mainTitle": "Pagamento completato!",
     "successPage.subtitle": "Grazie per aver completato il check-in e il pagamento della tassa di soggiorno.",
     "successPage.bookingDetailsTitle": "📋 Dettagli prenotazione",
@@ -405,7 +405,7 @@ const I18N_UI = {
     "success.refLabel": "Booking reference:",
     "progress.label": "Step {current} of {total}",
 
-    "successPage.title": "Payment successful - Space Estate",
+    "successPage.title": "Payment successful - La Columbera",
     "successPage.mainTitle": "Payment completed!",
     "successPage.subtitle": "Thank you for completing check-in and paying the tourist tax.",
     "successPage.bookingDetailsTitle": "📋 Booking details",
@@ -615,7 +615,7 @@ const I18N_UI = {
     "success.refLabel": "Buchungsreferenz:",
     "progress.label": "Schritt {current} von {total}",
 
-    "successPage.title": "Zahlung erfolgreich - Space Estate",
+    "successPage.title": "Zahlung erfolgreich - La Columbera",
     "successPage.mainTitle": "Zahlung abgeschlossen!",
     "successPage.subtitle": "Vielen Dank für den Abschluss des Check-ins und die Zahlung der Kurtaxe.",
     "successPage.bookingDetailsTitle": "📋 Buchungsdetails",
@@ -848,7 +848,7 @@ const I18N_DOCUMENTI = {
 // Stato lingua corrente
 // ------------------------------------------------------------------
 const LINGUE_SUPPORTATE = ['it', 'en', 'de'];
-const LINGUA_STORAGE_KEY = 'spaceestate_lingua';
+const LINGUA_STORAGE_KEY = 'columbera_lingua';
 const LINGUA_DEFAULT = 'it';
 
 function getLingua() {

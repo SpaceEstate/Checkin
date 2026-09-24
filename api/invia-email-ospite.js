@@ -29,7 +29,7 @@ const LINGUE_VALIDE = ['it', 'en', 'de'];
 
 const EMAIL_TESTI = {
   it: {
-    headerTitle: 'Benvenuto a Space Estate!',
+    headerTitle: 'Benvenuto a La Columbera!',
     headerSubtitle: 'Il tuo soggiorno sta per iniziare',
     guestFallback: 'Ospite',
     thanksText: 'Grazie per aver completato il check-in e il pagamento della tassa di soggiorno. Siamo felici di accoglierti nella nostra struttura!',
@@ -60,7 +60,7 @@ const EMAIL_TESTI = {
     footerTagline: 'La Columbera - Appartamenti turistici',
     footerAutomated: 'Questa è una email automatica, per favore non rispondere direttamente.',
     footerGenerated: (data) => `Generata il ${data}`,
-    subjectLine: (appartamento, data) => `Benvenuto a Space Estate - ${appartamento} - Check-in ${data}`,
+    subjectLine: (appartamento, data) => `Benvenuto a La Columbera - ${appartamento} - Check-in ${data}`,
     genericName: 'Generico',
     fallbackDescrizione: 'Codice non disponibile, contatta il proprietario',
     corteDescrizione: 'Appartamento con 1 camera da letto',
@@ -69,7 +69,7 @@ const EMAIL_TESTI = {
     torreNomeCompleto: 'La Columbera - Torre'
   },
   en: {
-    headerTitle: 'Welcome to Space Estate!',
+    headerTitle: 'Welcome to La Columbera!',
     headerSubtitle: 'Your stay is about to begin',
     guestFallback: 'Guest',
     thanksText: "Thank you for completing check-in and paying the tourist tax. We're delighted to welcome you to our property!",
@@ -100,7 +100,7 @@ const EMAIL_TESTI = {
     footerTagline: 'La Columbera - Holiday apartments',
     footerAutomated: 'This is an automated email, please do not reply directly to it.',
     footerGenerated: (data) => `Generated on ${data}`,
-    subjectLine: (appartamento, data) => `Welcome to Space Estate - ${appartamento} - Check-in ${data}`,
+    subjectLine: (appartamento, data) => `Welcome to La Columbera - ${appartamento} - Check-in ${data}`,
     genericName: 'Generic',
     fallbackDescrizione: 'Code not available, please contact the owner',
     corteDescrizione: 'Apartment with 1 bedroom',
@@ -109,7 +109,7 @@ const EMAIL_TESTI = {
     torreNomeCompleto: 'La Columbera - Torre'
   },
   de: {
-    headerTitle: 'Willkommen bei Space Estate!',
+    headerTitle: 'Willkommen bei La Columbera!',
     headerSubtitle: 'Ihr Aufenthalt beginnt bald',
     guestFallback: 'Gast',
     thanksText: 'Vielen Dank für den Abschluss des Check-ins und die Zahlung der Kurtaxe. Wir freuen uns, Sie in unserer Unterkunft begrüßen zu dürfen!',
@@ -140,7 +140,7 @@ const EMAIL_TESTI = {
     footerTagline: 'La Columbera - Ferienwohnungen',
     footerAutomated: 'Dies ist eine automatische E-Mail, bitte antworten Sie nicht direkt darauf.',
     footerGenerated: (data) => `Erstellt am ${data}`,
-    subjectLine: (appartamento, data) => `Willkommen bei Space Estate - ${appartamento} - Check-in ${data}`,
+    subjectLine: (appartamento, data) => `Willkommen bei La Columbera - ${appartamento} - Check-in ${data}`,
     genericName: 'Allgemein',
     fallbackDescrizione: 'Code nicht verfügbar, bitte kontaktieren Sie den Eigentümer',
     corteDescrizione: 'Wohnung mit 1 Schlafzimmer',
@@ -652,7 +652,7 @@ function generaHTMLEmailOspite(dati, codiciCassetta, lingua) {
         </div>
         
         <div class="footer">
-          <p><strong>Space Estate</strong></p>
+          <p><strong>La Columbera</strong></p>
           <p>${T.footerTagline}</p>
           <p style="margin-top: 15px; font-size: 12px;">
             ${T.footerAutomated}
@@ -686,7 +686,7 @@ async function inviaEmailConNodemailer(emailDestinatario, dati, htmlContent, all
   );
 
   const mailOptions = {
-    from: process.env.EMAIL_USER,
+    from: '"La Columbera" <' + process.env.EMAIL_USER + '>',
     to: emailDestinatario,
     subject: oggetto,
     html: htmlContent,
