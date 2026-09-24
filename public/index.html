@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, maximum-scale=5, viewport-fit=cover">
+  <meta name="theme-color" content="#7a2e39">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Check-in Ospiti · La Columbera">
+  <meta name="description" content="Completa la registrazione per il tuo soggiorno a La Columbera">
+
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="icon" href="favicon-32.png" type="image/png" sizes="32x32">
+  <link rel="icon" href="favicon-16.png" type="image/png" sizes="16x16">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+
+  <title>Check-in Ospiti · La Columbera</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="checkin.css">
+
+  <!-- Preconnect Stripe e backend Vercel -->
+  <link rel="preconnect" href="https://js.stripe.com">
+  <link rel="preconnect" href="https://checkout.stripe.com">
+  <link rel="preconnect" href="https://m.stripe.com">
+  <link rel="preconnect" href="https://m.stripe.network">
+  <link rel="dns-prefetch" href="https://js.stripe.com">
+  <link rel="dns-prefetch" href="https://checkout.stripe.com">
+  <link rel="preconnect" href="https://checkin-six-coral.vercel.app">
+  <link rel="dns-prefetch" href="https://checkin-six-coral.vercel.app">
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="language-selector" id="language-selector" role="group" aria-label="Lingua / Language / Sprache"></div>
+      <div class="header-brand">
+        <img src="img/brand/logo-light.png" alt="La Columbera · Abitazione in villa storica">
+      </div>
+      <h1 data-i18n="header.title">Check-in Ospiti</h1>
+      <p data-i18n="header.subtitle">Completa la registrazione per il tuo soggiorno</p>
+    </div>
+
+    <!-- Indicatore di avanzamento: valori impostati via JS (vedi prossimo passaggio su checkin.js) -->
+    <div class="progress-wrapper" id="progress-wrapper">
+      <div class="progress-track">
+        <div class="progress-fill" id="progress-fill"></div>
+      </div>
+      <p class="progress-label" id="progress-label"></p>
+    </div>
+
+    <div class="form-container">
+      <form id="checkin-form">
+
+        <!-- Step 0: Verifica numero prenotazione -->
+        <div class="step active" id="step-0">
+          <div class="step-header">
+            <div class="verification-icon">🔐</div>
+            <h2 class="step-title" data-i18n="step0.title">Verifica prenotazione</h2>
+            <p class="step-subtitle" data-i18n="step0.subtitle">Inserisci il tuo numero di prenotazione per iniziare</p>
+          </div>
+
+          <div class="booking-input-wrapper">
+            <div class="form-group">
+              <label class="form-label" for="numero-prenotazione" data-i18n="step0.label">Numero prenotazione</label>
+              <input
+                type="text"
+                id="numero-prenotazione"
+                name="numero-prenotazione"
+                class="form-input form-input-code"
+                placeholder="Es. BK12345"
+                data-i18n-placeholder="step0.placeholder"
+                autocomplete="off"
+                pattern="[A-Za-z0-9]*">
+            </div>
+            <a href="#" class="no-booking-link" onclick="event.preventDefault(); saltaVerifica();" data-i18n="step0.noBooking">
+              Non ho il numero di prenotazione
+            </a>
+          </div>
+
+          <div class="button-group">
+            <button type="button" class="btn btn-primary" onclick="verificaPrenotazione()" data-i18n="step0.verifyBtn">
+              Verifica e continua →
+            </button>
+          </div>
+        </div>
+
+        <!-- Step 1: Info generali -->
+        <div class="step" id="step-1">
+          <div class="step-header">
+            <h2 class="step-title" data-i18n="step1.title">Informazioni generali</h2>
+            <p class="step-subtitle" data-i18n="step1.subtitle">Inserisci i dettagli della tua prenotazione</p>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="data-checkin" data-i18n="step1.dateLabel">Data check-in</label>
+            <input type="date" id="data-checkin" name="data-checkin" class="form-input" required>
+          </div>
+
+          <div class="form-grid">
+            <!-- Selezione appartamento: checkbox invece di select multiple (niente hack JS per il toggle) -->
+            <div class="form-group full-width">
+              <label class="form-label" id="appartamento-label" data-i18n="step1.apartmentLabel">Appartamento/i *</label>
+              <div class="apartment-options" id="appartamento-group" role="group" aria-labelledby="appartamento-label">
+                <label class="apartment-chip">
+                  <input type="checkbox" class="apartment-checkbox" name="appartamento"
+                         value="La Columbera - Torre, Appartamento con 2 camere da letto">
+                  <span class="apartment-chip-icon" aria-hidden="true">🏰</span>
+                  <span class="apartment-chip-text">
+                    <strong>Torre</strong>
+                    <small data-i18n="apt.torreDesc">2 camere da letto</small>
+                  </span>
+                </label>
+                <label class="apartment-chip">
+                  <input type="checkbox" class="apartment-checkbox" name="appartamento"
+                         value="La Columbera - Corte, Appartamento con 1 camera da letto">
+                  <span class="apartment-chip-icon" aria-hidden="true">🏡</span>
+                  <span class="apartment-chip-text">
+                    <strong>Corte</strong>
+                    <small data-i18n="apt.corteDesc">1 camera da letto</small>
+                  </span>
+                </label>
+              </div>
+              <p class="field-error" id="appartamento-error" role="alert"></p>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="numero-ospiti" data-i18n="step1.guestsLabel">Numero ospiti</label>
+              <select id="numero-ospiti" name="numero-ospiti" class="form-select" required>
+                <option value="" data-i18n="step1.guestsPlaceholder">Seleziona numero</option>
+                <option value="1" data-i18n="guests.n1">1 ospite</option>
+                <option value="2" data-i18n="guests.n2">2 ospiti</option>
+                <option value="3" data-i18n="guests.n3">3 ospiti</option>
+                <option value="4" data-i18n="guests.n4">4 ospiti</option>
+                <option value="5" data-i18n="guests.n5">5 ospiti</option>
+                <option value="6" data-i18n="guests.n6">6 ospiti</option>
+                <option value="7" data-i18n="guests.n7">7 ospiti</option>
+                <option value="8" data-i18n="guests.n8">8 ospiti</option>
+                <option value="9" data-i18n="guests.n9">9 ospiti</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="numero-notti" data-i18n="step1.nightsLabel">Numero notti</label>
+              <input type="number" id="numero-notti" name="numero-notti" class="form-input" min="1" required placeholder="Es. 3" data-i18n-placeholder="step1.nightsPlaceholder">
+            </div>
+
+            <div class="conditional-group" id="gruppo-wrapper">
+              <div class="form-group">
+                <label class="form-label" for="tipo-gruppo" data-i18n="step1.groupLabel">Tipo di gruppo</label>
+                <select id="tipo-gruppo" name="tipo-gruppo" class="form-select">
+                  <option value="" data-i18n="step1.groupPlaceholder">Seleziona tipo</option>
+                  <option value="famiglia" data-i18n="step1.groupFamily">Famiglia</option>
+                  <option value="generico" data-i18n="step1.groupGeneric">Gruppo</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="button-group">
+            <button type="button" class="btn btn-secondary" onclick="tornaAVerifica()" data-i18n="step1.backBtn">← Torna indietro</button>
+            <button type="button" class="btn btn-primary" onclick="prossimoStep()" data-i18n="step1.nextBtn">Avanti →</button>
+          </div>
+        </div>
+
+        <!-- Step finale: Riepilogo e pagamento -->
+        <div class="step" id="step-final">
+          <div class="step-header">
+            <h2 class="step-title" data-i18n="stepFinal.title">Riepilogo e pagamento</h2>
+            <p class="step-subtitle" data-i18n="stepFinal.subtitle">Verifica i dati e procedi al pagamento</p>
+          </div>
+
+          <div class="summary-section">
+            <h3 class="summary-title" data-i18n="stepFinal.summaryTitle">Riepilogo prenotazione</h3>
+            <div id="summary-content"></div>
+          </div>
+
+          <div class="privacy-section">
+            <div class="privacy-checkbox">
+              <input type="checkbox" id="privacy-consent" name="privacy-consent" class="privacy-input" required>
+              <label for="privacy-consent" class="privacy-label">
+                <span class="checkbox-custom"></span>
+                <span class="privacy-text">
+                  <span data-i18n="stepFinal.privacyText">Dichiaro di aver letto l'informativa privacy ai sensi del Regolamento UE 2016/679 e di essere informato che i dati personali forniti saranno trattati per le finalità connesse alla registrazione degli ospiti e agli obblighi di comunicazione alle Autorità competenti previsti dalla normativa vigente, inclusa la trasmissione alla Questura ai sensi dell'art. 109 TULPS.</span>
+                  <span class="required-mark">*</span>
+                </span>
+              </label>
+            </div>
+          </div>
+
+          <div class="button-group">
+            <button type="button" class="btn btn-secondary" onclick="indietroStep()" data-i18n="stepFinal.backBtn">← Indietro</button>
+            <button type="button" class="btn btn-success" id="btn-procedi-pagamento" disabled onclick="procediAlPagamento()" data-i18n="stepFinal.payBtnInitial">Procedi al pagamento</button>
+          </div>
+        </div>
+
+        <!-- Step successo -->
+        <div class="step" id="step-success">
+          <div class="success-message">
+            <h3 data-i18n="success.title">✅ Check-in completato!</h3>
+            <p data-i18n="success.line1">Grazie per aver completato la registrazione.</p>
+            <p data-i18n="success.line2">Ti auguriamo un soggiorno piacevole!</p>
+            <p><strong data-i18n="success.refLabel">Riferimento pratica:</strong> <span id="booking-reference"></span></p>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="i18n.js"></script>
+  <script src="checkin.js"></script>
+</body>
+</html>
