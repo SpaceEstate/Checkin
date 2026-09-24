@@ -1,5 +1,6 @@
 /* ============================================================
-   VARIABILI — palette "La Columbera"
+   VARIABILI — palette "La Columbera" (allineata al sito ufficiale:
+   github.com/SpaceEstate/LaColumbera → css/main.css)
    ------------------------------------------------------------
    I toni "base" restano quelli originali e vanno usati per bordi,
    sfondi chiari e ombre (nessun testo sopra, quindi il contrasto
@@ -10,34 +11,36 @@
    header e altri elementi dove il testo è bianco su sfondo colorato.
    ============================================================ */
 :root {
-  --color-accent-100: #c4a484;
-  --color-accent-100-rgb: 196, 164, 132;
-  --color-accent-200: #b89968;
-  --color-accent-200-rgb: 184, 153, 104;
-  --color-accent-300: #a67c52;
-  --color-accent-300-rgb: 166, 124, 82;
-  --color-accent-400: #8b7d6b;
-  --color-accent-400-rgb: 139, 125, 107;
+  /* oro (accent secondario: focus ring, badge, dettagli) */
+  --color-accent-100: #e6dbc6;
+  --color-accent-100-rgb: 230, 219, 198;
+  --color-accent-200: #b08d3c;
+  --color-accent-200-rgb: 176, 141, 60;
+  /* vino bordeaux (colore guida del brand, bottoni primari, CTA) */
+  --color-accent-300: #7a2e39;
+  --color-accent-300-rgb: 122, 46, 57;
+  --color-accent-400: #6c5f55;
+  --color-accent-400-rgb: 108, 95, 85;
 
-  --color-accent-100-dark: #89725c;
-  --color-accent-200-dark: #806b48;
-  --color-accent-300-dark: #745639;
-  --color-accent-400-dark: #61574a;
+  --color-accent-100-dark: #8c6f2e;
+  --color-accent-200-dark: #7a2e39;
+  --color-accent-300-dark: #5f222b;
+  --color-accent-400-dark: #3a151b;
 
-  /* Testo: scuriti rispetto all'originale (#8b7d6b e #a0927f) per
-     rientrare nel minimo leggibile AA (4.5:1) su sfondo bianco/crema */
-  --color-text: #766a5a;
-  --color-text-muted: #786d5f;
+  --color-text: #1e1917;
+  --color-text-muted: #6c5f55;
 
-  --color-bg-cream: #f5f2e9;
-  --color-bg-cream-light: #faf9f6;
-  --color-border: #e8dcc0;
-  --color-border-light: #d4c7b5;
+  --color-bg-cream: #f1e9d9;
+  --color-bg-cream-light: #faf5ec;
+  --color-border: #dccfb6;
+  --color-border-light: #e6dbc6;
 
-  --color-white: #ffffff;
+  --color-white: #fffdf7;
   --color-error: #e74c3c;
   --color-error-bg: #fadbd8;
   --color-error-text: #c0392b;
+
+  --font-serif: 'Fraunces', 'Cormorant Garamond', Georgia, serif;
 }
 
 /* ============================================================
@@ -102,9 +105,27 @@ body {
   50% { transform: translateY(-20px) rotate(180deg); }
 }
 
+.header-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-bottom: 14px;
+  position: relative;
+  z-index: 1;
+}
+
+.header-brand img {
+  height: 48px;
+  width: auto;
+  display: block;
+  filter: drop-shadow(0 2px 8px rgba(0,0,0,.25));
+}
+
 .header h1 {
+  font-family: var(--font-serif);
   font-size: 2.5rem;
-  font-weight: 700;
+  font-weight: 500;
   margin-bottom: 10px;
   position: relative;
   z-index: 1;
@@ -235,8 +256,9 @@ body {
 }
 
 .step-title {
+  font-family: var(--font-serif);
   font-size: 2rem;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--color-text);
   margin-bottom: 10px;
 }
@@ -347,7 +369,7 @@ body {
   -webkit-appearance: none;
   -moz-appearance: none;
   appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23766a5a' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%231e1917' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 12px center;
   background-size: 20px;
@@ -1482,6 +1504,10 @@ body {
     font-size: 2rem;
   }
 
+  .header-brand img {
+    height: 40px;
+  }
+
   .form-container {
     padding: 20px 15px;
   }
@@ -1679,6 +1705,14 @@ body {
   .header h1 {
     font-size: 1.6rem;
     margin-bottom: 8px;
+  }
+
+  .header-brand img {
+    height: 34px;
+  }
+
+  .header-brand {
+    margin-bottom: 10px;
   }
 
   .header p {

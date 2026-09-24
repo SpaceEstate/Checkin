@@ -7,7 +7,9 @@
     <link rel="icon" href="/favicon.ico" sizes="any">
     <link rel="icon" href="/icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..700&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
     <script src="i18n.js"></script>
     <style>
         * {
@@ -18,21 +20,21 @@
 
         body {
             font-family: 'Inter', sans-serif;
-            background: linear-gradient(135deg, #f5f2e9 0%, #e8dcc0 100%);
+            background: linear-gradient(135deg, #f1e9d9 0%, #dccfb6 100%);
             min-height: 100vh;
             min-height: 100dvh;
             display: flex;
             justify-content: center;
             align-items: center;
             padding: 20px;
-            color: #766a5a;
+            color: #1e1917;
         }
 
         .success-container {
             background: #fff;
             padding: 40px;
             border-radius: 20px;
-            box-shadow: 0 10px 30px rgba(139, 125, 107, 0.2);
+            box-shadow: 0 10px 30px rgba(58, 21, 27, 0.15);
             max-width: 700px;
             width: 100%;
             text-align: center;
@@ -48,7 +50,7 @@
         .lang-flag {
             font-size: 1.3rem;
             line-height: 1;
-            background: #faf9f6;
+            background: #faf5ec;
             border: 2px solid transparent;
             border-radius: 10px;
             padding: 6px 10px;
@@ -61,7 +63,7 @@
         }
 
         .lang-flag.active {
-            border-color: #a67c52;
+            border-color: #7a2e39;
         }
 
         .success-header {
@@ -74,15 +76,22 @@
         }
 
         .success-title {
-            color: #a67c52;
-            font-size: 2rem;
-            font-weight: 600;
+            color: #7a2e39;
+            font-family: 'Fraunces', 'Cormorant Garamond', Georgia, serif;
+            font-size: 2.1rem;
+            font-weight: 500;
             margin-bottom: 10px;
+        }
+
+        .success-logo {
+            height: 44px;
+            width: auto;
+            margin-bottom: 18px;
         }
 
         .success-subtitle {
             font-size: 1.1rem;
-            color: #766a5a;
+            color: #1e1917;
             margin-bottom: 20px;
         }
 
@@ -95,14 +104,14 @@
         }
 
         .info-card {
-            background: #faf9f6;
+            background: #faf5ec;
             padding: 20px;
             border-radius: 12px;
-            border-left: 4px solid #a67c52;
+            border-left: 4px solid #7a2e39;
         }
 
         .info-card h3 {
-            color: #a67c52;
+            color: #7a2e39;
             font-size: 1.2rem;
             margin-bottom: 10px;
             font-weight: 600;
@@ -121,16 +130,16 @@
 
         .info-label {
             font-weight: 500;
-            color: #766a5a;
+            color: #1e1917;
         }
 
         .info-value {
             font-weight: 600;
-            color: #a67c52;
+            color: #7a2e39;
         }
 
         .code-section {
-            background: linear-gradient(135deg, #a67c52, #b89968);
+            background: linear-gradient(135deg, #7a2e39, #b08d3c);
             color: #fff;
             padding: 25px;
             border-radius: 15px;
@@ -194,19 +203,19 @@
         }
 
         .btn-primary {
-            background: linear-gradient(135deg, #b89968, #a67c52);
+            background: linear-gradient(135deg, #b08d3c, #7a2e39);
             color: #fff;
         }
 
         .btn-secondary {
             background: #f8f8f8;
-            color: #766a5a;
+            color: #1e1917;
             border: 2px solid #e0e0e0;
         }
 
         .btn:hover {
             transform: translateY(-2px);
-            box-shadow: 0 6px 15px rgba(166, 124, 82, 0.3);
+            box-shadow: 0 6px 15px rgba(122, 46, 57, 0.3);
         }
 
 /* Stili per codici multipli */
@@ -295,6 +304,7 @@
     <div class="success-container">
         <div class="language-selector" id="language-selector" role="group" aria-label="Lingua / Language / Sprache"></div>
         <div class="success-header">
+            <img src="img/brand/logo.png" alt="La Columbera" class="success-logo">
             <div class="success-icon">✅</div>
             <h1 class="success-title" data-i18n="successPage.mainTitle">Pagamento completato!</h1>
             <p class="success-subtitle" data-i18n="successPage.subtitle">Grazie per aver completato il check-in e il pagamento della tassa di soggiorno.</p>

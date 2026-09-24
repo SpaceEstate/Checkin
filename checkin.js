@@ -80,7 +80,7 @@ function precompilaDatiPrenotazione(dati) {
     dataInput.dispatchEvent(new Event('change', { bubbles: true }));
 
     if (dataInput.value) {
-      dataInput.style.backgroundColor = '#f5f2e9';
+      dataInput.style.backgroundColor = '#f1e9d9';
       // Blocco del campo pre-verificato: se esiste il wrapper custom si
       // blocca il testo digitabile (un <input type="text"> normale:
       // readOnly qui è affidabile, nessun bug nativo dei date-input) e il
@@ -93,7 +93,7 @@ function precompilaDatiPrenotazione(dati) {
       const pickerBtn = wrapper?.querySelector('.date-picker-btn');
       if (textInput) {
         textInput.readOnly = true;
-        textInput.style.backgroundColor = '#f5f2e9';
+        textInput.style.backgroundColor = '#f1e9d9';
         textInput.style.cursor = 'not-allowed';
       }
       if (pickerBtn) {
@@ -142,7 +142,7 @@ function precompilaDatiPrenotazione(dati) {
   if (ospitiSelect && dati.numeroOspiti) {
     ospitiSelect.value = dati.numeroOspiti.toString();
     ospitiSelect.disabled = true;
-    ospitiSelect.style.backgroundColor = '#f5f2e9';
+    ospitiSelect.style.backgroundColor = '#f1e9d9';
     ospitiSelect.style.cursor = 'not-allowed';
     ospitiSelect.dispatchEvent(new Event('change'));
   }
@@ -152,7 +152,7 @@ function precompilaDatiPrenotazione(dati) {
   if (nottiInput && dati.numeroNotti) {
     nottiInput.value = dati.numeroNotti;
     nottiInput.readOnly = true;
-    nottiInput.style.backgroundColor = '#f5f2e9';
+    nottiInput.style.backgroundColor = '#f1e9d9';
     nottiInput.style.cursor = 'not-allowed';
   }
   
@@ -168,7 +168,7 @@ function precompilaDatiPrenotazione(dati) {
     const sottoChiave = dati.numeroOspiti > 1 ? 'verify.selectGroupType' : 'verify.reviewAndProceed';
     stepHeader.innerHTML = `
       <span style="color: #27ae60; font-weight: 600;" data-i18n="verify.confirmed">✓ Dati prenotazione verificati</span><br>
-      <span style="font-size: 0.9rem; color: #a0927f;" data-i18n="${sottoChiave}">
+      <span style="font-size: 0.9rem; color: #6c5f55;" data-i18n="${sottoChiave}">
         ${t(sottoChiave)}
       </span>
     `;
@@ -1097,7 +1097,7 @@ function preparaRiepilogo(mantieniPosizione) {
   console.log('📍 Dettagli:', { dataCheckin, appartamenti, numeroOspiti, numeroNotti });
   
   dettagliSection.innerHTML = `
-    <h3 style="font-size: 1.5rem; color: #8b7d6b; margin-bottom: 20px;" data-i18n="summary.dettagliTitle">📍 Dettagli soggiorno</h3>
+    <h3 style="font-size: 1.5rem; color: #6c5f55; margin-bottom: 20px;" data-i18n="summary.dettagliTitle">📍 Dettagli soggiorno</h3>
     <div class="summary-item">
       <span data-i18n="summary.dataCheckin">Data Check-in:</span>
       <span><strong>${dataFormatted}</strong></span>
@@ -1122,7 +1122,7 @@ function preparaRiepilogo(mantieniPosizione) {
   ospitiSection.className = 'summary-section';
   ospitiSection.style.marginTop = '20px';
   
-  let ospitiHTML = '<h3 style="font-size: 1.5rem; color: #8b7d6b; margin-bottom: 20px;" data-i18n="summary.ospitiTitle">👥 Ospiti</h3>';
+  let ospitiHTML = '<h3 style="font-size: 1.5rem; color: #6c5f55; margin-bottom: 20px;" data-i18n="summary.ospitiTitle">👥 Ospiti</h3>';
   
   for (let i = 1; i <= numeroOspiti; i++) {
     const cognome = document.querySelector(`input[name="ospite${i}_cognome"]`)?.value || '';
@@ -1132,10 +1132,10 @@ function preparaRiepilogo(mantieniPosizione) {
     const etaChiave = eta >= 4 ? 'summary.etaSoggetta' : 'summary.etaEsente';
     
     ospitiHTML += `
-      <div class="guest-summary" style="background: white; padding: 15px; border-radius: 10px; margin-bottom: 12px; border: 1px solid #e8dcc0;">
-        <strong style="color: #8b7d6b; font-size: 1.05rem; display: block;">${cognome} ${nome}</strong>
-        ${i === 1 ? `<span style="color: #a67c52; font-size: 0.9rem; display: block;" data-i18n="summary.responsabile">(Responsabile)</span>` : ''}
-        <span class="age" style="color: #a0927f; font-size: 0.9rem; display: block; margin-top: 5px;"
+      <div class="guest-summary" style="background: white; padding: 15px; border-radius: 10px; margin-bottom: 12px; border: 1px solid #dccfb6;">
+        <strong style="color: #6c5f55; font-size: 1.05rem; display: block;">${cognome} ${nome}</strong>
+        ${i === 1 ? `<span style="color: #7a2e39; font-size: 0.9rem; display: block;" data-i18n="summary.responsabile">(Responsabile)</span>` : ''}
+        <span class="age" style="color: #6c5f55; font-size: 0.9rem; display: block; margin-top: 5px;"
               data-i18n-key="${etaChiave}" data-i18n-params='${JSON.stringify({ eta })}'>
           ${t(etaChiave, { eta })}
         </span>
@@ -1151,11 +1151,11 @@ function preparaRiepilogo(mantieniPosizione) {
   totaleSection.className = 'summary-section';
   totaleSection.style.marginTop = '20px';
   totaleSection.innerHTML = `
-    <h3 style="font-size: 1.5rem; color: #8b7d6b; margin-bottom: 20px;" data-i18n="summary.totaleTitle">💰 Totale tassa di soggiorno</h3>
-    <div class="total-amount" style="font-size: 2rem; font-weight: 700; color: #a67c52; text-align: center; margin: 20px 0; padding: 20px; background: linear-gradient(135deg, rgba(184, 153, 104, 0.1) 0%, rgba(166, 124, 82, 0.1) 100%); border-radius: 12px;">
+    <h3 style="font-size: 1.5rem; color: #6c5f55; margin-bottom: 20px;" data-i18n="summary.totaleTitle">💰 Totale tassa di soggiorno</h3>
+    <div class="total-amount" style="font-size: 2rem; font-weight: 700; color: #7a2e39; text-align: center; margin: 20px 0; padding: 20px; background: linear-gradient(135deg, rgba(176, 141, 60, 0.1) 0%, rgba(122, 46, 57, 0.1) 100%); border-radius: 12px;">
       €${totale.toFixed(2)}
     </div>
-    <small class="tax-note" style="display: block; text-align: center; color: #a0927f; font-size: 0.85rem; font-style: italic; margin-top: 10px;" data-i18n="summary.totaleNota">
+    <small class="tax-note" style="display: block; text-align: center; color: #6c5f55; font-size: 0.85rem; font-style: italic; margin-top: 10px;" data-i18n="summary.totaleNota">
       Tassa di €1,50 per notte per ospiti dai 4 anni in su
     </small>
   `;

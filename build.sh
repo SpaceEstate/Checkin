@@ -13,6 +13,8 @@ cp successo-pagamento.html public/
 # Le immagini della cassetta sono già committate in public/images/cassetta/
 # (non serve copiarle da nessun'altra parte: non esiste una cartella
 # images/cassetta/ alla radice del repo).
+# Stesso discorso per il logo: committato direttamente in public/img/brand/
+# (la copia in img/brand/ alla radice resta solo come sorgente di riferimento).
 
 echo "✅ File copiati con successo!"
 echo "📂 Contenuto public/:"
