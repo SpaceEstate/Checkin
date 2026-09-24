@@ -264,7 +264,22 @@ export default async function handler(req, res) {
 // ✅ FIX: nomi file corretti (con prefisso numerico)
 async function caricaAllegatiFoto() {
   const allegati = [];
-  
+
+  // Logo La Columbera (cid: logo_columbera), incorporato nell'header dell'email
+  try {
+    const logoPath = join(process.cwd(), 'public', 'img', 'brand', 'email-logo.png');
+    const logoContent = await readFile(logoPath);
+    allegati.push({
+      filename: 'logo-la-columbera.png',
+      content: logoContent,
+      cid: 'logo_columbera',
+      contentType: 'image/png'
+    });
+    console.log(`✅ Logo caricato (${(logoContent.length / 1024).toFixed(1)} KB)`);
+  } catch (err) {
+    console.warn(`⚠️ Impossibile caricare il logo: ${err.message}`);
+  }
+
   try {
     const basePath = join(process.cwd(), 'public', 'images', 'cassetta');
     
@@ -288,6 +303,7 @@ async function caricaAllegatiFoto() {
       console.warn('⚠️ Impossibile listare directory');
     }
     
+    let fotoTrovate = 0;
     for (const file of files) {
       try {
         const filePath = join(basePath, file.name);
@@ -301,6 +317,7 @@ async function caricaAllegatiFoto() {
           cid: file.cid,
           contentType: 'image/jpeg'
         });
+        fotoTrovate++;
         
         console.log(`✅ Foto caricata: ${file.name} (${(content.length / 1024).toFixed(1)} KB)`);
       } catch (err) {
@@ -308,7 +325,7 @@ async function caricaAllegatiFoto() {
       }
     }
     
-    if (allegati.length === 0) {
+    if (fotoTrovate === 0) {
       console.warn('⚠️ NESSUNA foto trovata - email inviata senza immagini');
     }
     
@@ -418,34 +435,35 @@ function generaHTMLEmailOspite(dati, codiciCassetta, lingua) {
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <style>
         body {
-          font-family: 'Arial', sans-serif;
+          font-family: 'Georgia', 'Times New Roman', serif;
           line-height: 1.6;
-          color: #333;
-          background-color: #f5f2e9;
+          color: #1e1917;
+          background-color: #f1e9d9;
           margin: 0;
           padding: 0;
         }
         .container {
           max-width: 600px;
           margin: 20px auto;
-          background: white;
+          background: #fffdf7;
           border-radius: 16px;
           overflow: hidden;
-          box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-          border: 1px solid rgba(232, 220, 192, 0.3);
+          box-shadow: 0 4px 20px rgba(58,21,27,0.12);
+          border: 1px solid rgba(220, 207, 182, 0.5);
         }
         .header {
-          background: linear-gradient(135deg, #b89968 0%, #a67c52 100%);
-          color: white;
-          padding: 40px 20px;
+          background: linear-gradient(135deg, #8c6f2e 0%, #7a2e39 100%);
+          color: #fffdf7;
+          padding: 36px 20px 32px;
           text-align: center;
         }
-        .header h1 { margin: 0; font-size: 28px; font-weight: 600; }
-        .header p { margin: 10px 0 0 0; font-size: 16px; opacity: 0.95; }
-        .content { padding: 40px 30px; }
-        .welcome-text { font-size: 18px; color: #8b7d6b; margin-bottom: 20px; }
+        .header img.brand-logo { height: 46px; width: auto; margin-bottom: 16px; }
+        .header h1 { margin: 0; font-size: 26px; font-weight: 500; font-family: 'Georgia', 'Times New Roman', serif; }
+        .header p { margin: 10px 0 0 0; font-size: 16px; opacity: 0.95; font-family: 'Arial', sans-serif; }
+        .content { padding: 40px 30px; font-family: 'Arial', sans-serif; }
+        .welcome-text { font-size: 18px; color: #6c5f55; margin-bottom: 20px; }
         .code-section {
-          background: linear-gradient(135deg, #a67c52 0%, #8b7d6b 100%);
+          background: linear-gradient(135deg, #7a2e39 0%, #5f222b 100%);
           color: white;
           padding: 30px;
           border-radius: 12px;
@@ -472,55 +490,56 @@ function generaHTMLEmailOspite(dati, codiciCassetta, lingua) {
         .code-sub-section .code-box { font-size: 40px; padding: 15px; background: rgba(255, 255, 255, 0.2); }
         .code-note { font-size: 14px; opacity: 0.9; margin-top: 10px; }
         .info-section {
-          background: #faf9f6;
+          background: #f1e9d9;
           padding: 20px;
           border-radius: 8px;
           margin: 20px 0;
-          border-left: 4px solid #b89968;
+          border-left: 4px solid #b08d3c;
         }
-        .info-title { font-size: 18px; font-weight: 600; color: #8b7d6b; margin-bottom: 15px; }
+        .info-title { font-size: 18px; font-weight: 600; color: #6c5f55; margin-bottom: 15px; }
         .info-item {
           display: flex;
           justify-content: space-between;
           padding: 8px 0;
-          border-bottom: 1px solid #e8dcc0;
+          border-bottom: 1px solid #dccfb6;
         }
         .info-item:last-child { border-bottom: none; }
-        .info-label { font-weight: 500; color: #a0927f; }
-        .info-value { font-weight: 600; color: #8b7d6b; }
+        .info-label { font-weight: 500; color: #6c5f55; }
+        .info-value { font-weight: 600; color: #1e1917; }
         .instructions {
           background: #fff9e6;
           padding: 20px;
           border-radius: 8px;
           margin: 20px 0;
-          border-left: 4px solid #ffc107;
+          border-left: 4px solid #b08d3c;
         }
-        .instructions h3 { color: #856404; margin-top: 0; font-size: 18px; margin-bottom: 15px; }
-        .instructions p { margin: 10px 0; color: #8b7d6b; line-height: 1.8; }
+        .instructions h3 { color: #7a2e39; margin-top: 0; font-size: 18px; margin-bottom: 15px; }
+        .instructions p { margin: 10px 0; color: #6c5f55; line-height: 1.8; }
         .address-block {
           background: white;
           padding: 12px;
           border-radius: 6px;
           margin: 10px 0;
-          border-left: 3px solid #b89968;
+          border-left: 3px solid #b08d3c;
         }
         .photo-gallery { margin: 30px 0; }
-        .photo-gallery h3 { color: #8b7d6b; font-size: 20px; margin-bottom: 20px; text-align: center; }
+        .photo-gallery h3 { color: #6c5f55; font-size: 20px; margin-bottom: 20px; text-align: center; }
         .photo-item { margin: 20px 0; text-align: center; }
         .photo-item img {
           max-width: 100%;
           height: auto;
           border-radius: 12px;
-          box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+          box-shadow: 0 4px 15px rgba(58,21,27,0.18);
           margin-bottom: 10px;
         }
-        .photo-caption { font-size: 14px; color: #8b7d6b; font-style: italic; }
+        .photo-caption { font-size: 14px; color: #6c5f55; font-style: italic; }
         .footer {
-          background: #f5f2e9;
+          background: #f1e9d9;
           padding: 30px;
           text-align: center;
-          color: #a0927f;
+          color: #6c5f55;
           font-size: 14px;
+          font-family: 'Arial', sans-serif;
         }
         .footer p { margin: 5px 0; }
       </style>
@@ -528,6 +547,7 @@ function generaHTMLEmailOspite(dati, codiciCassetta, lingua) {
     <body>
       <div class="container">
         <div class="header">
+          <img src="cid:logo_columbera" alt="La Columbera" class="brand-logo">
           <h1>${T.headerTitle}</h1>
           <p>${T.headerSubtitle}</p>
         </div>
@@ -626,7 +646,7 @@ function generaHTMLEmailOspite(dati, codiciCassetta, lingua) {
             </div>
           </div>
           
-          <p style="margin-top: 30px; color: #8b7d6b;">
+          <p style="margin-top: 30px; color: #6c5f55;">
             ${T.closingText}
           </p>
         </div>
