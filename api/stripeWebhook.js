@@ -2,21 +2,19 @@
 // Webhook Stripe: dopo un pagamento confermato avvia l'elaborazione del check-in (vedi _elabora-checkin.js).
 //
 // Cosa è cambiato (adeguamento GDPR, branch gdpr/checkin-semplificazione):
-//  - niente più scrittura degli ospiti su Google Sheets (duplicazione dei dati anagrafici eliminata);
+//  - i dati degli ospiti vanno al foglio Google del check-in come prima (da lì lo script del gestore crea il TXT);
 //  - niente più PDF di riepilogo né email con elenco ospiti: al gestore va solo l'immagine del documento;
-//  - il TXT Alloggiati Web viene generato e salvato su Google Drive (caricamento sul portale a mano);
 //  - i dati temporanei si leggono direttamente dal database (prima: chiamata HTTP all'URL di produzione con
 //    INTERNAL_API_SECRET, che dalle preview puntava comunque alla produzione) e si cancellano appena non servono;
 //  - se un passo fallisce per un motivo temporaneo il webhook risponde 500 e Stripe ritenta: ogni passo è idempotente,
-//    quindi un nuovo tentativo non duplica email né file.
+//    quindi un nuovo tentativo non duplica email né righe del foglio.
 // Invariati: verifica della firma Stripe, evento gestito (checkout.session.completed), importi e logica di pagamento.
 
 import Stripe from 'stripe';
 import { pgStore } from './_db.js';
 import { elaboraCheckin } from './_elabora-checkin.js';
-import { caricaTabelle } from './_alloggiati_tabelle.js';
-import { makeDrive } from './_drive.js';
 import { inviaImmaginiAlGestore } from './_email-gestore.js';
+import { salvaSuSheet } from './_sheet-checkin.js';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -56,8 +54,7 @@ export function dipendenzeProduzione(requestId) {
     store: pgStore,
     env: process.env,
     fetch: (...a) => globalThis.fetch(...a),
-    drive: makeDrive({ env: process.env }),
-    caricaTabelle,
+    salvaSuSheet,
     inviaEmailOspite: inviaEmailOspiteHttp,
     inviaEmailGestore: inviaImmaginiAlGestore,
     log: msg => console.log(`[${requestId}] ${msg}`)

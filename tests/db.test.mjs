@@ -3,7 +3,7 @@
 import './setup-env.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { checkinFamiglia, fintaDriveApi, ENV_DRIVE, caricaTabelleOk, contieneSensibili } from './helpers.mjs';
+import { checkinFamiglia, ENV_DRIVE, contieneSensibili } from './helpers.mjs';
 
 const URL_TEST = process.env.TEST_DATABASE_URL;
 const salta = !URL_TEST ? 'SKIP — TEST_DATABASE_URL non impostata: store PostgreSQL non verificabile in questo ambiente' : false;
@@ -49,26 +49,26 @@ test('store PostgreSQL: dati temporanei, registro, lease, pulizia, tabelle', { s
   assert.equal(await pgStore.eliminaDatiTemporanei(id), 1);
 });
 
-test('flusso completo sullo store PostgreSQL (Drive ed email simulati)', { skip: salta }, async () => {
+test('flusso completo sullo store PostgreSQL (foglio ed email simulati)', { skip: salta }, async () => {
   process.env.DATABASE_URL = URL_TEST;
   const { pgStore, getPostgresClient } = await import('../api/_db.js');
   const { elaboraCheckin, checkinIdDa } = await import('../api/_elabora-checkin.js');
-  const { makeDrive } = await import('../api/_drive.js');
   const sql = getPostgresClient();
   const tempId = 'temp_1762000000000_flusso';
   await sql`DELETE FROM temporary_sessions WHERE session_id = ${tempId}`;
   await sql`DELETE FROM checkin_adempimenti WHERE stripe_session_id = 'cs_test_flussodb'`;
   await pgStore.salvaDatiTemporanei(tempId, checkinFamiglia(), new Date(Date.now() + 3600e3));
-  const api = fintaDriveApi({ falliscicaricamenti: 1 }), inviate = [];
-  const deps = { store: pgStore, env: Object.assign({ EMAIL_PROPRIETARIO: 'g@esempio.invalid' }, ENV_DRIVE), drive: makeDrive({ env: ENV_DRIVE, fetch: api.fetch, getToken: async () => 't' }),
-    caricaTabelle: caricaTabelleOk, inviaEmailOspite: async () => {}, inviaEmailGestore: async a => { inviate.push(a.documenti.length); } };
+  const foglio = [], inviate = []; let fallisci = 1;
+  const deps = { store: pgStore, env: Object.assign({ EMAIL_PROPRIETARIO: 'g@esempio.invalid', SHEET_ID: 'FOGLIO_FINTO' }, ENV_DRIVE),
+    salvaSuSheet: async righe => { if (fallisci-- > 0) throw new Error('x'); foglio.push(...righe); },
+    inviaEmailOspite: async () => {}, inviaEmailGestore: async a => { inviate.push(a.documenti.length); } };
   const s = { id: 'cs_test_flussodb', customer_details: { email: 'o@esempio.invalid' }, metadata: { dataCheckin: '2026-11-05', numeroOspiti: '3', numeroNotti: '3', totale: '13.5', lingua: 'it', temp_session_id: tempId } };
   assert.equal((await elaboraCheckin(s, deps)).esito, 'da_ripetere');
-  assert.ok(await pgStore.leggiDatiTemporanei(tempId), 'dati ancora presenti dopo l\'errore Drive');
+  assert.ok(await pgStore.leggiDatiTemporanei(tempId), 'dati ancora presenti dopo l\'errore del foglio');
   assert.equal((await elaboraCheckin(s, deps)).esito, 'completato');
   assert.equal(await pgStore.leggiDatiTemporanei(tempId), null, 'dati eliminati dopo il successo');
   const reg = await pgStore.leggiRegistro(checkinIdDa(s.id));
-  assert.equal(reg.txt_stato, 'salvato_drive'); assert.equal(api.files.size, 1); assert.deepEqual(inviate, [2]);
+  assert.equal(reg.sheet_stato, 'salvato'); assert.equal(foglio.length, 3); assert.deepEqual(inviate, [2]);
   assert.deepEqual(contieneSensibili(JSON.stringify(reg)), []);
   await sql.end();
 });

@@ -74,7 +74,7 @@ export function memStore(clock) {
     },
     async ottieniOCreaRegistro({ checkinId, stripeSessionId, tempSessionId, dataArrivo }) {
       if (!registri.has(checkinId)) registri.set(checkinId, { checkin_id: checkinId, stripe_session_id: stripeSessionId, temp_session_id: tempSessionId, data_arrivo: dataArrivo,
-        txt_stato: 'da_elaborare', txt_problemi: null, txt_nome_file: null, txt_sha256: null, drive_file_id: null, drive_salvato_at: null, drive_eliminato_at: null,
+        sheet_stato: 'da_inviare', txt_stato: 'da_elaborare', txt_problemi: null, txt_nome_file: null, txt_sha256: null, drive_file_id: null, drive_salvato_at: null, drive_eliminato_at: null,
         email_ospite_stato: 'da_inviare', email_gestore_stato: 'da_inviare', dati_temporanei_eliminati_at: null, in_corso_fino: null, created_at: new Date(now()), updated_at: new Date(now()) });
       return Object.assign({}, registri.get(checkinId));
     },

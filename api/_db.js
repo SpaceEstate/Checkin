@@ -57,6 +57,8 @@ async function initSchema(db) {
       created_at TIMESTAMP DEFAULT NOW(),
       updated_at TIMESTAMP DEFAULT NOW()
     )`;
+  // stato dell'invio al foglio Google (aggiunto dopo: ALTER per le tabelle già create)
+  await db`ALTER TABLE checkin_adempimenti ADD COLUMN IF NOT EXISTS sheet_stato VARCHAR(24) NOT NULL DEFAULT 'da_inviare'`;
   await db`
     CREATE TABLE IF NOT EXISTS alloggiati_tabelle (
       nome VARCHAR(32) PRIMARY KEY,
@@ -74,7 +76,7 @@ async function db() {
 }
 
 // Colonne del registro che il codice può aggiornare (lista chiusa: niente nomi di colonna arbitrari).
-const CAMPI_REGISTRO = ['temp_session_id', 'data_arrivo', 'txt_stato', 'txt_problemi', 'txt_nome_file', 'txt_sha256', 'drive_file_id',
+const CAMPI_REGISTRO = ['sheet_stato', 'temp_session_id', 'data_arrivo', 'txt_stato', 'txt_problemi', 'txt_nome_file', 'txt_sha256', 'drive_file_id',
   'drive_salvato_at', 'drive_eliminato_at', 'email_ospite_stato', 'email_gestore_stato', 'dati_temporanei_eliminati_at'];
 
 // Implementazione PostgreSQL dello "store" usato da _elabora-checkin.js e dagli endpoint.
@@ -136,7 +138,7 @@ export const pgStore = {
     const d = await db();
     const n = Math.min(200, Math.max(1, parseInt(limite, 10) || 50));
     return d`
-      SELECT checkin_id, data_arrivo, txt_stato, txt_problemi, txt_nome_file, drive_salvato_at, drive_eliminato_at,
+      SELECT checkin_id, data_arrivo, sheet_stato, txt_stato, txt_problemi, txt_nome_file, drive_salvato_at, drive_eliminato_at,
              email_ospite_stato, email_gestore_stato, dati_temporanei_eliminati_at, created_at, updated_at
       FROM checkin_adempimenti ORDER BY created_at DESC LIMIT ${n}`;
   },

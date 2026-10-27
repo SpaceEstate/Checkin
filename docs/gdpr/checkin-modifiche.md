@@ -4,6 +4,16 @@ Branch `gdpr/checkin-semplificazione`. È il primo di tre interventi: 1) check-i
 
 Il documento descrive cosa fa il codice. Non attesta la conformità al GDPR: per questo servono anche le verifiche organizzative, contrattuali e sugli account reali elencate più sotto.
 
+## ⚠️ Aggiornamento 27/10/2026 — scelta del gestore: si torna al foglio Google
+
+La prova di configurazione (`prova-drive`) ha restituito `HTTP 403 · storageQuotaExceeded`: l'account di servizio non può salvare file nel "Il mio Drive" di un account Google personale. Il gestore ha quindi deciso di **mantenere il flusso precedente per il TXT**:
+
+- dopo il pagamento i dati degli ospiti vengono **scritti di nuovo nel foglio Google `SHEET_ID`**, con le stesse colonne e gli stessi valori della versione precedente (`api/_sheet-checkin.js`); da lì lo **script Apps Script del gestore** crea il TXT nella cartella Drive "Check-in › Polizia di Stato", come prima;
+- **non è più attivo** il salvataggio del TXT su Drive da parte del check-in. I moduli `_checkin-alloggiati.js`, `_drive.js` e le azioni admin collegate restano nel codice ma il flusso non li usa (la pre-verifica del comune di nascita resta attiva);
+- **restano in vigore** le altre modifiche: niente PDF, email al gestore con sole immagini, metadati Stripe senza dati anagrafici, dati temporanei minimizzati e cancellati appena il foglio è scritto e l'email è partita, log senza dati personali, avvisi sulla verifica de visu.
+
+Conseguenza privacy da riportare nell'intervento 3: **i dati anagrafici degli ospiti tornano a essere duplicati nel foglio Google** (e nei TXT creati dallo script). La loro conservazione e cancellazione non è gestita dal codice del check-in ma dal foglio e dallo script del gestore: vanno definite e applicate lì (es. cancellazione delle righe e del TXT dopo la ricevuta Alloggiati). Le parti di questo documento su Drive (§ 2–8) descrivono la soluzione non attivata.
+
 ---
 
 ## 1. Fonti consultate e cosa dicono
