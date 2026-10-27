@@ -21,13 +21,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="checkin.css">
 
-  <!-- Preconnect Stripe e backend Vercel -->
-  <link rel="preconnect" href="https://js.stripe.com">
-  <link rel="preconnect" href="https://checkout.stripe.com">
-  <link rel="preconnect" href="https://m.stripe.com">
-  <link rel="preconnect" href="https://m.stripe.network">
-  <link rel="dns-prefetch" href="https://js.stripe.com">
-  <link rel="dns-prefetch" href="https://checkout.stripe.com">
+  <!-- Preconnect solo al backend del check-in. Niente preconnect verso Stripe: la pagina non carica script di Stripe
+       (il pagamento avviene con un reindirizzamento) e il browser non deve collegarsi a server di terzi prima che l'ospite scelga di pagare. -->
   <link rel="preconnect" href="https://checkin-six-coral.vercel.app">
   <link rel="dns-prefetch" href="https://checkin-six-coral.vercel.app">
 </head>
@@ -177,19 +172,22 @@
           </div>
 
           <div class="privacy-section">
+            <!-- Informativa breve (art. 13 GDPR) sui trattamenti del check-in; testo completo su privacy.html del sito -->
+            <p class="privacy-info" data-i18n="stepFinal.infoBreve">In breve: i dati di tutti gli ospiti servono per la comunicazione obbligatoria alla Questura (portale Alloggiati Web) e, con le date di nascita, per calcolare l&#39;imposta di soggiorno; il pagamento avviene sulla pagina di Stripe. Per controllare i dati, il gestore riceve via email l&#39;immagine del documento e un riepilogo in PDF (generato dal servizio esterno Browserless, su server negli Stati Uniti): queste copie e il foglio di lavoro vengono cancellati entro 24 ore dalla registrazione su Alloggiati Web. I dati non sono usati per altri scopi. Questa conferma non è un consenso: serve solo a dichiarare che hai letto l&#39;informativa.</p>
+            <!-- Presa visione dell'informativa: NON è un consenso, non viene inviata al server né registrata -->
             <div class="privacy-checkbox">
-              <input type="checkbox" id="privacy-consent" name="privacy-consent" class="privacy-input" required>
-              <label for="privacy-consent" class="privacy-label">
+              <input type="checkbox" id="privacy-presa-visione" name="privacy-presa-visione" class="privacy-input" required>
+              <label for="privacy-presa-visione" class="privacy-label">
                 <span class="checkbox-custom"></span>
                 <span class="privacy-text">
-                  <span data-i18n="stepFinal.privacyText">Dichiaro di aver letto l'informativa privacy ai sensi del Regolamento UE 2016/679 e di essere informato che i dati personali forniti saranno trattati per le finalità connesse alla registrazione degli ospiti e agli obblighi di comunicazione alle Autorità competenti previsti dalla normativa vigente, inclusa la trasmissione alla Questura ai sensi dell'art. 109 TULPS.</span>
+                  <span data-i18n="stepFinal.privacyText">Dichiaro di aver letto l'informativa privacy.</span>
                   <span class="required-mark">*</span>
                 </span>
               </label>
             </div>
-            <!-- Link all'informativa: la pagina privacy.html sarà pubblicata sul sito principale (intervento separato) -->
+            <!-- Informativa completa: pagina privacy.html del sito principale (repo LaColumbera) -->
             <p class="privacy-link-wrapper">
-              <a class="privacy-link" href="https://la-columbera.vercel.app/privacy.html" target="_blank" rel="noopener" data-i18n="stepFinal.privacyLink">Leggi l'informativa privacy</a>
+              <a class="privacy-link" href="https://la-columbera.vercel.app/privacy.html" target="_blank" rel="noopener noreferrer" data-i18n="stepFinal.privacyLink">Leggi l'informativa privacy</a>
             </p>
           </div>
 
@@ -210,6 +208,9 @@
         </div>
       </form>
     </div>
+
+    <!-- Link all'informativa visibile in ogni passaggio del modulo -->
+    <p class="page-privacy"><a href="https://la-columbera.vercel.app/privacy.html" target="_blank" rel="noopener noreferrer" data-i18n="footer.privacy" data-testid="checkin-footer-privacy">Informativa privacy</a></p>
   </div>
 
   <script src="i18n.js"></script>

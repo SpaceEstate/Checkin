@@ -1235,7 +1235,7 @@ function aggiornaBottonePagamento(totale) {
   
   // Gestione checkbox privacy
   setTimeout(() => {
-    const privacyCheckbox = document.getElementById('privacy-consent');
+    const privacyCheckbox = document.getElementById('privacy-presa-visione');
     const paymentBtn = document.getElementById('btn-procedi-pagamento');
     
     if (privacyCheckbox && paymentBtn) {
@@ -1245,7 +1245,7 @@ function aggiornaBottonePagamento(totale) {
       // lingua, per ritradurre l'importo): l'input privacy invece resta
       // sempre lo stesso elemento del DOM, quindi il listener va agganciato
       // una volta sola, altrimenti si accumulano copie duplicate e la
-      // notifica "Privacy accettata" comparirebbe più volte.
+      // notifica di presa visione comparirebbe più volte.
       if (privacyCheckbox.dataset.listenerAgganciato !== 'true') {
         privacyCheckbox.addEventListener('change', function() {
           const btn = document.getElementById('btn-procedi-pagamento');
@@ -1447,7 +1447,7 @@ window.closeCamera = function(ospiteNum, lato) {
 
 // === PAGAMENTO ===
 window.procediAlPagamento = async function() {
-  const privacyCheckbox = document.getElementById('privacy-consent');
+  const privacyCheckbox = document.getElementById('privacy-presa-visione');
   if (!privacyCheckbox?.checked) {
     showNotification(t('notif.privacyRichiesta'), 'error');
     privacyCheckbox?.scrollIntoView({ behavior: 'smooth', block: 'center' });

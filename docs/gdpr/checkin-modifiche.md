@@ -4,6 +4,23 @@ Branch `gdpr/checkin-semplificazione`. È il primo di tre interventi: 1) check-i
 
 Il documento descrive cosa fa il codice. Non attesta la conformità al GDPR: per questo servono anche le verifiche organizzative, contrattuali e sugli account reali elencate più sotto.
 
+## ⚠️ Aggiornamento intervento 3 (branch `gdpr/informativa`) — cosa vale oggi
+
+Questa sezione corregge le parti del documento non più attuali. Le ho verificate sul codice di `main` (commit `431feb0`).
+
+- **Il PDF di riepilogo è di nuovo attivo**, su richiesta del gestore.
+  - Lo genera `api/_pdf-riepilogo.js` tramite **Browserless**: le frasi "Browserless non è più usato" e "Rimossi … il PDF" del § 2 e del § 4 non valgono più.
+  - Browserless riceve l'HTML con i dati anagrafici di tutti gli ospiti, senza immagini.
+  - L'endpoint nel codice è `production-sfo.browserless.io`, cioè un server indicato come statunitense: è un trasferimento extra SEE da verificare.
+  - `BROWSERLESS_API_TOKEN` resta necessaria.
+- **L'email al gestore contiene le immagini del documento e il PDF** (`_email-gestore.js`).
+- **Il riquadro finale sulla verifica dell'identità è stato rimosso**, su richiesta del gestore. Resta la nota accanto al caricamento del documento. Le chiavi `stepFinal.identita*` in `i18n.js` non sono più usate.
+- **Informativa:** `https://la-columbera.vercel.app/privacy.html` esiste (repo LaColumbera). Nell'intervento 3:
+  - è stata riscritta;
+  - nel modulo sono stati aggiunti un'informativa breve, il link visibile in ogni passaggio e nella pagina di successo, e testi corretti per la casella di presa visione (id `privacy-presa-visione`, non inviata né registrata);
+  - sono stati tolti i preconnect verso Stripe.
+- **Inventario completo** dei trattamenti, dei fornitori, della conservazione e delle verifiche: `LaColumbera/docs/gdpr/inventario-trattamenti.md`.
+
 ## ⚠️ Aggiornamento 27/10/2026 — scelta del gestore: si torna al foglio Google
 
 La prova di configurazione (`prova-drive`) ha restituito `HTTP 403 · storageQuotaExceeded`: l'account di servizio non può salvare file nel "Il mio Drive" di un account Google personale. Il gestore ha quindi deciso di **mantenere il flusso precedente per il TXT**:

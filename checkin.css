@@ -1919,3 +1919,28 @@ body {
   outline: 3px solid var(--color-accent-200);
   outline-offset: 2px;
 }
+
+/* === Informativa breve e link all'informativa (adeguamento GDPR, intervento 3) === */
+.privacy-info {
+  margin: 0 0 14px;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: inherit;
+  opacity: 0.9;
+}
+.page-privacy {
+  text-align: center;
+  margin: 18px 0 8px;
+  font-size: 0.9rem;
+}
+.page-privacy a {
+  display: inline-block;
+  min-height: 44px;
+  line-height: 44px;
+  color: inherit;
+  text-decoration: underline;
+}
+.page-privacy a:focus-visible {
+  outline: 3px solid var(--color-accent-200);
+  outline-offset: 2px;
+}
