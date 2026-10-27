@@ -12,7 +12,6 @@ import { makeHandler as makeSessione } from '../api/get-session.js';
 import { makeHandler as makeSalva } from '../api/salva-dati-temporanei.js';
 import { makeHandler as makeVerifica } from '../api/verifica-dati-alloggiati.js';
 import { makeHandler as makeAdmin } from '../api/admin-alloggiati.js';
-import { makeHandler as makePulizia } from '../api/pulizia-dati-temporanei.js';
 import { checkinIdDa } from '../api/_elabora-checkin.js';
 import { makeDrive } from '../api/_drive.js';
 import { requireApi, memStore, fintoRes, fintoReq, checkinFamiglia, caricaTabelleOk, caricaTabelleKo, catturaLog, contieneSensibili, fintoJpeg, fintoPdf, dataUri, NOW, fintaDriveApi, ENV_DRIVE } from './helpers.mjs';
@@ -168,13 +167,20 @@ test('pulizia programmata: CRON_SECRET rispettata, scaduti eliminati, registri c
   await store.ottieniOCreaRegistro({ checkinId: 'ckaaaaaaaaaaaaaaaa', stripeSessionId: 'cs_a' });
   await store.ottieniOCreaRegistro({ checkinId: 'ckbbbbbbbbbbbbbbbb', stripeSessionId: 'cs_b' });
   await store.aggiornaRegistro('ckbbbbbbbbbbbbbbbb', { drive_file_id: 'FILEID00000001' });
-  const h = makePulizia({ store, env: { CRON_SECRET: 'cron-prova' } });
+  const h = makeAdmin({ store, env: { CRON_SECRET: 'cron-prova', ADMIN_SECRET: 'segreto-admin-di-prova' }, drive: {}, caricaTabelle: caricaTabelleOk });
   let r = fintoRes(); await catturaLog(() => h(fintoReq('GET', null, {}), r)); assert.equal(r.statusCode, 401);
   t = NOW + 31 * 864e5;
   r = fintoRes(); await catturaLog(() => h(fintoReq('GET', null, { authorization: 'Bearer cron-prova' }), r));
   assert.equal(r.statusCode, 200);
   assert.equal(store.sessioni.size, 0);
   assert.deepEqual([...store.registri.keys()], ['ckbbbbbbbbbbbbbbbb'], 'il registro di un TXT non ancora eliminato da Drive resta come promemoria');
+});
+
+test('Vercel Hobby: al massimo 12 funzioni nella cartella api/ (file senza "_")', () => {
+  const funzioni = fs.readdirSync(path.join(root, 'api')).filter(f => f.endsWith('.js') && !f.startsWith('_'));
+  assert.ok(funzioni.length <= 12, funzioni.length + ' funzioni: ' + funzioni.join(', '));
+  const cron = JSON.parse(fs.readFileSync(path.join(root, 'vercel.json'), 'utf8')).crons.map(c => c.path.replace(/^\/api\//, '') + '.js');
+  assert.ok(cron.every(c => funzioni.includes(c)), 'il cron punta a una funzione esistente');
 });
 
 test('rimozioni: niente PDF, niente Browserless, niente scrittura degli ospiti su Google Sheets', () => {

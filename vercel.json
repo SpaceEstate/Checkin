@@ -8,6 +8,6 @@
     }
   },
   "crons": [
-    { "path": "/api/pulizia-dati-temporanei", "schedule": "17 3 * * *" }
+    { "path": "/api/admin-alloggiati", "schedule": "17 3 * * *" }
   ]
 }

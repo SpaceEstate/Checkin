@@ -15,7 +15,12 @@
 //  - elimina-dati-temporanei {checkinId, conferma: "ELIMINA"}  cancella subito anagrafiche e immagini ancora in attesa
 //  - carica-tabella {nome, csv}  carica a mano una tabella ufficiale (Luoghi, Tipi_Documento, Tipi_Alloggiato) scaricata dal portale
 // Nessuna azione invia nulla ad Alloggiati Web.
+//
+// Pulizia programmata: il cron di Vercel chiama GET /api/admin-alloggiati (senza "azione" e senza x-admin-secret,
+// con "Authorization: Bearer <CRON_SECRET>"): viene gestita da _pulizia.js. È qui e non in un endpoint separato
+// perché il piano Vercel Hobby ammette al massimo 12 funzioni per deployment.
 import crypto from 'crypto';
+import { gestisciPulizia } from './_pulizia.js';
 import { pgStore } from './_db.js';
 import { caricaTabelle, salvaTabellaManuale } from './_alloggiati_tabelle.js';
 import { generaTxt, costruisciSchedine, nomeFileTxt } from './_checkin-alloggiati.js';
@@ -111,6 +116,7 @@ export function makeHandler(deps) {
 
   return async function handler(req, res) {
     res.setHeader('Cache-Control', 'no-store');
+    if (req.method === 'GET' && !(req.query && req.query.azione) && !req.headers['x-admin-secret']) return gestisciPulizia(req, res, { store, env });
     if (!autorizzato(req, env)) return res.status(401).json({ error: 'Non autorizzato' });
     const body = req.method === 'POST' && req.body && typeof req.body === 'object' ? req.body : {};
     const azione = String(req.method === 'GET' ? (req.query && req.query.azione) || '' : body.azione || '');

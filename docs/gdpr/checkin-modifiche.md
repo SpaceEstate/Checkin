@@ -72,7 +72,7 @@ In questo documento le **prescrizioni normative** (quanto sopra) sono tenute sep
 
 | Dato | Durata applicata | Meccanismo |
 |---|---|---|
-| Dati temporanei di un check-in **non pagato** | Scadono dopo **2 ore**. La cancellazione fisica avviene al primo tra: un nuovo salvataggio di qualunque ospite, un webhook, il cron giornaliero. Massimo effettivo: circa **2 h + 24 h** se non arrivano altre richieste | `pulisciScaduti()` + Vercel Cron `17 3 * * *` (03:17 UTC) |
+| Dati temporanei di un check-in **non pagato** | Scadono dopo **2 ore**. La cancellazione fisica avviene al primo tra: un nuovo salvataggio di qualunque ospite, un webhook, il cron giornaliero. Massimo effettivo: circa **2 h + 24 h** se non arrivano altre richieste | `pulisciScaduti()` + Vercel Cron `17 3 * * *` (03:17 UTC) su `/api/admin-alloggiati` (GET senza azione, autenticata con `CRON_SECRET`) |
 | Dati temporanei di un check-in **pagato**, tutto riuscito | **Cancellati subito**, appena il TXT è su Drive e l'email al gestore è partita | `_elabora-checkin.js` passo 4 |
 | Dati temporanei di un check-in pagato con un passo non riuscito (Drive, email, tabelle) o con TXT non valido o Drive non configurato | Fino al successo, ma **al massimo 72 ore** dalla prima elaborazione (più il ritardo del cron). Dopo vengono cancellati comunque, anche se il TXT non è stato salvato | Scadenza allungata una sola volta, fino a `creazione registro + 72 h` |
 | Registro tecnico `checkin_adempimenti` | Finché il TXT è su Drive e non risulta eliminato (fa da promemoria). Poi **30 giorni** dall'eliminazione da Drive o dall'ultimo aggiornamento | Cron giornaliero |
@@ -169,6 +169,8 @@ Elimina l'email e gli allegati dalla casella del gestore, da "Posta inviata" del
 | `CRON_SECRET` | consigliata, nuova | Protegge il cron di pulizia |
 | `DATABASE_URL` / `POSTGRES_URL`, `EMAIL_USER`, `EMAIL_PASSWORD`, `EMAIL_PROPRIETARIO`, `ADMIN_SECRET`, `INTERNAL_API_SECRET`, `STRIPE_*`, `SHEET_ID*`, `CODICE_CASSETTA_*` | esistenti, invariate | |
 | `BROWSERLESS_API_TOKEN` | **non più usata** | Si può rimuovere da Vercel dopo il merge |
+
+**Limite Vercel Hobby: massimo 12 funzioni per deployment.** Con questo intervento la cartella `api/` ne contiene esattamente 12 (i file con prefisso `_` non contano): per questo la pulizia programmata è dentro `admin-alloggiati.js` e non in un endpoint separato. Una nuova funzione richiederà di accorparne un'altra o di passare a un piano superiore.
 
 `SHEET_ID` va mantenuta: `verifica-prenotazione.js` la usa come ripiego se manca `SHEET_ID_PRENOTAZIONI`.
 
