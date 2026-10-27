@@ -1,5 +1,19 @@
 // api/test-email.js
 // Script migliorato per testare l'invio email senza passare da Stripe
+// (endpoint amministrativo: invia email VERE agli indirizzi configurati, con dati e immagine sintetici)
+import zlib from 'zlib';
+import { inviaImmaginiAlGestore } from './_email-gestore.js';
+
+// PNG 32x32 grigio, generato al volo: immagine sintetica per i test (nessun documento reale).
+function immagineSinteticaPng() {
+  const crcTable = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
+  const crc = buf => { let c = 0xFFFFFFFF; for (const b of buf) c = crcTable[(c ^ b) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+  const chunk = (type, data) => { const len = Buffer.alloc(4); len.writeUInt32BE(data.length); const td = Buffer.concat([Buffer.from(type, 'ascii'), data]); const c = Buffer.alloc(4); c.writeUInt32BE(crc(td)); return Buffer.concat([len, td, c]); };
+  const w = 32, h = 32, ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 0; ihdr[10] = 0; ihdr[11] = 0; ihdr[12] = 0;
+  const raw = Buffer.alloc((w + 1) * h, 0x80); for (let y = 0; y < h; y++) raw[y * (w + 1)] = 0;
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
+}
 
 export default async function handler(req, res) {
   // CORS Headers
@@ -63,58 +77,31 @@ export default async function handler(req, res) {
     console.log('👥 Ospiti:', datiPrenotazioneTest.numeroOspiti);
     console.log('📎 Documenti:', datiPrenotazioneTest.documenti.length);
 
-    // TEST 1: Email al proprietario (genera-pdf-email)
-    console.log('\n📧 TEST 1: Email proprietario con PDF...');
+    // TEST 1: Email al gestore — SOLO immagine del documento (sostituisce il vecchio test PDF di genera-pdf-email,
+    // rimosso con l'adeguamento GDPR). L'immagine è SINTETICA (quadrato grigio generato qui), nessun documento reale.
+    console.log('\n📧 TEST 1: Email gestore con sola immagine documento (sintetica)...');
     const test1Start = Date.now();
     try {
-      const emailProprietario = process.env.EMAIL_PROPRIETARIO || 'NON_CONFIGURATA';
-      console.log('📬 Destinatario proprietario:', emailProprietario);
-
-      if (emailProprietario === 'NON_CONFIGURATA') {
+      if (!process.env.EMAIL_PROPRIETARIO) {
         throw new Error('EMAIL_PROPRIETARIO non configurata nelle variabili ambiente');
       }
-
-      const response1 = await fetch(`${baseUrl}/api/genera-pdf-email`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          // Richiesto da genera-pdf-email.js dopo il fix di sicurezza:
-          // senza questo header risponde 401 (vedi stripeWebhook.js).
-          'x-internal-secret': process.env.INTERNAL_API_SECRET
-        },
-        body: JSON.stringify({
-          datiPrenotazione: datiPrenotazioneTest,
-          emailDestinatario: emailProprietario
-        })
+      const result1 = await inviaImmaginiAlGestore({
+        documenti: [{ lato: 'fronte', base64: 'data:image/png;base64,' + immagineSinteticaPng().toString('base64') }],
+        riferimento: 'TEST',
+        statoTxt: 'test: nessun TXT generato',
+        destinatario: process.env.EMAIL_PROPRIETARIO,
+        env: process.env
       });
-
-      const result1 = await response1.json();
       const test1Time = Date.now() - test1Start;
-      
-      results.tests.push({
-        test: 'Email Proprietario (con PDF)',
-        status: response1.ok ? 'SUCCESS' : 'FAILED',
-        statusCode: response1.status,
-        executionTime: `${test1Time}ms`,
-        response: result1
-      });
-
+      results.tests.push({ test: 'Email Gestore (solo immagine)', status: 'SUCCESS', executionTime: `${test1Time}ms`, response: result1 });
       results.executionTime.emailProprietario = test1Time;
-
-      if (response1.ok) {
-        console.log(`✅ Email proprietario: OK (${test1Time}ms)`);
-        console.log(`📄 PDF generato: ${result1.pdfGenerato ? 'SI' : 'NO'}`);
-        console.log(`📎 Documenti allegati: ${result1.numeroDocumenti || 0}`);
-      } else {
-        console.error('❌ Email proprietario: FAILED');
-        console.error('Dettagli:', result1);
-      }
+      console.log(`✅ Email gestore: OK (${test1Time}ms)`);
     } catch (error) {
-      console.error('❌ Errore test 1:', error.message);
+      console.error('❌ Errore test 1:', error && (error.code || error.name) || 'errore');
       results.tests.push({
-        test: 'Email Proprietario (con PDF)',
+        test: 'Email Gestore (solo immagine)',
         status: 'ERROR',
-        error: error.message
+        error: error && (error.code || error.message) || 'errore'
       });
     }
 
@@ -181,7 +168,8 @@ export default async function handler(req, res) {
       EMAIL_USER: process.env.EMAIL_USER ? '✅ Configurata' : '❌ MANCANTE',
       EMAIL_PASSWORD: process.env.EMAIL_PASSWORD ? '✅ Configurata' : '❌ MANCANTE',
       EMAIL_PROPRIETARIO: process.env.EMAIL_PROPRIETARIO ? `✅ ${process.env.EMAIL_PROPRIETARIO}` : '❌ MANCANTE',
-      BROWSERLESS_API_TOKEN: process.env.BROWSERLESS_API_TOKEN ? '✅ Configurata (PDF disponibile)' : '⚠️ Mancante (email senza PDF)',
+      GOOGLE_DRIVE_ALLOGGIATI_FOLDER_ID: process.env.GOOGLE_DRIVE_ALLOGGIATI_FOLDER_ID ? '✅ Configurata' : '❌ MANCANTE (TXT non salvabile su Drive)',
+      ALLOGGIATI_WS: ['ALLOGGIATI_UTENTE', 'ALLOGGIATI_PASSWORD', 'ALLOGGIATI_WSKEY'].every(k => process.env[k]) ? '✅ Configurate (tabelle ufficiali dal servizio)' : '⚠️ Mancanti (servono tabelle caricate a mano)',
       CODICE_CASSETTA: process.env.CODICE_CASSETTA ? '✅ Configurata' : '⚠️ Opzionale'
     };
 
@@ -203,11 +191,9 @@ export default async function handler(req, res) {
     return res.status(200).send(htmlResponse);
 
   } catch (error) {
-    console.error('❌ Errore generale nel test:', error);
+    console.error('❌ Errore generale nel test:', error && (error.code || error.name) || 'errore');
     return res.status(500).json({
-      error: 'Errore nel test',
-      message: error.message,
-      stack: error.stack
+      error: 'Errore nel test'
     });
   }
 }

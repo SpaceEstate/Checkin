@@ -1,11 +1,11 @@
 {
   "name": "checkin-system",
   "version": "1.0.0",
-  "description": "Sistema completo di check-in con pagamento Stripe, generazione PDF e integrazione Google Sheets",
+  "description": "Sistema di check-in con pagamento Stripe e TXT Alloggiati Web (caricamento manuale) salvato su Google Drive",
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "test": "echo 'No tests specified'"
+    "test": "node --test ../tests/*.test.mjs"
   },
   "dependencies": {
     "stripe": "^17.6.0",
@@ -23,7 +23,7 @@
   "keywords": [
     "checkin",
     "stripe",
-    "pdf",
+    "alloggiati",
     "google-sheets",
     "vercel",
     "nodejs",

@@ -21,9 +21,10 @@ function maskEmail(email) {
 
 // ------------------------------------------------------------------
 // i18n email ospite (IT/EN/DE). Questa è l'UNICA email tradotta: quella al
-// proprietario (api/genera-pdf-email.js) resta sempre in italiano, così
-// come Google Sheets e il PDF per la Questura — la lingua qui sotto riguarda
-// solo cosa legge l'ospite.
+// gestore (api/_email-gestore.js, solo immagine del documento) e il TXT
+// Alloggiati restano in italiano — la lingua qui sotto riguarda solo cosa
+// legge l'ospite. Dal webhook arrivano solo i dati che servono a questa email
+// (soggiorno + nome per il saluto): nessun documento, nessuna data di nascita.
 // ------------------------------------------------------------------
 const LINGUE_VALIDE = ['it', 'en', 'de'];
 
@@ -161,8 +162,7 @@ function localeEmail(lingua) {
 }
 
 // Nome appartamento mostrato all'ospite nell'email. Il valore che arriva in
-// dati.appartamento resta sempre quello italiano (coerente con Google
-// Sheets e il PDF per il proprietario): qui si traduce solo l'etichetta.
+// dati.appartamento resta sempre quello italiano: qui si traduce solo l'etichetta.
 function nomeAppartamentoEmail(valoreOriginale, lingua) {
   const T = EMAIL_TESTI[linguaValida(lingua)];
   if (lingua === 'it' || !valoreOriginale) return valoreOriginale;

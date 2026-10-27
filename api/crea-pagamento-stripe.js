@@ -32,7 +32,8 @@ function calcolaTotaleServer(ospiti, numeroNotti) {
   return Math.round(ospitiSoggetti * notti * TASSA_PER_NOTTE * 100) / 100;
 }
 
-export default async function handler(req, res) {
+// `stripe` è un parametro per poterlo sostituire nei test (nessuna chiamata reale a Stripe)
+async function gestisciRichiesta(stripe, req, res) {
   res.setHeader("Access-Control-Allow-Origin", "https://spaceestate.github.io");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -60,9 +61,7 @@ export default async function handler(req, res) {
       tempSessionId, // ✅ ID sessione temporanea per recuperare documenti
       lingua, // Lingua scelta dall'ospite nel form (it/en/de): guida la lingua
               // della pagina di pagamento Stripe e, più avanti, dell'email di
-              // benvenuto. Non tocca in alcun modo Google Sheets, il PDF per
-              // il proprietario o la comunicazione alla Questura, che restano
-              // sempre in italiano.
+              // benvenuto. Non tocca il TXT Alloggiati né l'email al gestore.
       successUrl,
       cancelUrl
     } = req.body;
@@ -104,15 +103,15 @@ export default async function handler(req, res) {
     }
 
     console.log("📋 Dati validati:", {
-      dataCheckin,
-      appartamento,
       numeroOspiti,
       totale: totaleServer,
-      responsabilePresente: !!(responsabile.nome && responsabile.cognome),
-      tempSessionId: tempSessionId || 'N/A'
+      tempSessionId: tempSessionId ? 'presente' : 'assente'
     });
 
-    // ✅ SOLUZIONE: Metadata MINIMI (solo info essenziali)
+    // Metadata MINIMI: solo identificativi tecnici e dati del soggiorno necessari a collegare pagamento e check-in
+    // (adeguamento GDPR). NON si inviano a Stripe nome, cognome, sesso, data/luogo di nascita, cittadinanza né estremi
+    // del documento: prima finivano qui (resp_*) e restavano nei metadati della sessione Stripe. I dati degli ospiti
+    // restano solo nei dati temporanei collegati da temp_session_id, cancellati dopo l'elaborazione (_elabora-checkin.js).
     const metadata = {
       dataCheckin,
       appartamento: appartamento.substring(0, 490), // Max 490 per sicurezza
@@ -122,21 +121,7 @@ export default async function handler(req, res) {
       totale: totaleServer.toString(),
       timestamp: timestamp || new Date().toISOString(),
       lingua: linguaOspite,
-      
-      // ⭐ CHIAVE: Salva solo il temp_session_id (circa 30 caratteri)
-      temp_session_id: tempSessionId || '',
-      
-      // Dati responsabile (compatti)
-      resp_cognome: responsabile.cognome || '',
-      resp_nome: responsabile.nome || '',
-      resp_genere: responsabile.genere || '',
-      resp_nascita: responsabile.nascita || '',
-      resp_eta: responsabile.eta ? responsabile.eta.toString() : '',
-      resp_cittadinanza: responsabile.cittadinanza || '',
-      resp_luogoNascita: responsabile.luogoNascita || '',
-      
-      // ❌ RIMOSSO: altri_ospiti (troppo grande - causa errore 672 caratteri)
-      // Verranno recuperati da Redis nel webhook usando temp_session_id
+      temp_session_id: tempSessionId || ''
     };
 
     // Rimuovi campi vuoti per risparmiare spazio
@@ -147,7 +132,6 @@ export default async function handler(req, res) {
     });
 
     console.log("💳 Creazione sessione Stripe...");
-    console.log("🔑 Metadata temp_session_id:", metadata.temp_session_id);
     console.log("📏 Metadata size:", JSON.stringify(metadata).length, "chars");
 
     const finalSuccessUrl = successUrl || "https://spaceestate.github.io/Checkin/successo-pagamento.html?session_id={CHECKOUT_SESSION_ID}";
@@ -199,10 +183,12 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
-    console.error("❌ Errore creazione sessione:", error);
+    console.error("❌ Errore creazione sessione:", error && (error.type || error.code || error.name) || 'errore');
     return res.status(500).json({ 
-      error: "Errore creazione sessione",
-      message: error.message 
+      error: "Errore creazione sessione"
     });
   }
 }
+
+export const makeHandler = client => (req, res) => gestisciRichiesta(client, req, res);
+export default makeHandler(stripe);

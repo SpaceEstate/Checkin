@@ -57,7 +57,8 @@ function determinaCodiciCassetta(appartamento, lang) {
   return codici.length > 0 ? codici : fallback;
 }
 
-export default async function handler(req, res) {
+// `stripe` è un parametro per poterlo sostituire nei test (nessuna chiamata reale a Stripe)
+async function gestisciRichiesta(stripe, req, res) {
   // CORS Headers
   res.setHeader("Access-Control-Allow-Origin", "https://spaceestate.github.io");
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
@@ -134,45 +135,10 @@ export default async function handler(req, res) {
       amount_total: (session.amount_total / 100).toFixed(2),
       // Calcolati qui, dopo la verifica payment_status === 'paid' sopra:
       // non arrivano mai al client prima che il pagamento sia confermato.
-      codiciCassetta: determinaCodiciCassetta(metadata.appartamento, linguaRichiesta),
-      
-      // Dati responsabile
-      responsabile: {
-        cognome: metadata.resp_cognome,
-        nome: metadata.resp_nome,
-        genere: metadata.resp_genere,
-        nascita: metadata.resp_nascita,
-        eta: metadata.resp_eta,
-        cittadinanza: metadata.resp_cittadinanza,
-        luogoNascita: metadata.resp_luogoNascita,
-        comune: metadata.resp_comune,
-        provincia: metadata.resp_provincia,
-        tipoDocumento: metadata.resp_tipoDocumento,
-        numeroDocumento: metadata.resp_numeroDocumento,
-        luogoRilascio: metadata.resp_luogoRilascio
-      }
+      codiciCassetta: determinaCodiciCassetta(metadata.appartamento, linguaRichiesta)
+      // Rimossi "responsabile" e "altriOspiti" (adeguamento GDPR): i dati anagrafici non sono più nei metadati
+      // Stripe e la pagina di successo non li usava.
     };
-
-    // Deserializza altri ospiti se presenti
-    if (metadata.altri_ospiti) {
-      try {
-        const altriOspiti = JSON.parse(metadata.altri_ospiti);
-        sessionData.altriOspiti = altriOspiti.map(o => ({
-          numero: o.n,
-          cognome: o.c,
-          nome: o.no,
-          genere: o.g,
-          nascita: o.na,
-          eta: o.e,
-          cittadinanza: o.ci,
-          luogoNascita: o.ln,
-          comune: o.co,
-          provincia: o.p
-        }));
-      } catch (e) {
-        console.warn("⚠️ Errore nel parsing altri_ospiti:", e);
-      }
-    }
 
     console.log("📤 Invio dati sessione processati");
 
@@ -195,3 +161,6 @@ export default async function handler(req, res) {
     });
   }
 }
+
+export const makeHandler = client => (req, res) => gestisciRichiesta(client, req, res);
+export default makeHandler(stripe);

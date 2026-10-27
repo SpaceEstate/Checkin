@@ -976,6 +976,7 @@ function generaStepOspiti() {
         <div class="document-section" style="grid-column: 1 / -1;">
           <h3 class="document-title" data-i18n="guest.documentoTitolo">📄 Documento di identità</h3>
           <p class="document-subtitle" data-i18n="guest.documentoSottotitolo">Servono due file: il fronte e il retro del documento (foto o PDF). Con il passaporto basta la pagina con i dati.</p>
+          <p class="document-subtitle identity-hint" data-i18n="guest.documentoAvvisoIdentita">${t('guest.documentoAvvisoIdentita')}</p>
           <p class="upload-status" id="upload-status-1" data-i18n-key="guest.statoDocumenti" data-i18n-params='{"n":0}'>${t('guest.statoDocumenti', { n: 0 })}</p>
           <div class="document-upload">
 ${bloccoUploadLato(1, 'fronte')}
@@ -1466,6 +1467,20 @@ window.procediAlPagamento = async function() {
     
     // ✅ Raccogli dati completi
     const datiCompleti = await raccogliDatiPrenotazioneConCompressione();
+
+    // Pre-verifica dei dati per la comunicazione Alloggiati Web (comune di nascita,
+    // caratteri ammessi...). Blocca solo per problemi che l'ospite può correggere;
+    // se il servizio non risponde si prosegue (i dati vengono riverificati dopo il pagamento).
+    if (payButton) payButton.innerHTML = t('payment.verificaDati');
+    const problemiAlloggiati = await verificaDatiAlloggiati(datiCompleti);
+    if (problemiAlloggiati.length > 0) {
+      mostraProblemiAlloggiati(problemiAlloggiati);
+      if (payButton) {
+        payButton.disabled = false;
+        payButton.innerHTML = t('payment.payButton', { amount: calcolaTotale().toFixed(2) });
+      }
+      return;
+    }
     
     // ✅ CRITICAL: Genera tempSessionId PRIMA di salvare
     const tempSessionId = 'temp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
@@ -1586,6 +1601,69 @@ window.procediAlPagamento = async function() {
     
     showNotification(errorMessage, 'error');
   }
+}
+
+// === PRE-VERIFICA DATI ALLOGGIATI WEB ===
+// Invia SOLO i campi anagrafici (mai le immagini) all'endpoint di verifica, che non
+// salva nulla. Ritorna l'elenco dei problemi correggibili dall'ospite; [] se è tutto
+// a posto oppure se la verifica non è disponibile (timeout, rete, tabelle assenti).
+async function verificaDatiAlloggiati(dati) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
+  try {
+    const resp = await fetch(`${API_BASE_URL}/verifica-dati-alloggiati`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({
+        dataCheckin: dati.dataCheckin,
+        numeroOspiti: dati.numeroOspiti,
+        numeroNotti: dati.numeroNotti,
+        tipoGruppo: dati.tipoGruppo,
+        ospiti: dati.ospiti
+      }),
+      signal: controller.signal
+    });
+    if (!resp.ok) return [];
+    const esito = await resp.json();
+    if (!esito || esito.disponibile !== true || esito.ok === true) return [];
+    return Array.isArray(esito.problemi) ? esito.problemi : [];
+  } catch (e) {
+    console.warn('Pre-verifica Alloggiati non disponibile: si prosegue');
+    return [];
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+const ETICHETTA_CAMPO_ALLOGGIATI = {
+  cognome: 'field.cognome',
+  nome: 'field.nome',
+  comune: 'guest.comuneEtichetta',
+  numero_documento: 'field.numeroDocumento'
+};
+
+// Mostra il primo problema e porta l'ospite al passo e al campo da correggere.
+function mostraProblemiAlloggiati(problemi) {
+  const p = problemi[0];
+  const n = parseInt(p.ospite, 10) || 1;
+  const campo = t(ETICHETTA_CAMPO_ALLOGGIATI[p.campo] || 'field.nome');
+  let messaggio;
+  if (p.codice === 'comune_non_trovato') {
+    const sugg = Array.isArray(p.suggerimenti) && p.suggerimenti.length
+      ? t('alloggiati.suggerimenti', { elenco: p.suggerimenti.join(', ') })
+      : '';
+    messaggio = t('alloggiati.comuneNonTrovato', { n }) + sugg;
+  } else if (p.codice === 'troppo_lungo') {
+    messaggio = t('alloggiati.troppoLungo', { n, campo });
+  } else {
+    messaggio = t('alloggiati.caratteriNonAmmessi', { n, campo });
+  }
+  if (problemi.length > 1) messaggio += ' ' + t('alloggiati.altriProblemi', { quanti: problemi.length - 1 });
+  currentStep = n + 1;
+  mostraStepCorrente();
+  const input = document.querySelector(`[name="ospite${n}_${p.campo}"]`);
+  if (input) setTimeout(() => input.focus(), 400);
+  showNotification(messaggio, 'error');
 }
 
 // ✅ NUOVA FUNZIONE: Compressione immagini
@@ -1716,14 +1794,13 @@ async function raccogliDatiPrenotazioneConCompressione() {
       ospite.isResponsabile = true;
     }
     
-    console.log(`✅ Ospite ${i}:`, ospite.cognome, ospite.nome);
     datiPrenotazione.ospiti.push(ospite);
   }
   
   // Raccogli documento responsabile: SEMPRE due file (fronte + retro).
-  // L'array `documenti` conteneva un solo elemento; ora ne contiene due,
-  // entrambi con ospiteNumero = 1 e un campo `lato` che il backend usa per
-  // nominare gli allegati (genera-pdf-email.js).
+  // L'array `documenti` contiene un elemento per lato, con ospiteNumero = 1 e
+  // un campo `lato` che il backend usa per nominare l'allegato dell'email al
+  // gestore (api/_email-gestore.js: "documento-fronte.jpg" ecc.).
   showNotification(t('notif.caricamentoDocResponsabile'), 'info');
 
   let documentiRaccolti = 0;
@@ -1735,7 +1812,7 @@ async function raccogliDatiPrenotazioneConCompressione() {
 
     try {
       const originalSizeMB = (file.size / 1024 / 1024).toFixed(2);
-      console.log(`📸 Documento responsabile (${lato}): ${file.name} - ${originalSizeMB} MB (originale)`);
+      console.log(`📸 Documento responsabile (${lato}): ${originalSizeMB} MB (originale)`);
 
       const base64 = await fileToBase64(file);
       // Con due documenti invece di uno il target per lato scende da 700 a
@@ -1759,7 +1836,8 @@ async function raccogliDatiPrenotazioneConCompressione() {
       datiPrenotazione.documenti.push({
         ospiteNumero: 1,
         lato: lato,
-        nomeFile: `${lato}_${file.name}`,
+        // Mai il nome originale del file: può contenere nome e cognome dell'ospite.
+        nomeFile: `documento_${lato}`,
         tipo: file.type,
         dimensione: base64Finale.split(',')[1].length,
         base64: base64Finale
@@ -1826,8 +1904,23 @@ async function creaLinkPagamentoConSessionId(datiPrenotazione, tempSessionId) {
     const API_ENDPOINT = `${API_BASE_URL}/crea-pagamento-stripe`;
     console.log("🌐 Chiamata API ->", API_ENDPOINT);
 
+    // Solo ciò che serve a creare il pagamento (importo ricalcolato dal server in base
+    // alle date di nascita, numero di notti, dati del soggiorno). Niente nomi, documenti
+    // o immagini: quei dati restano solo nel salvataggio temporaneo (salva-dati-temporanei).
     const datiConMetadata = {
-      ...datiPrenotazione,
+      dataCheckin: datiPrenotazione.dataCheckin,
+      appartamento: datiPrenotazione.appartamento,
+      numeroOspiti: datiPrenotazione.numeroOspiti,
+      numeroNotti: datiPrenotazione.numeroNotti,
+      tipoGruppo: datiPrenotazione.tipoGruppo,
+      totale: datiPrenotazione.totale,
+      lingua: datiPrenotazione.lingua,
+      timestamp: datiPrenotazione.timestamp,
+      ospiti: (datiPrenotazione.ospiti || []).map(o => ({
+        numero: o.numero,
+        nascita: o.nascita,
+        isResponsabile: o.isResponsabile === true
+      })),
       tempSessionId: tempSessionId,
       successUrl: `https://spaceestate.github.io/Checkin/successo-pagamento.html?session_id={CHECKOUT_SESSION_ID}&temp_session=${tempSessionId}&lang=${getLingua()}`,
       cancelUrl: `${window.location.href}?canceled=true`

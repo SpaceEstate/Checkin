@@ -1899,3 +1899,47 @@ body {
   flex: 1;
   min-width: 120px;
 }
+
+/* === Avviso verifica identità e link informativa (adeguamento GDPR) === */
+.identity-notice {
+  background: var(--color-bg-cream-light);
+  border: 2px solid var(--color-border);
+  border-left: 6px solid var(--color-accent-300);
+  border-radius: 16px;
+  padding: 18px 20px;
+  margin-bottom: 24px;
+  width: 100%;
+  box-sizing: border-box;
+  overflow-wrap: anywhere;
+}
+.identity-notice-title {
+  margin: 0 0 8px;
+  font-size: 1.05rem;
+  color: var(--color-accent-300);
+}
+.identity-notice p {
+  margin: 0;
+  color: var(--color-text);
+  line-height: 1.5;
+}
+.identity-hint {
+  font-style: italic;
+}
+.privacy-link-wrapper {
+  margin: 14px 0 0;
+}
+.privacy-link {
+  display: inline-block;
+  min-height: 44px;
+  line-height: 44px;
+  color: var(--color-accent-300);
+  font-weight: 600;
+  text-decoration: underline;
+}
+.privacy-link:focus-visible {
+  outline: 3px solid var(--color-accent-200);
+  outline-offset: 2px;
+}
+@media (max-width: 480px) {
+  .identity-notice { padding: 14px 16px; }
+}
