@@ -204,11 +204,11 @@ test('Vercel Hobby: al massimo 12 funzioni nella cartella api/ (file senza "_")'
   assert.ok(cron.every(c => funzioni.includes(c)), 'il cron punta a una funzione esistente');
 });
 
-test('rimozioni: niente PDF, niente Browserless; il foglio Google si scrive solo da _sheet-checkin.js', () => {
+test('vecchio endpoint PDF rimosso; Browserless solo nel modulo interno del PDF; foglio Google solo da _sheet-checkin.js', () => {
   assert.equal(fs.existsSync(path.join(root, 'api', 'genera-pdf-email.js')), false);
   const api = fs.readdirSync(path.join(root, 'api')).filter(f => f.endsWith('.js')).map(f => [f, fs.readFileSync(path.join(root, 'api', f), 'utf8')]);
   for (const [f, s] of api) {
-    assert.ok(!/browserless|BROWSERLESS_API_TOKEN|application\/pdf['"],\s*\n?\s*content: pdf|genera-pdf-email['"`]/.test(s.replace(/^\s*\/\/.*$/gm, '')), f + ': riferimento a PDF/Browserless');
+    if (f !== '_pdf-riepilogo.js') assert.ok(!/browserless\.io|genera-pdf-email['"`]/.test(s.replace(/^\s*\/\/.*$/gm, '')), f + ': riferimento a Browserless o al vecchio endpoint');
     if (!['verifica-prenotazione.js', '_sheet-checkin.js'].includes(f)) assert.ok(!/google-spreadsheet|addRows?\(/.test(s), f + ': scrittura su Google Sheets');
   }
   const wh = fs.readFileSync(path.join(root, 'api', 'stripeWebhook.js'), 'utf8');

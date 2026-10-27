@@ -5,7 +5,7 @@
 //   1. email di benvenuto all'ospite (codici cassetta) — invariata nei contenuti, ma riceve solo i dati che le servono;
 //   2. invio dei dati al foglio Google del check-in (SHEET_ID), da cui lo script del gestore crea il TXT Alloggiati
 //      (ripristinato su richiesta del gestore: il salvataggio diretto su Drive non è possibile con l'account di servizio);
-//   3. email al gestore con la SOLA immagine del documento;
+//   3. email al gestore con l'immagine del documento e il PDF di riepilogo dei dati (ripristinato su richiesta del gestore);
 //   4. eliminazione dei dati temporanei (anagrafiche + immagini) appena i dati sono nel foglio e l'email al gestore è partita.
 // Se un passo fallisce per un motivo temporaneo (rete, Google, SMTP) il risultato è "da_ripetere": il webhook
 // risponde con errore e Stripe ritenta più tardi. I dati temporanei restano al massimo TTL_DOPO_PAGAMENTO_MS dal primo
@@ -32,7 +32,7 @@ function descriviStatoSheet(reg) {
   }
 }
 
-// deps = { store, env, now, salvaSuSheet(righe, env), inviaEmailOspite(payload), inviaEmailGestore(args), log }
+// deps = { store, env, now, salvaSuSheet(righe, env), inviaEmailOspite(payload), inviaEmailGestore(args), generaPdfRiepilogo(args), log }
 export async function elaboraCheckin(session, deps) {
   const { store, env } = deps;
   const now = deps.now || (() => Date.now());
@@ -103,14 +103,15 @@ export async function elaboraCheckin(session, deps) {
       }
     }
 
-    // 3. email al gestore: solo immagini del documento
+    // 3. email al gestore: immagini del documento + PDF di riepilogo (se il PDF fallisce, l'email parte comunque)
     if (!TERMINALI_EMAIL.includes(reg.email_gestore_stato)) {
       const dest = env.EMAIL_PROPRIETARIO;
       if (!dest) await aggiorna({ email_gestore_stato: 'non_configurata' });
       else if (!dati) await aggiorna({ email_gestore_stato: 'dati_non_disponibili' });
       else {
         try {
-          await deps.inviaEmailGestore({ documenti: dati.documenti, riferimento: riferimentoBreve(checkinId), statoTxt: descriviStatoSheet(reg), destinatario: dest, env });
+          const generaPdf = deps.generaPdfRiepilogo ? allegati => deps.generaPdfRiepilogo({ dati, metadata, allegati, env, oggi: new Date(now()) }) : undefined;
+          await deps.inviaEmailGestore({ documenti: dati.documenti, riferimento: riferimentoBreve(checkinId), statoTxt: descriviStatoSheet(reg), destinatario: dest, env, generaPdf });
           await aggiorna({ email_gestore_stato: 'inviata' });
           log('email gestore: inviata');
         } catch (e) {

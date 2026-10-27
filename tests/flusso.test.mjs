@@ -6,6 +6,7 @@ import { elaboraCheckin, checkinIdDa, TTL_DOPO_PAGAMENTO_MS } from '../api/_elab
 import { makeDrive, configDrive } from '../api/_drive.js';
 import { componiEmail, inviaImmaginiAlGestore, preparaAllegati } from '../api/_email-gestore.js';
 import { righeSheet } from '../api/_sheet-checkin.js';
+import { generaHTMLRiepilogo } from '../api/_pdf-riepilogo.js';
 import { memStore, fintaDriveApi, ENV_DRIVE, checkinFamiglia, caricaTabelleOk, caricaTabelleKo, NOW, catturaLog, contieneSensibili, fintoJpeg, fintoPdf, dataUri } from './helpers.mjs';
 
 const ENV = Object.assign({ EMAIL_PROPRIETARIO: 'gestore@esempio.invalid', EMAIL_USER: 'mittente@esempio.invalid', EMAIL_PASSWORD: 'x', SHEET_ID: 'FOGLIO_FINTO' }, ENV_DRIVE);
@@ -18,9 +19,10 @@ function scenario(o) {
   const store = memStore(() => clock);
   const api = fintaDriveApi(o.drive);
   const drive = makeDrive({ env: o.env || ENV, fetch: api.fetch, getToken: async () => 'token-finto' });
-  const ospite = [], gestore = [], logs = [], foglio = [];
+  const ospite = [], gestore = [], logs = [], foglio = [], pdfRichiesti = [];
   const deps = {
     store, env: o.env || ENV, now: () => clock,
+    generaPdfRiepilogo: async a => { if (o.pdfKo) throw Object.assign(new Error('x'), { code: 'PDF_NON_CONFIGURATO' }); pdfRichiesti.push(a); return { filename: 'checkin-' + a.dati.dataCheckin + '.pdf', content: Buffer.from('%PDF-1.4 finto'), contentType: 'application/pdf' }; },
     salvaSuSheet: async righe => { if (o.foglioKo && o.foglioKo-- > 0) throw Object.assign(new Error('x'), { code: 'ECONNRESET' }); foglio.push(...JSON.parse(JSON.stringify(righe))); },
     inviaEmailOspite: async p => { if (o.ospiteKo && o.ospiteKo-- > 0) throw Object.assign(new Error('x'), { code: 'ETIMEDOUT' }); ospite.push(JSON.parse(JSON.stringify(p))); return { success: true }; },
     inviaEmailGestore: async a => {
@@ -33,7 +35,7 @@ function scenario(o) {
   };
   const s = sessione();
   store.sessioni.set(s.metadata.temp_session_id, { data: checkinFamiglia(o.dati), expires: NOW + 2 * 3600e3 });
-  return { store, api, deps, ospite, gestore, logs, foglio, s, avanza: ms => { clock += ms; } };
+  return { store, api, deps, ospite, gestore, logs, foglio, pdfRichiesti, s, avanza: ms => { clock += ms; } };
 }
 
 test('percorso completo: righe nel foglio come prima, email gestore con sole immagini, email ospite minima, dati cancellati', async () => {
@@ -51,9 +53,10 @@ test('percorso completo: righe nel foglio come prima, email gestore con sole imm
   // email gestore: solo immagini, testo generico
   assert.equal(x.gestore.length, 1);
   const m = x.gestore[0];
-  assert.deepEqual(m.attachments.map(a => [a.filename, a.contentType]), [['documento-fronte.jpg', 'image/jpeg'], ['documento-retro.jpg', 'image/jpeg']]);
-  assert.deepEqual(contieneSensibili(m.subject + m.text), []);
-  assert.match(m.text, /inviati al foglio/); assert.match(m.text, /NON basta come identificazione/);
+  assert.deepEqual(m.attachments.map(a => [a.filename, a.contentType]), [['checkin-2026-11-05.pdf', 'application/pdf'], ['documento-fronte.jpg', 'image/jpeg'], ['documento-retro.jpg', 'image/jpeg']]);
+  assert.deepEqual(contieneSensibili(m.subject + m.text), [], 'dati solo negli allegati, mai in oggetto o corpo');
+  assert.match(m.text, /inviati al foglio/); assert.match(m.text, /riepilogo PDF dei dati inseriti/);
+  assert.equal(x.pdfRichiesti.length, 1); assert.equal(x.pdfRichiesti[0].metadata.totale, '13.5');
   // email ospite: niente documenti né date di nascita
   assert.equal(x.ospite.length, 1);
   assert.deepEqual(Object.keys(x.ospite[0].datiPrenotazione).sort(), ['appartamento', 'dataCheckin', 'lingua', 'numeroNotti', 'numeroOspiti', 'ospiti', 'totale']);
@@ -78,6 +81,21 @@ test('errore del foglio: retry senza righe duplicate, dati conservati fino al su
   assert.equal(x.store.sessioni.size, 0);
   assert.equal((await elaboraCheckin(x.s, x.deps)).esito, 'completato', 'evento consegnato di nuovo da Stripe');
   assert.equal(x.foglio.length, 3);
+});
+
+test('PDF non generabile: l\'email parte con le sole immagini e lo dice, senza retry', async () => {
+  const x = scenario({ pdfKo: true });
+  const { v: r } = await catturaLog(() => elaboraCheckin(x.s, x.deps));
+  assert.equal(r.esito, 'completato');
+  assert.deepEqual(x.gestore[0].attachments.map(a => a.filename), ['documento-fronte.jpg', 'documento-retro.jpg']);
+  assert.match(x.gestore[0].text, /PDF NON è stato generato/);
+});
+
+test('modello del PDF: tutti gli ospiti, valori inseriti resi come testo (nessun HTML eseguibile)', () => {
+  const d = checkinFamiglia(); d.ospiti[1].cognome = '<script>alert(1)</script>';
+  const html = generaHTMLRiepilogo(Object.assign({}, d, { totale: 13.5, ospiti: d.ospiti.map(o => Object.assign({ eta: 30, isResponsabile: o.numero === 1 }, o)), documenti: [] }));
+  assert.ok(!html.includes('<script>alert(1)</script>')); assert.ok(html.includes('&lt;script&gt;'));
+  for (const n of ['Ermenegilda', 'Teodorico', 'Clotilde', 'ZZ9900011']) assert.ok(html.includes(n), n);
 });
 
 test('righe del foglio: ospite singolo e campi mancanti come nella versione precedente', () => {
