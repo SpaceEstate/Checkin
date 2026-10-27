@@ -17,6 +17,8 @@
 //  - prova-drive              carica nella cartella un file di prova SENZA dati personali, ne verifica il contenuto e lo elimina:
 //                             serve a controllare la configurazione di Drive senza aspettare un check-in
 //  - prova-tabelle            legge le tabelle ufficiali (dal servizio, se configurato) e le mette in cache: controlla le credenziali
+//  - prova-pdf                genera con Browserless un PDF di riepilogo con dati DI FANTASIA (nessuna email inviata):
+//                             controlla che BROWSERLESS_API_TOKEN sia configurata e accettata
 // Nessuna azione invia nulla ad Alloggiati Web.
 //
 // Pulizia programmata: il cron di Vercel chiama GET /api/admin-alloggiati (senza "azione" e senza x-admin-secret,
@@ -29,6 +31,7 @@ import { caricaTabelle, salvaTabellaManuale } from './_alloggiati_tabelle.js';
 import { generaTxt, costruisciSchedine, nomeFileTxt } from './_checkin-alloggiati.js';
 import { makeDrive, configDrive, descriviErroreDrive } from './_drive.js';
 import { readConfig } from './_alloggiati_ws.js';
+import { generaPdfRiepilogo } from './_pdf-riepilogo.js';
 
 const RE_CHECKIN = /^ck[0-9a-f]{16}$/;
 
@@ -78,6 +81,22 @@ export function makeHandler(deps) {
       try { await drive.eliminaFile(caricato.fileId); }
       catch (e) { return [200, { ok: true, esito: 'Caricamento riuscito, ma il file di prova non è stato eliminato: cancellalo a mano dalla cartella', dettaglio: descriviErroreDrive(e) }]; }
       return [200, { ok: true, esito: 'Caricamento su Drive riuscito e verificato; file di prova eliminato' }];
+    },
+    async 'prova-pdf'() {
+      if (!env.BROWSERLESS_API_TOKEN) return [200, { ok: false, esito: 'BROWSERLESS_API_TOKEN non configurata su Vercel (o manca il Redeploy dopo averla aggiunta)' }];
+      const fantasia = { dataCheckin: '2030-01-01', appartamento: 'PROVA', numeroOspiti: 1, numeroNotti: 1, tipoGruppo: null,
+        ospiti: [{ numero: 1, isResponsabile: true, cognome: 'Prova', nome: 'Test', genere: 'M', nascita: '1990-01-01', cittadinanza: 'Italia', luogoNascita: 'Italia', tipoDocumento: 'PROVA', numeroDocumento: 'PROVA000', luogoRilascio: 'Italia' }] };
+      try {
+        const pdf = await (deps.generaPdfRiepilogo || generaPdfRiepilogo)({ dati: fantasia, metadata: { totale: '0' }, allegati: [], env, oggi: new Date(now()) });
+        const valido = pdf && pdf.content && pdf.content.length > 500 && pdf.content.slice(0, 5).toString('latin1') === '%PDF-';
+        return [200, valido ? { ok: true, esito: 'Browserless risponde: PDF di prova generato (' + Math.round(pdf.content.length / 1024) + ' KB). Nessuna email inviata.' }
+          : { ok: false, esito: 'Browserless ha risposto ma il file ricevuto non è un PDF valido' }];
+      } catch (e) {
+        const m = /\((\d{3})\)/.exec(String(e && e.message || ''));
+        const http = m ? +m[1] : null;
+        return [200, { ok: false, esito: 'PDF NON generato', dettaglio: http ? 'Browserless HTTP ' + http : (e && (e.code || e.name) || 'errore'),
+          suggerimento: http === 401 || http === 403 ? 'Il token non è valido: controlla il valore copiato dal tuo account Browserless' : http === 429 ? 'Limite di utilizzo del piano Browserless raggiunto' : 'Riprova tra qualche minuto; se persiste controlla lo stato del tuo account Browserless' }];
+      }
     },
     async 'prova-tabelle'() {
       const tab = await tabelle();

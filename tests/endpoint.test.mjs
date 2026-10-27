@@ -180,6 +180,20 @@ test('admin: prove di configurazione di Drive e tabelle senza dati personali', a
   assert.equal(r.body.ok, true); assert.equal(r.body.italiaRiconosciuta, true);
 });
 
+test('admin: prova-pdf segnala token mancante, token rifiutato e PDF generato', async () => {
+  const H = { 'x-admin-secret': 'segreto-admin-di-prova' };
+  let h = makeAdmin({ store: memStore(), env: { ADMIN_SECRET: 'segreto-admin-di-prova' }, drive: {}, caricaTabelle: caricaTabelleOk, now: () => NOW });
+  let r = fintoRes(); await h(fintoReq('POST', { azione: 'prova-pdf' }, H), r);
+  assert.equal(r.body.ok, false); assert.match(r.body.esito, /non configurata/);
+  const env = { ADMIN_SECRET: 'segreto-admin-di-prova', BROWSERLESS_API_TOKEN: 'finto' };
+  h = makeAdmin({ store: memStore(), env, drive: {}, caricaTabelle: caricaTabelleOk, now: () => NOW, generaPdfRiepilogo: async () => { throw new Error('Browserless error (401)'); } });
+  r = fintoRes(); await h(fintoReq('POST', { azione: 'prova-pdf' }, H), r);
+  assert.equal(r.body.ok, false); assert.equal(r.body.dettaglio, 'Browserless HTTP 401'); assert.match(r.body.suggerimento, /token non è valido/);
+  h = makeAdmin({ store: memStore(), env, drive: {}, caricaTabelle: caricaTabelleOk, now: () => NOW, generaPdfRiepilogo: async () => ({ content: Buffer.concat([Buffer.from('%PDF-1.4'), Buffer.alloc(2000)]) }) });
+  r = fintoRes(); await h(fintoReq('POST', { azione: 'prova-pdf' }, H), r);
+  assert.equal(r.body.ok, true); assert.match(r.body.esito, /Nessuna email inviata/);
+});
+
 test('pulizia programmata: CRON_SECRET rispettata, scaduti eliminati, registri con TXT ancora su Drive conservati', async () => {
   let t = NOW;
   const store = memStore(() => t);
