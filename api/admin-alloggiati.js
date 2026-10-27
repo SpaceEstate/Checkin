@@ -14,6 +14,9 @@
 //                             verificato personalmente la ricevuta sul portale Alloggiati Web: il sistema non la verifica.
 //  - elimina-dati-temporanei {checkinId, conferma: "ELIMINA"}  cancella subito anagrafiche e immagini ancora in attesa
 //  - carica-tabella {nome, csv}  carica a mano una tabella ufficiale (Luoghi, Tipi_Documento, Tipi_Alloggiato) scaricata dal portale
+//  - prova-drive              carica nella cartella un file di prova SENZA dati personali, ne verifica il contenuto e lo elimina:
+//                             serve a controllare la configurazione di Drive senza aspettare un check-in
+//  - prova-tabelle            legge le tabelle ufficiali (dal servizio, se configurato) e le mette in cache: controlla le credenziali
 // Nessuna azione invia nulla ad Alloggiati Web.
 //
 // Pulizia programmata: il cron di Vercel chiama GET /api/admin-alloggiati (senza "azione" e senza x-admin-secret,
@@ -58,6 +61,29 @@ export function makeHandler(deps) {
         emailGestore: { configurata: !!(env.EMAIL_PROPRIETARIO && env.EMAIL_USER && env.EMAIL_PASSWORD) },
         nota: 'Nessun invio ad Alloggiati Web è previsto da questo sistema.'
       }];
+    },
+    async 'prova-drive'() {
+      const d = configDrive(env);
+      if (!d.ok) return [200, { ok: false, esito: 'Drive non configurato', mancanti: d.missing }];
+      const id = 'ckprova' + crypto.randomBytes(6).toString('hex');
+      let caricato = null;
+      try {
+        caricato = await drive.caricaTxt({ nomeFile: 'prova-configurazione-' + new Date(now()).toISOString().slice(0, 10) + '.txt', contenuto: 'File di prova del sistema di check-in: nessun dato personale.\r\n', checkinId: id });
+      } catch (e) {
+        const quota = e && e.motivo === 'storageQuotaExceeded';
+        return [200, { ok: false, esito: 'Caricamento NON riuscito', dettaglio: descriviErroreDrive(e),
+          suggerimento: quota ? 'L\'account di servizio non ha spazio proprio: serve una cartella in un Drive condiviso (Google Workspace) o un\'altra soluzione.'
+            : 'Controlla: Google Drive API attiva nel progetto Google Cloud, cartella condivisa come Editor con l\'indirizzo GOOGLE_CLIENT_EMAIL, ID cartella corretto.' }];
+      }
+      try { await drive.eliminaFile(caricato.fileId); }
+      catch (e) { return [200, { ok: true, esito: 'Caricamento riuscito, ma il file di prova non è stato eliminato: cancellalo a mano dalla cartella', dettaglio: descriviErroreDrive(e) }]; }
+      return [200, { ok: true, esito: 'Caricamento su Drive riuscito e verificato; file di prova eliminato' }];
+    },
+    async 'prova-tabelle'() {
+      const tab = await tabelle();
+      if (!tab.ok) return [200, { ok: false, esito: 'Tabelle ufficiali NON disponibili', motivo: tab.motivo }];
+      return [200, { ok: true, esito: 'Tabelle ufficiali disponibili', righe: { Luoghi: tab.tables.luoghi.size, Tipi_Documento: tab.tables.documenti.size, Tipi_Alloggiato: tab.tables.tipi.size },
+        italiaRiconosciuta: !!tab.tables.luoghi.italia }];
     },
     async elenco(b) {
       const righe = await store.elencoRegistri(b.limite);

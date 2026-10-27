@@ -159,6 +159,27 @@ test('admin: autenticazione, eliminazione TXT solo con conferma esplicita, scari
   assert.equal(r.statusCode, 410);
 });
 
+test('admin: prove di configurazione di Drive e tabelle senza dati personali', async () => {
+  const H = { 'x-admin-secret': 'segreto-admin-di-prova' };
+  const env = Object.assign({ ADMIN_SECRET: 'segreto-admin-di-prova' }, ENV_DRIVE);
+  const api = fintaDriveApi();
+  let h = makeAdmin({ store: memStore(), env, drive: makeDrive({ env: ENV_DRIVE, fetch: api.fetch, getToken: async () => 't' }), caricaTabelle: caricaTabelleOk, now: () => NOW });
+  let r = fintoRes(); await h(fintoReq('POST', { azione: 'prova-drive' }, H), r);
+  assert.equal(r.body.ok, true); assert.equal(api.files.size, 0, 'file di prova eliminato');
+  assert.equal(api.log.filter(l => l.metodo === 'POST').length, 1);
+  const api2 = fintaDriveApi({ quota: true });
+  h = makeAdmin({ store: memStore(), env, drive: makeDrive({ env: ENV_DRIVE, fetch: api2.fetch, getToken: async () => 't' }), caricaTabelle: caricaTabelleKo, now: () => NOW });
+  r = fintoRes(); await h(fintoReq('POST', { azione: 'prova-drive' }, H), r);
+  assert.equal(r.body.ok, false); assert.match(r.body.suggerimento, /Drive condiviso/);
+  r = fintoRes(); await h(fintoReq('POST', { azione: 'prova-tabelle' }, H), r);
+  assert.equal(r.body.ok, false);
+  h = makeAdmin({ store: memStore(), env: { ADMIN_SECRET: 'segreto-admin-di-prova' }, drive: {}, caricaTabelle: caricaTabelleOk, now: () => NOW });
+  r = fintoRes(); await h(fintoReq('POST', { azione: 'prova-drive' }, H), r);
+  assert.equal(r.body.ok, false); assert.equal(r.body.esito, 'Drive non configurato');
+  r = fintoRes(); await h(fintoReq('POST', { azione: 'prova-tabelle' }, H), r);
+  assert.equal(r.body.ok, true); assert.equal(r.body.italiaRiconosciuta, true);
+});
+
 test('pulizia programmata: CRON_SECRET rispettata, scaduti eliminati, registri con TXT ancora su Drive conservati', async () => {
   let t = NOW;
   const store = memStore(() => t);

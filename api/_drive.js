@@ -9,13 +9,15 @@
 //  - Attenzione (da verificare sull'account reale): un account di servizio non ha spazio di archiviazione proprio; in una
 //    cartella del "Mio Drive" di un account Gmail personale il caricamento può essere rifiutato (storageQuotaExceeded).
 //    Funziona con un Drive condiviso (Google Workspace). Il modulo riporta l'errore così com'è, senza simulare successi.
-//  - Ambito OAuth minimo: drive.file (il servizio vede e modifica solo i file che ha creato lui).
+//  - Ambito OAuth: drive. Con il più ristretto drive.file l'account di servizio non può usare come cartella di
+//    destinazione una cartella che non ha creato lui (Drive risponde "file non trovato"). L'accesso effettivo resta
+//    comunque limitato a ciò che è condiviso con l'account di servizio: condividi con lui SOLO la cartella dei TXT.
 // Idempotenza: ogni file porta appProperties.checkinId; prima di caricare si cerca un file con lo stesso checkinId.
 // Successo dichiarato SOLO se Drive restituisce l'ID e l'MD5 del contenuto salvato coincide con quello inviato.
 import crypto from 'crypto';
 import { JWT } from 'google-auth-library';
 
-const SCOPE = 'https://www.googleapis.com/auth/drive.file';
+const SCOPE = 'https://www.googleapis.com/auth/drive';
 const API = 'https://www.googleapis.com/drive/v3/files';
 const UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files';
 const RE_ID = /^[A-Za-z0-9_-]{10,200}$/;

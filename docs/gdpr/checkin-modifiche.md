@@ -155,6 +155,8 @@ Elimina l'email e gli allegati dalla casella del gestore, da "Posta inviata" del
 - Per ripetere i passi non riusciti: `GET /api/retry-email-from-stripe?session_id=cs_…` con l'header `x-admin-secret`.
 - Chiusa la pratica, puoi cancellare subito i dati rimasti: `{"azione":"elimina-dati-temporanei","checkinId":"ck…","conferma":"ELIMINA"}`.
 
+**Verifica della configurazione senza aspettare un check-in:** azioni `prova-drive` (carica, verifica ed elimina un file di prova senza dati personali) e `prova-tabelle` (legge le tabelle ufficiali e le mette in cache).
+
 **E. Tabelle ufficiali senza credenziali del servizio nel progetto Checkin.** Scarica dal portale il CSV di Luoghi, Tipi_Documento e Tipi_Alloggiato e caricalo con `{"azione":"carica-tabella","nome":"Luoghi","csv":"…"}`. Va ricaricato quando il portale aggiorna le tabelle.
 
 ---
@@ -164,7 +166,7 @@ Elimina l'email e gli allegati dalla casella del gestore, da "Posta inviata" del
 | Variabile | Stato | Uso |
 |---|---|---|
 | `GOOGLE_DRIVE_ALLOGGIATI_FOLDER_ID` | **nuova, da creare** | ID della cartella Drive privata per i TXT |
-| `GOOGLE_CLIENT_EMAIL`, `GOOGLE_PRIVATE_KEY` | esistenti (account di servizio già usato per Sheets) | Drive. Serve la **Google Drive API attiva** nel progetto Google Cloud e la cartella **condivisa con l'account di servizio come Editor** |
+| `GOOGLE_CLIENT_EMAIL`, `GOOGLE_PRIVATE_KEY` | esistenti (account di servizio già usato per Sheets) | Drive. Serve la **Google Drive API attiva** nel progetto Google Cloud e la cartella **condivisa con l'account di servizio come Editor**. Ambito OAuth `drive`: l'accesso reale è limitato a ciò che è condiviso con l'account di servizio, quindi condividi con lui **solo** la cartella dei TXT (oltre ai fogli già usati) |
 | `ALLOGGIATI_UTENTE`, `ALLOGGIATI_PASSWORD`, `ALLOGGIATI_WSKEY` (facoltativa `ALLOGGIATI_URL`) | da decidere | Lettura automatica delle tabelle ufficiali. In alternativa: caricamento manuale (§ 8.E) |
 | `CRON_SECRET` | consigliata, nuova | Protegge il cron di pulizia |
 | `DATABASE_URL` / `POSTGRES_URL`, `EMAIL_USER`, `EMAIL_PASSWORD`, `EMAIL_PROPRIETARIO`, `ADMIN_SECRET`, `INTERNAL_API_SECRET`, `STRIPE_*`, `SHEET_ID*`, `CODICE_CASSETTA_*` | esistenti, invariate | |
