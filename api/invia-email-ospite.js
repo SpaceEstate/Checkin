@@ -4,11 +4,6 @@
 import nodemailer from 'nodemailer';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
 // Stesso criterio usato in stripeWebhook.js: mascherare l'indirizzo nei log
 // mantenendo visibile solo il dominio.
@@ -678,7 +673,6 @@ async function inviaEmailConNodemailer(emailDestinatario, dati, htmlContent, all
 
   const L = linguaValida(lingua);
   const T = EMAIL_TESTI[L];
-  const totale = typeof dati.totale === 'string' ? parseFloat(dati.totale) : (dati.totale || 0);
 
   const oggetto = T.subjectLine(
     nomeAppartamentoEmail(dati.appartamento, L) || 'Appartamento',

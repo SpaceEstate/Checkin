@@ -45,8 +45,7 @@ async function generaPDFConBrowserless(htmlContent, browserlessToken) {
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    // il testo della risposta non va nei messaggi di errore (potrebbe riportare parti del contenuto)
+    await response.text().catch(() => {});      // si legge comunque (chiude la connessione), ma il testo non va nei messaggi di errore: potrebbe riportare parti del contenuto
     throw new Error(`Browserless error (${response.status})`);
   }
 

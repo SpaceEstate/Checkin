@@ -904,14 +904,6 @@ function localeCorrente(lingua) {
   return { it: 'it-IT', en: 'en-GB', de: 'de-DE' }[lang] || 'it-IT';
 }
 
-// Mappa lingua interna -> locale Stripe Checkout (usato in crea-pagamento-stripe.js
-// lato server, ma la stessa funzione di mapping è duplicata lì: se cambi le chiavi
-// qui, aggiorna anche quella copia).
-function localeStripe(lingua) {
-  const lang = lingua || getLingua();
-  return { it: 'it', en: 'en', de: 'de' }[lang] || 'it';
-}
-
 // ------------------------------------------------------------------
 // Traduzione di una stringa
 // ------------------------------------------------------------------
@@ -966,16 +958,6 @@ function nomeAppartamentoTradotto(valoreOriginale) {
   };
 
   return parti.map(p => traduciSingolo(p.trim())).join(' + ');
-}
-
-// Data localizzata in formato lungo (es. "giovedì 10 settembre 2026")
-function formatDataLocalizzata(dataISO, lingua) {
-  if (!dataISO) return 'N/A';
-  const data = new Date(dataISO);
-  if (isNaN(data.getTime())) return 'N/A';
-  return data.toLocaleDateString(localeCorrente(lingua), {
-    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
-  });
 }
 
 // ------------------------------------------------------------------

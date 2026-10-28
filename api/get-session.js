@@ -1,4 +1,5 @@
 import Stripe from "stripe";
+import { eSessioneCheckin } from "./_sessione-checkin.js";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -57,8 +58,15 @@ function determinaCodiciCassetta(appartamento, lang) {
   return codici.length > 0 ? codici : fallback;
 }
 
+// Elaborazione del check-in (la stessa del webhook). Caricata solo quando serve: get-session resta leggero per le chiamate normali.
+async function elaboraProduzione(session) {
+  const { elaboraCheckin } = await import("./_elabora-checkin.js");
+  const { dipendenzeProduzione } = await import("./stripeWebhook.js");
+  return elaboraCheckin(session, dipendenzeProduzione("gs_" + Date.now()));
+}
+
 // `stripe` è un parametro per poterlo sostituire nei test (nessuna chiamata reale a Stripe)
-async function gestisciRichiesta(stripe, req, res) {
+async function gestisciRichiesta(stripe, req, res, deps = {}) {
   // CORS Headers
   res.setHeader("Access-Control-Allow-Origin", "https://spaceestate.github.io");
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
@@ -74,7 +82,7 @@ async function gestisciRichiesta(stripe, req, res) {
   }
 
   try {
-    const { session_id, lang } = req.query;
+    const { session_id, lang, elabora } = req.query;
     const linguaRichiesta = ['it', 'en', 'de'].includes(lang) ? lang : 'it';
     
     console.log("📡 Richiesta dati sessione:", session_id, "lingua:", linguaRichiesta);
@@ -119,6 +127,21 @@ async function gestisciRichiesta(stripe, req, res) {
       });
     }
 
+    // Rete di sicurezza del webhook: la pagina di successo chiama anche con ?elabora=1. Se il webhook di Stripe non fosse arrivato
+    // (non registrato, segreto sbagliato, ritardo) il check-in viene elaborato comunque. È la STESSA elaborazione del webhook ed è
+    // idempotente (lease + stato di ogni passo nel registro): se il webhook l'ha già fatta o la sta facendo non cambia nulla.
+    if (elabora === '1') {
+      if (!eSessioneCheckin(session)) return res.status(400).json({ error: "Sessione non valida" });
+      try {
+        const r = await (deps.elabora || elaboraProduzione)(session);
+        return res.status(200).json({ elaborazione: r && r.esito || 'sconosciuto' });
+      } catch (e) {
+        // niente errori alla pagina: l'ospite ha già pagato e vede i suoi codici; il webhook di Stripe ritenterà
+        console.error("❌ Elaborazione dalla pagina di successo non riuscita:", e && (e.code || e.name) || 'errore');
+        return res.status(200).json({ elaborazione: 'errore' });
+      }
+    }
+
     // Estrai i dati dai metadata
     const metadata = session.metadata || {};
     
@@ -145,22 +168,22 @@ async function gestisciRichiesta(stripe, req, res) {
     return res.status(200).json(sessionData);
 
   } catch (error) {
-    console.error("❌ Errore nel recupero sessione:", error);
+    console.error("❌ Errore nel recupero sessione:", error && (error.type || error.code || error.name) || 'errore');
     
     // Gestisci errori specifici di Stripe
-    if (error.code === 'resource_missing') {
+    if (error && error.code === 'resource_missing') {
       return res.status(404).json({ 
         error: "Sessione non trovata",
         message: "La sessione di pagamento non esiste o è scaduta"
       });
     }
     
+    // Il dettaglio dell'errore resta nei log del server: i messaggi di Stripe possono contenere parti della chiave
     return res.status(500).json({ 
-      error: "Errore interno del server",
-      message: error.message 
+      error: "Errore interno del server"
     });
   }
 }
 
-export const makeHandler = client => (req, res) => gestisciRichiesta(client, req, res);
+export const makeHandler = (client, deps) => (req, res) => gestisciRichiesta(client, req, res, deps);
 export default makeHandler(stripe);

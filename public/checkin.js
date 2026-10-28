@@ -379,7 +379,6 @@ window.toggleComuneProvincia = function(ospiteNum) {
 // === GESTIONE VERIFICA PRENOTAZIONE ===
 
 // Funzione per verificare la prenotazione
-// SOSTITUISCI TUTTA LA FUNZIONE verificaPrenotazione con questa:
 window.verificaPrenotazione = async function() {
   const input = document.getElementById('numero-prenotazione');
   const numeroPrenotazione = input?.value?.trim();
@@ -1543,7 +1542,7 @@ window.procediAlPagamento = async function() {
         throw errSalv;
       }
       
-      console.log('✅ Dati salvati su Redis con chiave:', tempSessionId);
+      console.log('✅ Dati temporanei salvati');
       
     } catch (fetchError) {
       clearTimeout(timeoutId);

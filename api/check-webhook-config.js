@@ -96,9 +96,8 @@ export default async function handler(req, res) {
       
       console.log(`  📊 Webhook registrati: ${webhooks.data.length}`);
       
-      const yourWebhooks = webhooks.data.filter(wh => 
-        wh.url.includes('vercel.app') || wh.url.includes('spaceestate')
-      );
+      // solo il webhook del check-in (l'account Stripe può averne altri, per esempio quello del sito di prenotazione)
+      const yourWebhooks = webhooks.data.filter(wh => /\/api\/stripeWebhook\/?$/.test(wh.url));
 
       if (yourWebhooks.length === 0) {
         console.warn('  ⚠️ NESSUN WEBHOOK TROVATO per questo dominio!');
@@ -112,9 +111,9 @@ export default async function handler(req, res) {
           console.log(`     URL: ${wh.url}`);
           console.log(`     Status: ${wh.status}`);
           console.log(`     Eventi: ${wh.enabled_events.join(', ')}`);
-          console.log(`     Secret: ${wh.secret.substring(0, 10)}...`);
+          // Stripe non restituisce mai il "signing secret" nell'elenco (solo alla creazione): niente da mostrare qui
           
-          if (!wh.enabled_events.includes('checkout.session.completed')) {
+          if (!wh.enabled_events.includes('checkout.session.completed') && !wh.enabled_events.includes('*')) {
             console.warn(`     ⚠️ MANCA evento checkout.session.completed!`);
           }
         });
@@ -162,7 +161,6 @@ export default async function handler(req, res) {
           console.log(`     ID: ${event.id}`);
           console.log(`     Creato: ${new Date(event.created * 1000).toLocaleString('it-IT')}`);
           console.log(`     Session ID: ${event.data.object.id}`);
-          console.log(`     Email: ${event.data.object.customer_details?.email || 'N/A'}`);
         });
       } else {
         console.log('  ℹ️ Nessun evento checkout.session.completed nelle ultime 24h');
@@ -250,13 +248,11 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
-    console.error('\n❌ Errore generale:', error);
-    console.error('Stack:', error.stack);
+    console.error('\n❌ Errore generale:', error && (error.type || error.code || error.name) || 'errore');
 
     return res.status(500).json({
       success: false,
       error: error.message,
-      stack: error.stack,
       checks: results.checks
     });
   }

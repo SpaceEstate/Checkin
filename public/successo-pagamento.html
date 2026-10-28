@@ -351,6 +351,12 @@
         return;
     }
 
+    // Rete di sicurezza: se il webhook di Stripe non fosse arrivato, questa chiamata fa elaborare comunque il check-in. È la stessa
+    // elaborazione del webhook ed è idempotente (se è già stata fatta non cambia nulla). Silenziosa: l'ospite non vede nulla.
+    if (!sessionId.startsWith('test_session_')) {
+        fetch(`https://checkin-six-coral.vercel.app/api/get-session?session_id=${encodeURIComponent(sessionId)}&elabora=1`, { method: 'GET', keepalive: true }).catch(() => {});
+    }
+
     try {
         console.log("📡 Caricamento dati sessione...");
         

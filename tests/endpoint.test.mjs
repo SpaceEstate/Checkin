@@ -29,7 +29,7 @@ function reqRaw(payload, headers) {
 test('webhook: firma non valida → 400 e nessuna elaborazione; firma valida → elaborazione; errore temporaneo → 500 (retry Stripe)', async () => {
   let chiamate = 0, esito = 'completato';
   const h = makeWebhook({ stripe: stripeLocale, endpointSecret: SEGRETO_WH, store: memStore(), dipendenze: () => ({}) });
-  const evento = JSON.stringify({ id: 'evt_finto', object: 'event', type: 'checkout.session.completed', data: { object: { id: 'cs_test_finto', metadata: {} } } });
+  const evento = JSON.stringify({ id: 'evt_finto', object: 'event', type: 'checkout.session.completed', data: { object: { id: 'cs_test_finto', payment_status: 'paid', metadata: { dataCheckin: '2026-11-05' } } } });      // sessione del check-in (le altre sono ignorate: vedi pagamenti.test.mjs)
   // elaborazione sostituita: qui si verifica solo il contratto del webhook
   const modulo = await import('../api/_elabora-checkin.js');
   assert.ok(modulo.elaboraCheckin);

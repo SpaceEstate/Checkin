@@ -32,6 +32,11 @@ function calcolaTotaleServer(ospiti, numeroNotti) {
   return Math.round(ospitiSoggetti * notti * TASSA_PER_NOTTE * 100) / 100;
 }
 
+// Dopo il pagamento (o l'annullamento) Stripe riporta l'ospite all'indirizzo ricevuto dal browser. Si accettano solo gli indirizzi
+// del check-in (GitHub Pages e Vercel): senza questo controllo chiunque potrebbe creare una sessione che rimanda a un sito qualsiasi.
+const PREFISSI_URL_AMMESSI = ["https://spaceestate.github.io/Checkin/", "https://checkin-six-coral.vercel.app/"];
+export const urlAmmesso = u => typeof u === "string" && u.length <= 2000 && PREFISSI_URL_AMMESSI.some(p => u.startsWith(p));
+
 // `stripe` è un parametro per poterlo sostituire nei test (nessuna chiamata reale a Stripe)
 async function gestisciRichiesta(stripe, req, res) {
   res.setHeader("Access-Control-Allow-Origin", "https://spaceestate.github.io");
@@ -134,8 +139,8 @@ async function gestisciRichiesta(stripe, req, res) {
     console.log("💳 Creazione sessione Stripe...");
     console.log("📏 Metadata size:", JSON.stringify(metadata).length, "chars");
 
-    const finalSuccessUrl = successUrl || "https://spaceestate.github.io/Checkin/successo-pagamento.html?session_id={CHECKOUT_SESSION_ID}";
-    const finalCancelUrl = cancelUrl || "https://spaceestate.github.io/Checkin/index.html?canceled=true";
+    const finalSuccessUrl = urlAmmesso(successUrl) ? successUrl : "https://spaceestate.github.io/Checkin/successo-pagamento.html?session_id={CHECKOUT_SESSION_ID}";
+    const finalCancelUrl = urlAmmesso(cancelUrl) ? cancelUrl : "https://spaceestate.github.io/Checkin/index.html?canceled=true";
 
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],

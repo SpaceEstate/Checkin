@@ -16,6 +16,7 @@ import { elaboraCheckin } from './_elabora-checkin.js';
 import { inviaImmaginiAlGestore } from './_email-gestore.js';
 import { salvaSuSheet } from './_sheet-checkin.js';
 import { generaPdfRiepilogo } from './_pdf-riepilogo.js';
+import { eSessioneCheckin } from './_sessione-checkin.js';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -89,6 +90,16 @@ export function makeHandler(deps) {
 
     if (event.type === 'checkout.session.completed') {
       const session = event.data.object;
+      // Lo stesso account Stripe incassa anche le prenotazioni del sito: quei pagamenti non sono check-in e si ignorano (200, nessun nuovo tentativo)
+      if (!eSessioneCheckin(session)) {
+        console.log(`[${requestId}] sessione di un altro sistema: ignorata`);
+        return res.status(200).json({ received: true, ignored: true });
+      }
+      // pagamento non ancora riuscito (metodi asincroni): si elabora solo quando è "paid"
+      if (session.payment_status && session.payment_status !== 'paid') {
+        console.log(`[${requestId}] pagamento non ancora riuscito: ignorata`);
+        return res.status(200).json({ received: true, ignored: true });
+      }
       try {
         const r = await elaboraCheckin(session, deps.dipendenze(requestId));
         console.log(`[${requestId}] checkin ${r.checkinId}: ${r.esito}`);
