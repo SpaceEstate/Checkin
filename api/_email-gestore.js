@@ -3,7 +3,7 @@
 //
 // MODALITÀ mantenuta su indicazione del gestore: richiede una valutazione separata di sicurezza e di gestione delle
 // copie (posta inviata, cestino, backup, dispositivi sincronizzati). Vedi docs/gdpr/checkin-modifiche.md.
-// Regole: i dati degli ospiti stanno SOLO negli allegati (PDF), mai nell'oggetto o nel corpo; nomi degli allegati
+// Regole: nel corpo solo il riassunto del soggiorno e il nome del responsabile; gli altri dati degli ospiti stanno SOLO negli allegati (PDF); nomi degli allegati
 // generici (mai il nome originale del file, che può contenere nome e cognome).
 // Il sistema NON può cancellare le copie dell'email: lo deve fare il gestore (promemoria nel corpo del messaggio).
 import nodemailer from 'nodemailer';
@@ -19,36 +19,37 @@ export function preparaAllegati(documenti) {
   return { allegati, scartati };
 }
 
-// Testo dell'email: generico, senza dati identificativi. `riferimento` è l'identificativo tecnico del check-in.
-export function componiEmail({ riferimento, statoTxt, numeroAllegati, pdf }) {
-  const oggetto = 'Check-in La Columbera - documento e riepilogo (rif. ' + riferimento + ')';
-  const testo = [
-    'È stato completato un check-in online.',
-    '',
-    'In allegato: ' + numeroAllegati + ' immagine/i del documento del responsabile'
+// Testo dell'email: riassunto del check-in (soggiorno e nome del responsabile, come richiesto dal gestore). Nel corpo NON vanno
+// mai date di nascita, estremi del documento né i dati degli altri ospiti: restano solo negli allegati (PDF).
+// `riepilogo` = { dataCheckin, appartamento, ospiti, registrati, notti, totale, responsabile } (opzionale). `riferimento` è l'identificativo tecnico.
+const dataIt = d => /^\d{4}-\d{2}-\d{2}$/.test(d || '') ? d.split('-').reverse().join('/') : (d || '—');
+export function componiEmail({ riferimento, statoTxt, numeroAllegati, pdf, riepilogo }) {
+  const r = riepilogo || null;
+  const oggetto = r ? 'Nuovo check-in ricevuto · ' + dataIt(r.dataCheckin) + ' (rif. ' + riferimento + ')' : 'Check-in La Columbera - documento e riepilogo (rif. ' + riferimento + ')';
+  const righe = ['Nuovo check-in ricevuto!', ''];
+  if (r) {
+    righe.push('DETTAGLI SOGGIORNO:',
+      '- Data check-in: ' + dataIt(r.dataCheckin),
+      '- Appartamento: ' + (r.appartamento || '—'),
+      '- Ospiti: ' + (r.ospiti || '—') + ' (' + (r.registrati || 0) + ' registrati)',
+      '- Notti: ' + (r.notti || '—'),
+      '- Totale tassa soggiorno: €' + (Number.isFinite(+r.totale) ? (+r.totale).toFixed(2) : '—'),
+      '');
+    if (r.responsabile) righe.push('Responsabile: ' + r.responsabile, '');
+  }
+  righe.push('In allegato: ' + numeroAllegati + ' immagine/i del documento del responsabile'
       + (pdf === true ? ' e il riepilogo PDF dei dati inseriti (da confrontare con il documento).'
-        : pdf === false ? '. Il riepilogo PDF NON è stato generato (errore tecnico): i dati sono nel foglio Google del check-in.' : '.'),
-    'Riferimento tecnico: ' + riferimento,
-    'Dati per Alloggiati Web (al momento di questo invio): ' + statoTxt,
-    '',
-    'PROMEMORIA OPERATIVO',
-    '1. Verifica l\'identità dell\'ospite di persona (o con un collegamento video in tempo reale idoneo) confrontando il documento originale',
-    '   con chi soggiorna: questa immagine NON basta come identificazione.',
-    '2. Carica a mano il file TXT su Alloggiati Web e verifica la ricevuta sul portale.',
-    '3. Dopo aver verificato la ricevuta: elimina questa email e i suoi allegati anche da "Posta inviata" della casella mittente,',
-    '   dal Cestino e da ogni altra copia accessibile (download, dispositivi sincronizzati); elimina il TXT e le righe',
-    '   degli ospiti non più necessarie dal foglio e dalla cartella Drive.',
-    '   Il sistema non può cancellare le copie delle email: va fatto a mano.',
-    '',
-    '---',
-    'Messaggio automatico del sistema di check-in.'
-  ].join('\n');
-  return { oggetto, testo };
+        : pdf === false ? '. Il riepilogo PDF NON è stato generato (errore tecnico): i dati sono nel foglio Google del check-in.' : '.'));
+  if (!/^inviati al foglio/.test(statoTxt || '')) righe.push('Dati per Alloggiati Web: ' + statoTxt);
+  righe.push('',
+    'Dopo la registrazione su Alloggiati Web elimina questa email e gli allegati (anche da Posta inviata e Cestino), il TXT e le righe del foglio.',
+    'Rif. tecnico: ' + riferimento);
+  return { oggetto, testo: righe.join('\n') };
 }
 
 // deps.transporter iniettabile nei test. Ritorna { inviata: true, allegati } oppure lancia un errore senza contenuti.
 // generaPdf(allegati) opzionale: se fallisce l'email parte comunque con le sole immagini (il PDF non blocca nulla).
-export async function inviaImmaginiAlGestore({ documenti, riferimento, statoTxt, destinatario, env, transporter, generaPdf }) {
+export async function inviaImmaginiAlGestore({ documenti, riferimento, statoTxt, destinatario, env, transporter, generaPdf, riepilogo }) {
   const { allegati, scartati } = preparaAllegati(documenti);
   if (!allegati.length) { const e = new Error('Nessuna immagine valida da inviare'); e.code = 'NESSUN_ALLEGATO'; e.scartati = scartati; throw e; }
   let pdf;
@@ -58,7 +59,7 @@ export async function inviaImmaginiAlGestore({ documenti, riferimento, statoTxt,
   }
   const t = transporter || nodemailer.createTransport({ service: 'gmail', auth: { user: env.EMAIL_USER, pass: env.EMAIL_PASSWORD } });
   const numeroImmagini = allegati.filter(a => a.filename.startsWith('documento-')).length;
-  const { oggetto, testo } = componiEmail({ riferimento, statoTxt, numeroAllegati: numeroImmagini, pdf });
+  const { oggetto, testo } = componiEmail({ riferimento, statoTxt, numeroAllegati: numeroImmagini, pdf, riepilogo });
   await t.sendMail({ from: '"La Columbera" <' + env.EMAIL_USER + '>', to: destinatario, subject: oggetto, text: testo, attachments: allegati });
   return { inviata: true, allegati: allegati.length, pdf: pdf === true, scartati: scartati.length };
 }

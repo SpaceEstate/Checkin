@@ -54,8 +54,11 @@ test('percorso completo: righe nel foglio come prima, email gestore con sole imm
   assert.equal(x.gestore.length, 1);
   const m = x.gestore[0];
   assert.deepEqual(m.attachments.map(a => [a.filename, a.contentType]), [['checkin-2026-11-05.pdf', 'application/pdf'], ['documento-fronte.jpg', 'image/jpeg'], ['documento-retro.jpg', 'image/jpeg']]);
-  assert.deepEqual(contieneSensibili(m.subject + m.text), [], 'dati solo negli allegati, mai in oggetto o corpo');
-  assert.match(m.text, /inviati al foglio/); assert.match(m.text, /riepilogo PDF dei dati inseriti/);
+  assert.deepEqual(contieneSensibili(m.subject), [], 'nessun dato personale nell\'oggetto');
+  assert.deepEqual(contieneSensibili(m.text).filter(v => !['Ermenegilda', 'Provaccia'].includes(v)), [], 'nel corpo solo il nome del responsabile: né documento, né nascite, né altri ospiti');
+  assert.match(m.text, /^Nuovo check-in ricevuto!/); assert.match(m.text, /- Data check-in: 05\/11\/2026/); assert.match(m.text, /- Appartamento: La Columbera - Torre/);
+  assert.match(m.text, /- Ospiti: 3 \(3 registrati\)/); assert.match(m.text, /- Notti: 3/); assert.match(m.text, /- Totale tassa soggiorno: €13\.50/); assert.match(m.text, /Responsabile: Ermenegilda Provaccia/);
+  assert.match(m.text, /riepilogo PDF dei dati inseriti/); assert.ok(!/Dati per Alloggiati Web/.test(m.text), 'con il foglio a posto non serve ripeterlo');
   assert.equal(x.pdfRichiesti.length, 1); assert.equal(x.pdfRichiesti[0].metadata.totale, '13.5');
   // email ospite: niente documenti né date di nascita
   assert.equal(x.ospite.length, 1);
