@@ -216,6 +216,7 @@ test('Vercel Hobby: al massimo 12 funzioni nella cartella api/ (file senza "_")'
   assert.ok(funzioni.length <= 12, funzioni.length + ' funzioni: ' + funzioni.join(', '));
   const cron = JSON.parse(fs.readFileSync(path.join(root, 'vercel.json'), 'utf8')).crons.map(c => c.path.replace(/^\/api\//, '') + '.js');
   assert.ok(cron.every(c => funzioni.includes(c)), 'il cron punta a una funzione esistente');
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root, 'vercel.json'), 'utf8')).regions, ['fra1'], 'funzioni a Francoforte, come il database Neon');
 });
 
 test('vecchio endpoint PDF rimosso; Browserless solo nel modulo interno del PDF; foglio Google solo da _sheet-checkin.js', () => {

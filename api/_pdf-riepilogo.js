@@ -19,13 +19,21 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
-async function generaPDFConBrowserless(htmlContent, browserlessToken) {
+// Server di Browserless: di serie San Francisco (USA). Con BROWSERLESS_URL=https://production-ams.browserless.io (Amsterdam) o
+// https://production-lon.browserless.io (Londra) l'HTML con i dati resta in Europa. Si accettano solo questi indirizzi: i dati degli
+// ospiti non devono poter finire su un altro server per un errore di configurazione.
+export function urlBrowserless(env) {
+  const v = String((env && env.BROWSERLESS_URL) || '').trim().replace(/\/+$/, '');
+  return /^https:\/\/production-(sfo|lon|ams)\.browserless\.io$/.test(v) ? v : 'https://production-sfo.browserless.io';
+}
+
+async function generaPDFConBrowserless(htmlContent, browserlessToken, env) {
 
   if (!browserlessToken) {
     throw new Error('BROWSERLESS_API_TOKEN non configurato');
   }
 
-  const url = `https://production-sfo.browserless.io/pdf?token=${browserlessToken}`;
+  const url = `${urlBrowserless(env)}/pdf?token=${browserlessToken}`;
 
   const response = await fetch(url, {
     method: 'POST',
@@ -246,7 +254,7 @@ export async function generaPdfRiepilogo({ dati, metadata, allegati, env, oggi }
       .map(o => Object.assign({}, o, { eta: calcolaEta(o.nascita, d), isResponsabile: o.numero === 1 || o.isResponsabile === true })),
     documenti: (allegati || []).map(a => ({ ospiteNumero: 1, nomeFile: a.filename, dimensione: a.content.length }))
   });
-  const content = await generaPDFConBrowserless(generaHTMLRiepilogo(datiPdf), token);
+  const content = await generaPDFConBrowserless(generaHTMLRiepilogo(datiPdf), token, env);
   const iso = /^\d{4}-\d{2}-\d{2}$/.test(dati.dataCheckin || '') ? dati.dataCheckin : 'riepilogo';
   return { filename: 'checkin-' + iso + '.pdf', content, contentType: 'application/pdf' };
 }

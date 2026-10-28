@@ -7,6 +7,7 @@ import { makeHandler as makeWebhook } from '../api/stripeWebhook.js';
 import { makeHandler as makeSessione } from '../api/get-session.js';
 import { makeHandler as makePagamento, urlAmmesso } from '../api/crea-pagamento-stripe.js';
 import { elaboraCheckin, checkinIdDa } from '../api/_elabora-checkin.js';
+import { urlBrowserless } from '../api/_pdf-riepilogo.js';
 import { requireApi, memStore, fintoRes, fintoReq, checkinFamiglia, catturaLog, NOW, ENV_DRIVE } from './helpers.mjs';
 
 const Stripe = requireApi('stripe');
@@ -135,4 +136,12 @@ test('pagamento: Stripe riporta l\'ospite solo a indirizzi del check-in; qualsia
   assert.equal(r.statusCode, 200);
   assert.equal(creata.success_url, 'https://spaceestate.github.io/Checkin/successo-pagamento.html?session_id={CHECKOUT_SESSION_ID}');
   assert.equal(creata.cancel_url, 'https://spaceestate.github.io/Checkin/index.html?canceled=true');
+});
+
+test('Browserless: di serie San Francisco; Amsterdam e Londra con BROWSERLESS_URL; qualsiasi altro indirizzo è ignorato (i dati non vanno altrove)', () => {
+  assert.equal(urlBrowserless({}), 'https://production-sfo.browserless.io');
+  assert.equal(urlBrowserless({ BROWSERLESS_URL: 'https://production-ams.browserless.io' }), 'https://production-ams.browserless.io');
+  assert.equal(urlBrowserless({ BROWSERLESS_URL: ' https://production-lon.browserless.io/ ' }), 'https://production-lon.browserless.io');
+  for (const v of ['https://evil.example', 'http://production-ams.browserless.io', 'https://production-ams.browserless.io.evil.example', 'https://production-ams.browserless.io/x', 'ams'])
+    assert.equal(urlBrowserless({ BROWSERLESS_URL: v }), 'https://production-sfo.browserless.io', v);
 });
