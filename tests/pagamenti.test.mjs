@@ -138,10 +138,11 @@ test('pagamento: Stripe riporta l\'ospite solo a indirizzi del check-in; qualsia
   assert.equal(creata.cancel_url, 'https://spaceestate.github.io/Checkin/index.html?canceled=true');
 });
 
-test('Browserless: di serie San Francisco; Amsterdam e Londra con BROWSERLESS_URL; qualsiasi altro indirizzo è ignorato (i dati non vanno altrove)', () => {
-  assert.equal(urlBrowserless({}), 'https://production-sfo.browserless.io');
+test('Browserless: di serie Amsterdam (UE); Londra o San Francisco solo se indicati; qualsiasi altro indirizzo è ignorato (i dati non vanno altrove)', () => {
+  assert.equal(urlBrowserless({}), 'https://production-ams.browserless.io');
+  assert.equal(urlBrowserless({ BROWSERLESS_URL: 'https://production-sfo.browserless.io' }), 'https://production-sfo.browserless.io');
   assert.equal(urlBrowserless({ BROWSERLESS_URL: 'https://production-ams.browserless.io' }), 'https://production-ams.browserless.io');
   assert.equal(urlBrowserless({ BROWSERLESS_URL: ' https://production-lon.browserless.io/ ' }), 'https://production-lon.browserless.io');
   for (const v of ['https://evil.example', 'http://production-ams.browserless.io', 'https://production-ams.browserless.io.evil.example', 'https://production-ams.browserless.io/x', 'ams'])
-    assert.equal(urlBrowserless({ BROWSERLESS_URL: v }), 'https://production-sfo.browserless.io', v);
+    assert.equal(urlBrowserless({ BROWSERLESS_URL: v }), 'https://production-ams.browserless.io', v);
 });

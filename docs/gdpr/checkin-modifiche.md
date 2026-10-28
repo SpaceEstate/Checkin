@@ -11,7 +11,7 @@ Questa sezione corregge le parti del documento non più attuali. Le ho verificat
 - **Il PDF di riepilogo è di nuovo attivo**, su richiesta del gestore.
   - Lo genera `api/_pdf-riepilogo.js` tramite **Browserless**: le frasi "Browserless non è più usato" e "Rimossi … il PDF" del § 2 e del § 4 non valgono più.
   - Browserless riceve l'HTML con i dati anagrafici di tutti gli ospiti, senza immagini.
-  - L'endpoint nel codice è `production-sfo.browserless.io`, cioè un server indicato come statunitense: è un trasferimento extra SEE da verificare.
+  - L'endpoint nel codice è `production-ams.browserless.io` (Amsterdam, UE); con `BROWSERLESS_URL` si può scegliere Londra o San Francisco (USA, trasferimento extra SEE).
   - `BROWSERLESS_API_TOKEN` resta necessaria.
 - **L'email al gestore contiene le immagini del documento e il PDF** (`_email-gestore.js`).
 - **Il riquadro finale sulla verifica dell'identità è stato rimosso**, su richiesta del gestore. Resta la nota accanto al caricamento del documento. Le chiavi `stepFinal.identita*` in `i18n.js` non sono più usate.

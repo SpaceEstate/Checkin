@@ -19,12 +19,12 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
-// Server di Browserless: di serie San Francisco (USA). Con BROWSERLESS_URL=https://production-ams.browserless.io (Amsterdam) o
-// https://production-lon.browserless.io (Londra) l'HTML con i dati resta in Europa. Si accettano solo questi indirizzi: i dati degli
-// ospiti non devono poter finire su un altro server per un errore di configurazione.
+// Server di Browserless: di serie Amsterdam (UE), come dichiarato nell'informativa privacy. BROWSERLESS_URL può indicare
+// production-lon (Londra) o production-sfo (San Francisco, USA: in quel caso va aggiornata l'informativa). Si accettano solo questi
+// indirizzi: i dati degli ospiti non devono poter finire su un altro server per un errore di configurazione.
 export function urlBrowserless(env) {
   const v = String((env && env.BROWSERLESS_URL) || '').trim().replace(/\/+$/, '');
-  return /^https:\/\/production-(sfo|lon|ams)\.browserless\.io$/.test(v) ? v : 'https://production-sfo.browserless.io';
+  return /^https:\/\/production-(sfo|lon|ams)\.browserless\.io$/.test(v) ? v : 'https://production-ams.browserless.io';
 }
 
 async function generaPDFConBrowserless(htmlContent, browserlessToken, env) {
