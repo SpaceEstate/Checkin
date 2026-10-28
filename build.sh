@@ -9,6 +9,8 @@ cp checkin.css public/
 cp checkin.js public/
 cp i18n.js public/
 cp successo-pagamento.html public/
+cp fonts.css public/
+cp -r fonts/. public/fonts/
 
 # Le immagini della cassetta sono già committate in public/images/cassetta/
 # (non serve copiarle da nessun'altra parte: non esiste una cartella

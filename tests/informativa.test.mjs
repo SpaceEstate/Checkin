@@ -55,10 +55,21 @@ test('nessun preconnect verso Stripe (la pagina non carica script di Stripe)', (
 });
 
 test('copie in public/ identiche e nessun file locale mancante', () => {
-  for (const f of ['index.html', 'checkin.css', 'checkin.js', 'i18n.js', 'successo-pagamento.html']) assert.equal(read('public/' + f), read(f), 'public/' + f);
+  for (const f of ['index.html', 'checkin.css', 'checkin.js', 'i18n.js', 'successo-pagamento.html', 'fonts.css']) assert.equal(read('public/' + f), read(f), 'public/' + f);
   for (const f of ['index.html', 'successo-pagamento.html']) for (const m of read(f).matchAll(/(?:href|src)="([^"]+)"/g)) {
     const u = m[1]; if (/^(https?:|mailto:|tel:|#|data:)/.test(u)) continue;
     const p = u.split('?')[0].split('#')[0]; if (!p) continue;
     assert.ok(fs.existsSync(path.join(ROOT, p)) || fs.existsSync(path.join(ROOT, 'public', p)), f + ': ' + u);
   }
+});
+
+test('caratteri serviti dal sito: nessuna richiesta a Google Fonts, file presenti (radice e public) con le licenze', () => {
+  for (const f of ['index.html', 'successo-pagamento.html', 'checkin.css', 'fonts.css']) assert.ok(!/googleapis|gstatic|fonts\.google/.test(read(f)), f + ': riferimento a Google Fonts');
+  const css = read('fonts.css');
+  const file = [...css.matchAll(/url\((fonts\/[^)]+)\)/g)].map(m => m[1]);
+  assert.ok(file.length >= 6, 'file dei caratteri dichiarati');
+  for (const u of file) for (const base of ['', 'public/']) assert.ok(fs.existsSync(path.join(ROOT, base + u)), base + u + ' mancante');
+  for (const l of ['OFL-Fraunces.txt', 'OFL-Manrope.txt']) assert.ok(fs.existsSync(path.join(ROOT, 'fonts', l)) && fs.existsSync(path.join(ROOT, 'public', 'fonts', l)), 'licenza ' + l);
+  assert.ok(/fonts\.css/.test(read('index.html')) && /fonts\.css/.test(read('successo-pagamento.html')));
+  assert.ok(!/'Inter'/.test(read('checkin.css') + read('successo-pagamento.html')), 'Inter non è più disponibile: si usa Manrope');
 });

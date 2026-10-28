@@ -53,7 +53,7 @@
 }
 
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background: linear-gradient(135deg, var(--color-bg-cream) 0%, var(--color-border) 100%);
   min-height: 100vh;
   min-height: 100dvh; /* su Safari iOS evita lo spazio fantasma quando la barra indirizzi è visibile */
@@ -1250,7 +1250,7 @@ body {
   color: var(--color-text);
   margin: 0;
   min-width: 0;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   transition: all 0.3s ease;
   box-sizing: border-box;
   min-height: 52px;
