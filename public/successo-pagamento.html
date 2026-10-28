@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title data-i18n="successPage.title">Pagamento Riuscito - La Columbera</title>
+    <meta name="description" content="Pagamento riuscito: qui trovi il riepilogo del check-in e il codice della cassetta di sicurezza per il tuo soggiorno a La Columbera.">
+    <meta name="robots" content="noindex">
     <link rel="icon" href="favicon.ico?v=2" sizes="any">
     <link rel="icon" href="favicon-32.png?v=2" type="image/png" sizes="32x32">
     <link rel="icon" href="favicon-16.png?v=2" type="image/png" sizes="16x16">
@@ -111,7 +113,7 @@
             border-left: 4px solid #7a2e39;
         }
 
-        .info-card h3 {
+        .info-card h2 {
             color: #7a2e39;
             font-size: 1.2rem;
             margin-bottom: 10px;
@@ -150,7 +152,7 @@
         .code-title {
             font-size: 1.4rem;
             font-weight: 600;
-            margin-bottom: 15px;
+            margin: 0 0 15px;
         }
 
         .code-box {
@@ -313,7 +315,7 @@
 
         <div class="info-grid">
             <div class="info-card">
-                <h3 data-i18n="successPage.bookingDetailsTitle">📋 Dettagli prenotazione</h3>
+                <h2 data-i18n="successPage.bookingDetailsTitle">📋 Dettagli prenotazione</h2>
                 <div id="booking-details">
                     <div class="loading" data-i18n="successPage.loadingDetails">Caricamento dettagli...</div>
                 </div>
@@ -321,7 +323,7 @@
         </div>
 
         <div class="code-section">
-            <h3 class="code-title" data-i18n="successPage.codeTitle">🔑 Codice cassetta sicurezza</h3>
+            <h2 class="code-title" data-i18n="successPage.codeTitle">🔑 Codice cassetta sicurezza</h2>
             <div id="codice-cassetta" class="code-box loading">
                 ••••
             </div>
@@ -330,7 +332,7 @@
 
         <div class="actions">
             <a href="index.html" class="btn btn-primary" data-i18n="successPage.backHome">🏠 Torna alla Home</a>
-            <button onclick="window.print()" class="btn btn-secondary" data-i18n="successPage.print">🖨️ Stampa</button>
+            <button type="button" onclick="window.print()" class="btn btn-secondary" data-i18n="successPage.print">🖨️ Stampa</button>
         </div>
         <p class="page-privacy" style="text-align:center;margin:20px 0 0"><a href="https://la-columbera.vercel.app/privacy.html" target="_blank" rel="noopener noreferrer" data-i18n="footer.privacy" style="display:inline-block;min-height:44px;line-height:44px;color:inherit;text-decoration:underline">Informativa privacy</a></p>
     </div>

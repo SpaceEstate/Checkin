@@ -284,6 +284,7 @@ body {
   display: block;
   text-align: center;
   margin-top: 15px;
+  padding: 12px 8px;      /* area di tocco di almeno 44 px (prima il solo testo, 23 px) */
   color: var(--color-text-muted);
   font-size: 0.9rem;
   text-decoration: none;
