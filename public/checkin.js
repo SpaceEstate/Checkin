@@ -285,13 +285,13 @@ function showNotification(message, type = 'info') {
   notification.className = `notification ${type}`;
   notification.textContent = message;
   notification.style.cssText = `
-    position: fixed; top: 20px; right: 20px; padding: 15px 25px;
-    border-radius: 8px; color: white; font-weight: 500; z-index: 10000;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3); animation: slideIn 0.3s ease-out;
-    max-width: 350px; word-wrap: break-word;
-    ${type === 'error' ? 'background-color: #e74c3c;' : ''}
-    ${type === 'success' ? 'background-color: #27ae60;' : ''}
-    ${type === 'info' ? 'background-color: #3498db;' : ''}
+    position: fixed; top: 20px; right: 20px; padding: 14px 22px;
+    border-radius: 14px; color: #fffdf7; font-weight: 600; font-size: .92rem; line-height: 1.45; z-index: 10000;
+    box-shadow: 0 24px 50px -24px rgba(30,25,23,.55); animation: slideIn 0.3s ease-out;
+    max-width: min(360px, calc(100vw - 40px)); word-wrap: break-word;
+    ${type === 'error' ? 'background-color: #aa3333;' : ''}
+    ${type === 'success' ? 'background-color: #7a2e39;' : ''}
+    ${type === 'info' ? 'background-color: #2e2825;' : ''}
   `;
   
   if (!document.querySelector('#notification-styles')) {
@@ -1928,7 +1928,8 @@ async function creaLinkPagamentoConSessionId(datiPrenotazione, tempSessionId) {
       tempSessionId: tempSessionId,
       numeroPrenotazione: numeroPrenotazioneVerificato || undefined,
       successUrl: `https://spaceestate.github.io/Checkin/successo-pagamento.html?session_id={CHECKOUT_SESSION_ID}&temp_session=${tempSessionId}&lang=${getLingua()}`,
-      cancelUrl: `${window.location.href}?canceled=true`
+      cancelUrl: `${window.location.href}?canceled=true`,
+      ui: 'elements' // campi della carta nella pagina, se il server ha la chiave pubblicabile; altrimenti risponde con la pagina di Stripe
     };
     
     const response = await fetch(API_ENDPOINT, {
@@ -1947,6 +1948,10 @@ async function creaLinkPagamentoConSessionId(datiPrenotazione, tempSessionId) {
     }
 
     const result = await response.json();
+    if (result.clientSecret && result.publishableKey) {
+      await mostraPagamentoNellaPagina(result, tempSessionId);
+      return;
+    }
     if (!result.checkoutUrl) {
       throw new Error("URL di pagamento non ricevuto dal server");
     }
@@ -1959,6 +1964,111 @@ async function creaLinkPagamentoConSessionId(datiPrenotazione, tempSessionId) {
     throw error;
   }
 }
+
+// === PAGAMENTO NELLA PAGINA (stessa soluzione del sito di La Columbera) ===
+// Dopo «Continua al pagamento» (dati salvati, sessione Stripe creata) compaiono qui i campi della carta di Stripe (Payment Element), con i colori
+// e i caratteri del sito. Il check-in si elabora SOLO quando Stripe conferma il pagamento (webhook, o la pagina di successo come rete di
+// sicurezza): un pagamento rifiutato o abbandonato non registra nulla. Senza la chiave pubblicabile su Vercel il server risponde con la pagina
+// di Stripe, come prima. Stripe.js si carica solo adesso: prima la pagina non si collega a Stripe.
+const STRIPE_JS = 'https://js.stripe.com/dahlia/stripe.js';
+let stripeJsPromessa = null;
+function caricaStripeJs() {
+  if (window.Stripe) return Promise.resolve(window.Stripe);
+  return stripeJsPromessa || (stripeJsPromessa = new Promise((ok, ko) => {
+    const s = document.createElement('script');
+    s.src = STRIPE_JS;
+    s.onload = () => window.Stripe ? ok(window.Stripe) : ko(new Error('Stripe.js'));
+    s.onerror = () => { stripeJsPromessa = null; ko(new Error('Stripe.js')); };
+    document.head.appendChild(s);
+  }));
+}
+// Stesso aspetto dei campi della carta del sito di La Columbera (js/pages.js → ASPETTO)
+const ASPETTO_STRIPE = { theme: 'stripe', labels: 'above',
+  variables: { colorPrimary: '#7A2E39', colorBackground: '#FAF5EC', colorText: '#1E1917', colorTextSecondary: '#6C5F55', colorTextPlaceholder: '#8A7D72', colorDanger: '#AA3333', iconColor: '#7A2E39',
+    fontFamily: "Manrope, 'Helvetica Neue', system-ui, sans-serif", fontSizeBase: '16px', fontWeightNormal: '500', borderRadius: '12px', spacingUnit: '4px', gridRowSpacing: '14px' },
+  rules: { '.Input': { border: '1px solid #DCCFB6', boxShadow: 'none', padding: '11px 14px' }, '.Input:focus': { border: '1px solid #7A2E39', boxShadow: '0 0 0 3px rgba(122,46,57,.12)' },
+    '.Input--invalid': { border: '1px solid #AA3333', boxShadow: 'none' }, '.Label': { fontSize: '12px', fontWeight: '700', letterSpacing: '.12em', textTransform: 'uppercase', color: '#7A2E39' },
+    '.Tab': { border: '1px solid #DCCFB6', backgroundColor: '#FAF5EC', boxShadow: 'none' }, '.Tab:hover': { border: '1px solid #7A2E39' },
+    '.Tab--selected': { border: '1px solid #7A2E39', backgroundColor: '#FFFFFF', boxShadow: '0 0 0 3px rgba(122,46,57,.12)' }, '.TabLabel': { fontWeight: '600' }, '.Error': { fontWeight: '600' } } };
+// Manrope servito dal check-in stesso (fonts/, con CORS: i campi stanno in un riquadro di Stripe)
+const fontiStripe = () => ['400', '500', '600', '700'].map(w => ({ family: 'Manrope', src: 'url(' + new URL('fonts/manrope-latin-wght-normal.woff2', window.location.href).href + ')', weight: w, display: 'swap' }));
+
+let pagamentoNellaPagina = null; // { element, azioni, timer, inCorso }
+
+function chiudiPagamentoNellaPagina(messaggio) {
+  const p = pagamentoNellaPagina;
+  if (p) { clearTimeout(p.timer); try { p.element && p.element.destroy(); } catch (e) { /* già chiuso */ } }
+  pagamentoNellaPagina = null;
+  const panel = document.getElementById('pay-panel');
+  if (panel) panel.hidden = true;
+  const el = document.getElementById('pay-element'); if (el) el.innerHTML = '';
+  const load = document.getElementById('pay-load'); if (load) load.hidden = false;
+  const err = document.getElementById('pay-err'); if (err) err.textContent = '';
+  const gruppo = document.getElementById('final-buttons'); if (gruppo) gruppo.hidden = false;
+  const privacy = document.getElementById('privacy-presa-visione'); if (privacy) privacy.disabled = false;
+  const payButton = document.querySelector('.btn-payment');
+  if (payButton) { payButton.disabled = !(privacy && privacy.checked); payButton.innerHTML = t('payment.payButton', { amount: calcolaTotale().toFixed(2) }); }
+  if (messaggio) showNotification(messaggio, 'info');
+}
+
+async function mostraPagamentoNellaPagina(result, tempSessionId) {
+  const importo = (typeof result.totale === 'number' ? result.totale : calcolaTotale()).toFixed(2);
+  const panel = document.getElementById('pay-panel'), btn = document.getElementById('btn-paga-ora'), err = document.getElementById('pay-err');
+  document.getElementById('pay-amount').textContent = '€' + importo;
+  const sub = document.getElementById('pay-due-sub');
+  sub.setAttribute('data-i18n-key', 'pay.dueSub'); sub.setAttribute('data-i18n-params', JSON.stringify({ notti: numeroNotti }));
+  sub.textContent = t('pay.dueSub', { notti: numeroNotti });
+  btn.setAttribute('data-i18n-key', 'pay.button'); btn.setAttribute('data-i18n-params', JSON.stringify({ amount: importo }));
+  btn.textContent = t('pay.button', { amount: importo }); btn.disabled = true;
+  err.textContent = '';
+  // il modulo resta quello: si nasconde solo il pulsante che ha avviato il pagamento (e la presa visione non si cambia più)
+  document.getElementById('final-buttons').hidden = true;
+  const privacy = document.getElementById('privacy-presa-visione'); if (privacy) privacy.disabled = true;
+  panel.hidden = false;
+  if (panel.scrollIntoView) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  const stato = pagamentoNellaPagina = { element: null, azioni: null, inCorso: false,
+    // la sessione di Stripe scade dopo 30 minuti: si torna al pulsante «Continua al pagamento» (i dati restano nel modulo)
+    timer: setTimeout(() => { if (pagamentoNellaPagina === stato && !stato.inCorso) chiudiPagamentoNellaPagina(t('pay.scaduto')); }, 29 * 60e3) };
+  try {
+    const Stripe = await caricaStripeJs();
+    const ck = Stripe(result.publishableKey, { locale: getLingua() }).initCheckoutElementsSdk({ clientSecret: result.clientSecret, elementsOptions: { appearance: ASPETTO_STRIPE, fonts: fontiStripe() } });
+    stato.element = ck.createPaymentElement({ layout: 'tabs' });
+    if (stato.element.on) stato.element.on('ready', () => { document.getElementById('pay-load').hidden = true; });
+    stato.element.mount('#pay-element');
+    const caricate = await ck.loadActions();
+    if (caricate.type !== 'success') throw new Error((caricate.error && caricate.error.message) || 'Stripe');
+    if (pagamentoNellaPagina !== stato) return; // nel frattempo l'ospite è tornato ai dati
+    stato.azioni = caricate.actions;
+    document.getElementById('pay-load').hidden = true;
+    btn.disabled = false;
+  } catch (e) {
+    console.error('Stripe nella pagina:', e && e.message);
+    if (pagamentoNellaPagina === stato) chiudiPagamentoNellaPagina(t('pay.erroreCarica'));
+    return;
+  }
+
+  btn.onclick = async () => {
+    if (stato.inCorso || !stato.azioni || pagamentoNellaPagina !== stato) return;
+    stato.inCorso = true; btn.disabled = true; btn.classList.add('is-loading'); btn.textContent = t('pay.inCorso'); err.textContent = '';
+    let r;
+    try { r = await stato.azioni.confirm({ redirect: 'if_required' }); }
+    catch (e) { r = { type: 'error', error: {} }; }
+    if (r && r.type === 'success') {
+      clearTimeout(stato.timer);
+      // stessa pagina di successo del pagamento sulla pagina di Stripe: stato del pagamento, codici della cassetta, elaborazione di riserva
+      window.location.href = `successo-pagamento.html?session_id=${encodeURIComponent(result.sessionId)}&temp_session=${encodeURIComponent(tempSessionId)}&lang=${getLingua()}`;
+      return;
+    }
+    stato.inCorso = false; btn.disabled = false; btn.classList.remove('is-loading'); btn.textContent = t('pay.button', { amount: importo });
+    err.textContent = (r && r.error && r.error.message) || t('pay.errore');
+    if (err.scrollIntoView) err.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  };
+}
+
+document.addEventListener('click', e => {
+  if (e.target && e.target.closest && e.target.closest('#btn-pay-modifica') && pagamentoNellaPagina && !pagamentoNellaPagina.inCorso) chiudiPagamentoNellaPagina();
+});
 
 function gestisciRitornoStripe() {
   const urlParams = new URLSearchParams(window.location.search);

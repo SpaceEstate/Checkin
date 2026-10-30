@@ -299,6 +299,113 @@
                 max-width: 280px;
             }
         }
+        /* ============================================================
+           TEMA «LA COLUMBERA» — come il modulo del check-in (checkin.css) e il sito principale:
+           fondo carta, carta bianca, titoli in Fraunces corsivo, parola calligrafica, etichette bordeaux,
+           righe con il filo come il «conto» del sito, pulsanti a pillola. Sta in fondo: vince sulle regole sopra.
+           ============================================================ */
+        body {
+            font-size: 16px;
+            line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
+            background:
+                radial-gradient(1200px 700px at 90% -10%, rgba(122, 46, 57, .07), transparent 60%),
+                radial-gradient(900px 700px at -10% 20%, rgba(176, 141, 60, .06), transparent 60%),
+                linear-gradient(180deg, #faf5ec 0%, #f1e9d9 100%);
+        }
+        .success-container {
+            border: 1px solid rgba(122, 46, 57, .12);
+            border-radius: 22px;
+            box-shadow: 0 30px 60px -35px rgba(30, 25, 23, .4);
+            padding: clamp(24px, 4vw, 44px);
+        }
+        .lang-flag { font-size: 1.15rem; background: #fff; border: 1px solid #dccfb6; border-radius: 999px; padding: 5px 11px; }
+        .lang-flag.active { background: rgba(122, 46, 57, .08); border-color: #7a2e39; box-shadow: 0 0 0 3px rgba(122, 46, 57, .1); }
+        .success-logo { height: 56px; order: -2; }
+        .success-icon {
+            width: 64px; height: 64px; margin: 0 auto 14px; display: grid; place-items: center; font-size: 1.6rem;
+            border-radius: 50%; background: #faf5ec; border: 1px solid #dccfb6;
+        }
+        .success-header::before {
+            content: "Grazie";
+            display: block;
+            font-family: 'Pinyon Script', 'Great Vibes', cursive;
+            font-size: clamp(1.9rem, 4vw, 2.4rem);
+            line-height: 1;
+            color: #7a2e39;
+            margin-bottom: 6px;
+            order: -1;
+        }
+        html[lang="en"] .success-header::before { content: "Thank you"; }
+        html[lang="de"] .success-header::before { content: "Danke"; }
+        .success-header { display: flex; flex-direction: column; align-items: center; }
+        .success-title {
+            font-style: italic;
+            font-weight: 400;
+            font-variation-settings: "SOFT" 100;
+            letter-spacing: -.01em;
+            font-size: clamp(1.9rem, 4.4vw, 2.6rem);
+            line-height: 1.15;
+            color: #1e1917;
+        }
+        .success-subtitle { color: #6c5f55; font-size: 1.02rem; }
+        .info-card { background: #faf5ec; border: 1px solid #dccfb6; border-left: 1px solid #dccfb6; border-radius: 16px; }
+        .info-card h2 {
+            font-family: 'Fraunces', 'Cormorant Garamond', Georgia, serif;
+            font-style: italic;
+            font-weight: 400;
+            font-size: 1.35rem;
+            color: #1e1917;
+        }
+        .info-item { border-bottom: 1px solid #dccfb6; padding: 10px 0; gap: 12px; }
+        .info-label { color: #6c5f55; font-weight: 500; }
+        .info-value { color: #1e1917; font-weight: 700; text-align: right; }
+        .code-section {
+            background: #fff;
+            color: #1e1917;
+            border: 1px solid rgba(122, 46, 57, .18);
+            border-radius: 18px;
+            box-shadow: 0 0 0 4px rgba(122, 46, 57, .05);
+        }
+        .code-title {
+            font-family: 'Fraunces', 'Cormorant Garamond', Georgia, serif;
+            font-style: italic;
+            font-weight: 400;
+            font-size: 1.45rem;
+            color: #1e1917;
+        }
+        .code-box, .code-number {
+            font-family: 'Fraunces', 'Cormorant Garamond', Georgia, serif;
+            font-weight: 500;
+            color: #7a2e39;
+            background: linear-gradient(135deg, #faf5ec 0%, #f1e9d9 100%);
+            border: 1px solid #dccfb6;
+        }
+        .code-item { background: #faf5ec; border: 1px solid #dccfb6; border-radius: 14px; }
+        .code-label {
+            color: #7a2e39;
+            font-size: .74rem;
+            letter-spacing: .14em;
+            text-transform: uppercase;
+            font-weight: 700;
+            opacity: 1;
+        }
+        .code-desc, .code-note { color: #6c5f55; opacity: 1; }
+        .error { color: #a33; background: rgba(170, 51, 51, .07); border-color: rgba(170, 51, 51, .22); }
+        .btn {
+            font-family: 'Manrope', 'Helvetica Neue', system-ui, sans-serif;
+            font-weight: 600;
+            letter-spacing: .02em;
+            border-radius: 999px;
+            padding: 14px 26px;
+            border: 1px solid transparent;
+            transition: transform .25s ease, background .25s ease, color .25s ease, border-color .25s ease, box-shadow .25s ease;
+        }
+        .btn-primary { background: #7a2e39; border-color: #7a2e39; color: #fff; box-shadow: 0 12px 28px -14px rgba(122, 46, 57, .55); }
+        .btn-primary:hover { background: #5f222b; border-color: #5f222b; box-shadow: 0 20px 40px -18px rgba(122, 46, 57, .6); }
+        .btn-secondary { background: transparent; color: #1e1917; border: 1px solid #1e1917; }
+        .btn-secondary:hover { background: #1e1917; color: #fff; box-shadow: none; transform: none; }
+        .btn:focus-visible, .lang-flag:focus-visible { outline: 3px solid rgba(122, 46, 57, .35); outline-offset: 2px; }
     </style>
 </head>
 <body>

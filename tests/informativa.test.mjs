@@ -48,7 +48,7 @@ test('testi: chiavi nuove presenti in it/en/de; informativa breve coerente con i
   assert.ok(/non sostituisce/i.test(it['guest.documentoAvvisoIdentita']), "l'immagine non sostituisce il controllo del documento originale");
 });
 
-test('nessun preconnect verso Stripe (la pagina non carica script di Stripe)', () => {
+test('nessun preconnect verso Stripe: Stripe.js si carica solo quando l\'ospite sceglie di pagare (pagamento nella pagina)', () => {
   const idx = read('index.html');
   assert.ok(!/rel="(preconnect|dns-prefetch)"[^>]*stripe/i.test(idx));
   assert.ok(!/<script[^>]+stripe/i.test(idx));
@@ -69,7 +69,7 @@ test('caratteri serviti dal sito: nessuna richiesta a Google Fonts, file present
   const file = [...css.matchAll(/url\((fonts\/[^)]+)\)/g)].map(m => m[1]);
   assert.ok(file.length >= 6, 'file dei caratteri dichiarati');
   for (const u of file) for (const base of ['', 'public/']) assert.ok(fs.existsSync(path.join(ROOT, base + u)), base + u + ' mancante');
-  for (const l of ['OFL-Fraunces.txt', 'OFL-Manrope.txt']) assert.ok(fs.existsSync(path.join(ROOT, 'fonts', l)) && fs.existsSync(path.join(ROOT, 'public', 'fonts', l)), 'licenza ' + l);
+  for (const l of ['OFL-Fraunces.txt', 'OFL-Manrope.txt', 'OFL-PinyonScript.txt']) assert.ok(fs.existsSync(path.join(ROOT, 'fonts', l)) && fs.existsSync(path.join(ROOT, 'public', 'fonts', l)), 'licenza ' + l);
   assert.ok(/fonts\.css/.test(read('index.html')) && /fonts\.css/.test(read('successo-pagamento.html')));
   assert.ok(!/'Inter'/.test(read('checkin.css') + read('successo-pagamento.html')), 'Inter non è più disponibile: si usa Manrope');
 });

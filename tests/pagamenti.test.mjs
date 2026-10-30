@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeHandler as makeWebhook } from '../api/stripeWebhook.js';
 import { makeHandler as makeSessione } from '../api/get-session.js';
-import { makeHandler as makePagamento, urlAmmesso, numeroPrenotazioneValido } from '../api/crea-pagamento-stripe.js';
+import { makeHandler as makePagamento, urlAmmesso, numeroPrenotazioneValido, chiavePubblicabile } from '../api/crea-pagamento-stripe.js';
 import { cercaPrenotazione } from '../api/verifica-prenotazione.js';
 import { elaboraCheckin, checkinIdDa } from '../api/_elabora-checkin.js';
 import { urlBrowserless } from '../api/_pdf-riepilogo.js';
@@ -153,6 +153,40 @@ test('pagamento: il numero di prenotazione verificato nel primo passo va nei met
     r = fintoRes(); await catturaLog(() => makePagamento(fintoStripe)(fintoReq('POST', Object.assign({}, d, { numeroPrenotazione: altro })), r));
     assert.equal(r.statusCode, 200); assert.ok(!('numeroPrenotazione' in creata.metadata) && !('numeroPrenotazione' in creata.payment_intent_data.metadata), String(altro));
   }
+});
+
+test('pagamento nella pagina (come sul sito di La Columbera): con la chiave pubblicabile la sessione è «elements» (API dahlia solo per questa chiamata), stessi importi e metadati; senza, o con chiavi di tipo diverso, la pagina di Stripe come prima', async () => {
+  const chiamate = [];
+  const fintoStripe = { checkout: { sessions: { create: async (p, o) => { chiamate.push({ p, o }); return p.ui_mode === 'elements' ? { id: 'cs_test_el', client_secret: 'cs_test_el_secret_x', url: null } : { id: 'cs_test_h', url: 'https://checkout.stripe.invalid/h' }; } } } };
+  const d = Object.assign(checkinFamiglia(), { numeroPrenotazione: 'HMSEDESZCW', ui: 'elements', successUrl: 'https://spaceestate.github.io/Checkin/successo-pagamento.html?session_id={CHECKOUT_SESSION_ID}&temp_session=t1&lang=en', cancelUrl: 'https://spaceestate.github.io/Checkin/?canceled=true' });
+  const ENV_EL = { STRIPE_SECRET_KEY: 'sk_test_x', STRIPE_PUBLISHABLE_KEY: 'pk_test_prova' };
+  let r = fintoRes(); await catturaLog(() => makePagamento(fintoStripe, ENV_EL)(fintoReq('POST', d), r));
+  assert.equal(r.statusCode, 200);
+  const el = chiamate.pop();
+  assert.deepEqual([r.body.clientSecret, r.body.publishableKey, r.body.sessionId, r.body.checkoutUrl], ['cs_test_el_secret_x', 'pk_test_prova', 'cs_test_el', undefined], 'la pagina riceve la chiave della sessione, non un indirizzo');
+  assert.deepEqual(el.o, { apiVersion: '2026-08-26.dahlia' }, 'versione delle API dei campi nella pagina, solo per questa chiamata');
+  assert.equal(el.p.ui_mode, 'elements');
+  for (const k of ['success_url', 'cancel_url', 'locale', 'allow_promotion_codes']) assert.ok(!(k in el.p), k + ' non ammesso nella pagina');
+  assert.equal(el.p.return_url, d.successUrl, 'se la banca porta su un\'altra pagina si torna alla pagina di successo');
+  assert.equal(el.p.line_items[0].price_data.unit_amount, Math.round(r.body.totale * 100), 'importo ricalcolato dal server');
+  assert.equal(el.p.metadata.dataCheckin, d.dataCheckin, 'resta un check-in (il webhook lo riconosce)');
+  assert.equal(el.p.metadata.numeroPrenotazione, 'HMSEDESZCW'); assert.equal(el.p.payment_intent_data.metadata.numeroPrenotazione, 'HMSEDESZCW');
+  assert.ok(el.p.expires_at - Math.floor(Date.now() / 1000) <= 1800, 'scade dopo 30 minuti');
+  // senza chiave, con formato sbagliato o di tipo diverso (prova/reale), o se la pagina non la chiede: pagina di Stripe, come prima
+  for (const [env, ui] of [[{ STRIPE_SECRET_KEY: 'sk_test_x' }, 'elements'], [{ STRIPE_SECRET_KEY: 'sk_test_x', STRIPE_PUBLISHABLE_KEY: 'pk_live_x' }, 'elements'],
+    [{ STRIPE_SECRET_KEY: 'sk_test_x', STRIPE_PUBLISHABLE_KEY: 'chiave a caso' }, 'elements'], [ENV_EL, undefined]]) {
+    r = fintoRes(); await catturaLog(() => makePagamento(fintoStripe, env)(fintoReq('POST', Object.assign({}, d, { ui })), r));
+    const h = chiamate.pop();
+    assert.equal(r.statusCode, 200); assert.equal(r.body.checkoutUrl, 'https://checkout.stripe.invalid/h'); assert.equal(r.body.clientSecret, undefined);
+    assert.equal(h.p.ui_mode, undefined); assert.equal(h.o, undefined, 'versione delle API di sempre'); assert.equal(h.p.success_url, d.successUrl); assert.equal(h.p.locale, d.lingua || 'it');
+  }
+});
+
+test('chiave pubblicabile: ok solo se ha il formato giusto ed è dello stesso tipo della chiave segreta', () => {
+  assert.deepEqual(chiavePubblicabile({}), { pk: '', stato: 'manca' });
+  assert.deepEqual(chiavePubblicabile({ STRIPE_PUBLISHABLE_KEY: 'sk_test_x' }), { pk: '', stato: 'formato' });
+  assert.deepEqual(chiavePubblicabile({ STRIPE_SECRET_KEY: 'sk_live_x', STRIPE_PUBLISHABLE_KEY: 'pk_test_x' }), { pk: '', stato: 'tipo' });
+  assert.deepEqual(chiavePubblicabile({ STRIPE_SECRET_KEY: 'rk_live_x', STRIPE_PUBLISHABLE_KEY: ' pk_live_abc ' }), { pk: 'pk_live_abc', stato: 'ok' });
 });
 
 test('verifica prenotazione: il numero si trova anche scritto con spazi, punti o trattini e in minuscolo; prima vale la corrispondenza esatta', () => {

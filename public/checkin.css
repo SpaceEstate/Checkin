@@ -1906,3 +1906,382 @@ body {
   outline: 3px solid var(--color-accent-200);
   outline-offset: 2px;
 }
+
+/* ============================================================
+   TEMA «LA COLUMBERA» — stesso linguaggio del sito principale
+   (github.com/SpaceEstate/LaColumbera → css/main.css, pagina prenota.html):
+   fondo carta con le sfumature bordeaux/oro, carte bianche arrotondate,
+   titoli in Fraunces corsivo, parole calligrafiche in Pinyon Script,
+   etichette bordeaux maiuscole spaziate, campi su fondo carta, pulsanti
+   a pillola bordeaux, righe di riepilogo come il «conto» del sito.
+   Sta in fondo al file: vince sulle regole di prima (anche nelle @media)
+   senza toccarle; i nomi delle classi usate da checkin.js non cambiano.
+   ============================================================ */
+:root {
+  --wine: #7A2E39;
+  --wine-2: #5F222B;
+  --ink: #1E1917;
+  --charcoal: #2E2825;
+  --paper: #FAF5EC;
+  --paper-2: #F1E9D9;
+  --stone: #E6DBC6;
+  --line: #DCCFB6;
+  --muted: #6C5F55;
+  --gold: #B08D3C;
+  --script: 'Pinyon Script', 'Great Vibes', cursive;
+  --shadow-card: 0 30px 60px -35px rgba(30, 25, 23, .4);
+  --color-error: #AA3333;
+  --color-error-bg: rgba(170, 51, 51, .07);
+  --color-error-text: #A33;
+}
+
+body {
+  color: var(--ink);
+  font-size: 16px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+  background:
+    radial-gradient(1200px 700px at 90% -10%, rgba(122, 46, 57, .07), transparent 60%),
+    radial-gradient(900px 700px at -10% 20%, rgba(176, 141, 60, .06), transparent 60%),
+    linear-gradient(180deg, var(--paper) 0%, var(--paper-2) 100%);
+}
+
+.container {
+  background: #fff;
+  backdrop-filter: none;
+  border-radius: 22px;
+  border: 1px solid rgba(122, 46, 57, .12);
+  box-shadow: var(--shadow-card);
+  margin: clamp(0px, 2vw, 24px) auto;
+}
+
+/* intestazione: come la testata e l'introduzione delle pagine del sito (carta chiara, logo a colori, corsivi) */
+.header {
+  background: linear-gradient(180deg, var(--paper) 0%, var(--paper-2) 100%);
+  color: var(--ink);
+  text-align: left;
+  padding: 18px clamp(20px, 4vw, 40px) 30px;
+  border-bottom: 1px solid var(--line);
+}
+.header::before { display: none; }
+.header-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 20px;
+  flex-wrap: wrap;
+  margin-bottom: 22px;
+}
+.header-brand { margin: 0; justify-content: flex-start; }
+.header-brand img { height: 56px; filter: none; }
+.header-intro { position: relative; }
+.header-eyebrow {
+  display: block;
+  font-family: var(--script);
+  font-size: clamp(1.9rem, 4vw, 2.5rem);
+  line-height: 1;
+  color: var(--wine);
+  margin-bottom: 2px;
+}
+.header h1 {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-weight: 400;
+  font-variation-settings: "SOFT" 100;
+  letter-spacing: -.01em;
+  line-height: 1.1;
+  font-size: clamp(2.1rem, 5vw, 3.1rem);
+  color: var(--ink);
+  margin-bottom: 8px;
+}
+.header p { color: var(--muted); opacity: 1; font-size: 1.02rem; margin: 0; }
+
+.language-selector { margin: 0; justify-content: flex-end; gap: 6px; }
+.lang-flag {
+  font-size: 1.15rem;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 11px;
+}
+.lang-flag:hover { background: #fff; border-color: rgba(122, 46, 57, .45); }
+.lang-flag.active { background: rgba(122, 46, 57, .08); border-color: var(--wine); box-shadow: 0 0 0 3px rgba(122, 46, 57, .1); }
+
+/* avanzamento: barra sottile bordeaux, etichetta come le etichette del sito */
+.progress-wrapper { margin-top: 22px; }
+.progress-track { height: 4px; background: var(--stone); }
+.progress-fill { background: var(--wine); }
+.progress-label {
+  font-size: .7rem;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--wine);
+}
+
+.form-container { padding: clamp(22px, 4vw, 40px); }
+
+/* titoli dei passi: Fraunces corsivo, come «I tuoi dati» e «Pagamento» sul sito */
+.step-header { margin-bottom: 30px; }
+.step-title {
+  font-style: italic;
+  font-weight: 400;
+  font-variation-settings: "SOFT" 100;
+  letter-spacing: -.01em;
+  font-size: clamp(1.7rem, 3.4vw, 2.2rem);
+  line-height: 1.15;
+  color: var(--ink);
+}
+.step-subtitle { color: var(--muted); font-size: 1rem; }
+.verification-icon {
+  width: 64px; height: 64px;
+  margin: 0 auto 16px;
+  display: grid; place-items: center;
+  font-size: 1.7rem;
+  border-radius: 50%;
+  background: var(--paper);
+  border: 1px solid var(--line);
+}
+
+/* campi */
+.form-label {
+  font-size: .74rem;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--wine);
+  margin-bottom: 6px;
+}
+.form-label small, .form-label .optional { text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--muted); }
+.required-mark { color: var(--wine); }
+.form-input, .form-select,
+.date-input-wrapper.mobile-date-input .date-text-input {
+  font-family: inherit;
+  font-size: .98rem;
+  padding: 11px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background-color: var(--paper);
+  color: var(--ink);
+  box-shadow: none;
+  transition: border-color .2s ease, box-shadow .2s ease;
+}
+.form-input:hover, .form-select:hover { border-color: rgba(122, 46, 57, .4); }
+.form-input:focus, .form-select:focus,
+.date-input-wrapper.mobile-date-input .date-text-input:focus {
+  outline: none;
+  border-color: var(--wine);
+  box-shadow: 0 0 0 3px rgba(122, 46, 57, .12);
+  background-color: #fff;
+  transform: none;
+}
+.form-input-code { font-family: var(--font-serif); font-size: 1.25rem; letter-spacing: .12em; }
+.form-input::placeholder { color: #8A7D72; }
+.field-error { color: var(--color-error-text); font-weight: 600; }
+.no-booking-link { color: var(--wine); font-weight: 700; font-size: .86rem; text-decoration: underline; text-underline-offset: 3px; }
+.no-booking-link:hover { color: var(--wine-2); }
+
+/* appartamento: scelte come le caselle del sito */
+.apartment-chip {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--paper);
+  box-shadow: none;
+}
+.apartment-chip:hover { border-color: rgba(122, 46, 57, .45); transform: none; }
+.apartment-chip:has(input:checked) { border-color: var(--wine); background: #fff; box-shadow: 0 0 0 3px rgba(122, 46, 57, .12); }
+.apartment-chip-text strong { font-family: var(--font-serif); font-style: italic; font-weight: 500; font-size: 1.2rem; color: var(--wine); }
+.apartment-chip-text small { color: var(--muted); }
+
+/* documento */
+.document-section {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-left: 1px solid var(--line);
+  border-radius: 18px;
+}
+.document-title { font-family: var(--font-serif); font-style: italic; font-weight: 400; color: var(--ink); }
+.document-subtitle { color: var(--muted); }
+.upload-side { border-radius: 14px; border-color: var(--line); background: #fff; }
+.upload-side.completo { border-color: var(--wine); box-shadow: 0 0 0 3px rgba(122, 46, 57, .08); }
+.upload-side-step { background: var(--stone); color: var(--charcoal); }
+.upload-side.completo .upload-side-step { background: var(--wine); color: #fff; }
+.upload-label { border-radius: 12px; border-color: var(--line); background: var(--paper); color: var(--wine); }
+.upload-label:hover { border-color: var(--wine); background: #fff; }
+.camera-btn { border-radius: 999px; }
+
+/* pulsanti: pillole del sito (Manrope, niente maiuscolo, ombra morbida bordeaux) */
+.btn {
+  font-family: 'Manrope', 'Helvetica Neue', system-ui, sans-serif;
+  font-weight: 600;
+  letter-spacing: .02em;
+  text-transform: none;
+  font-size: .98rem;
+  border-radius: 999px;
+  padding: 14px 26px;
+  border: 1px solid transparent;
+  transition: transform .25s ease, background .25s ease, color .25s ease, border-color .25s ease, box-shadow .25s ease;
+}
+.btn::before { display: none; }
+.btn-primary, .btn-success {
+  background: var(--wine);
+  border-color: var(--wine);
+  color: #fff;
+  box-shadow: 0 12px 28px -14px rgba(122, 46, 57, .55);
+}
+.btn-primary:hover, .btn-success:hover {
+  background: var(--wine-2);
+  border-color: var(--wine-2);
+  transform: translateY(-2px);
+  box-shadow: 0 20px 40px -18px rgba(122, 46, 57, .6);
+}
+.btn-secondary {
+  background: transparent;
+  border-color: var(--ink);
+  color: var(--ink);
+  box-shadow: none;
+}
+.btn-secondary:hover { background: var(--ink); color: #fff; transform: none; box-shadow: none; }
+.btn:disabled { opacity: .55; }
+.btn.is-loading { pointer-events: none; opacity: .85; cursor: wait; }
+
+/* riepilogo: come il «conto» del sito (righe con filo, valori in grassetto, totale in Fraunces corsivo bordeaux) */
+.summary-section {
+  background: #fff;
+  border: 1px solid rgba(122, 46, 57, .12);
+  border-left: 1px solid rgba(122, 46, 57, .12);
+  border-radius: 22px;
+  box-shadow: var(--shadow-card);
+  padding: clamp(18px, 3vw, 30px);
+}
+.summary-title, .summary-section h3 {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-weight: 400;
+  font-variation-settings: "SOFT" 100;
+  font-size: 1.55rem;
+  color: var(--ink);
+}
+.summary-item { border-bottom: 1px solid var(--line); padding: 10px 0; font-size: .95rem; }
+.summary-item span:first-child { color: var(--muted); }
+.summary-item span:last-child { color: var(--ink); font-weight: 600; }
+.summary-item:last-child { font-size: 1rem; }
+.guest-summary { background: var(--paper); border: 1px solid var(--line); border-radius: 14px; }
+.guest-summary strong { font-family: var(--font-serif); font-weight: 500; font-size: 1.08rem; }
+.guest-summary .age { color: var(--muted); }
+.total-amount {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-weight: 500;
+  color: var(--wine);
+  background: linear-gradient(135deg, var(--paper) 0%, var(--paper-2) 100%);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+}
+.tax-note { color: var(--muted); font-style: normal; }
+
+/* le tre parti del riepilogo (soggiorno, ospiti, totale) dentro la carta: riquadri leggeri, senza una seconda ombra */
+.summary-section .summary-section {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: none;
+  padding: clamp(14px, 2.4vw, 20px);
+  margin-bottom: 14px;
+}
+.summary-section .summary-section:last-child { margin-bottom: 0; }
+.summary-section .summary-section h3 { font-size: 1.2rem; margin-bottom: 8px; }
+.summary-section .guest-summary { background: #fff; }
+
+/* fotocamera e calendario: stessi pulsanti bordeaux pieni del sito */
+.camera-btn, .date-input-wrapper.mobile-date-input .date-picker-btn {
+  background: var(--wine);
+  border: 1px solid var(--wine);
+  box-shadow: 0 12px 28px -16px rgba(122, 46, 57, .55);
+}
+.camera-btn:hover, .date-input-wrapper.mobile-date-input .date-picker-btn:hover { background: var(--wine-2); border-color: var(--wine-2); }
+.camera-btn { border-radius: 999px; padding: 14px 20px; font-weight: 600; }
+
+/* presa visione dell'informativa */
+.privacy-section {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+}
+.privacy-info { color: var(--charcoal); font-size: .88rem; line-height: 1.6; }
+.checkbox-custom { border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+.privacy-input:checked + .privacy-label .checkbox-custom { background: var(--wine); border-color: var(--wine); }
+.privacy-input:focus-visible + .privacy-label .checkbox-custom { box-shadow: 0 0 0 3px rgba(122, 46, 57, .2); }
+.privacy-link, .page-privacy a { color: var(--wine); font-weight: 600; text-underline-offset: 3px; }
+
+/* esito, codici, conferme */
+.success-message { background: var(--paper); border: 1px solid var(--line); border-radius: 18px; }
+.success-message h3 { font-family: var(--font-serif); font-style: italic; font-weight: 400; color: var(--wine); }
+.code-item { background: #fff; border: 1px solid var(--line); border-radius: 14px; }
+.code-number { font-family: var(--font-serif); color: var(--wine); }
+.confirm-box { border-radius: 22px; border: 1px solid rgba(122, 46, 57, .12); box-shadow: var(--shadow-card); }
+.identity-hint { color: var(--muted); }
+
+/* ---------- pagamento nella pagina (come «Pagamento» in prenota.html del sito) ---------- */
+[hidden] { display: none !important; }
+.pay-panel {
+  background: #fff;
+  border: 1px solid rgba(122, 46, 57, .12);
+  border-radius: 22px;
+  box-shadow: var(--shadow-card);
+  padding: clamp(20px, 3vw, 32px);
+  margin-bottom: 24px;
+  scroll-margin-top: 20px;
+  animation: fadeInUp .35s ease-out;
+}
+.pay-head { display: flex; align-items: center; justify-content: space-between; gap: 10px 16px; flex-wrap: wrap; margin-bottom: 16px; }
+.pay-title { font-family: var(--font-serif); font-style: italic; font-weight: 400; font-variation-settings: "SOFT" 100; font-size: 1.55rem; margin: 0; color: var(--ink); }
+.pay-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 12px 5px 10px; border-radius: 999px;
+  background: rgba(122, 46, 57, .07); border: 1px solid rgba(122, 46, 57, .18);
+  color: var(--wine); font-size: .72rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; white-space: nowrap;
+}
+.pay-badge svg, .pay-trust svg { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.pay-due {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  padding: 14px 18px; margin: 0 0 20px; border-radius: 16px;
+  background: linear-gradient(135deg, var(--paper) 0%, var(--paper-2) 100%); border: 1px solid var(--line);
+}
+.pay-due div { display: flex; flex-direction: column; min-width: 0; }
+.pay-due span { font-size: .72rem; letter-spacing: .14em; text-transform: uppercase; font-weight: 700; color: var(--wine); }
+.pay-due small { font-size: .86rem; color: var(--muted); }
+.pay-due b { font-family: var(--font-serif); font-weight: 500; font-style: italic; font-size: clamp(1.7rem, 3vw, 2.1rem); line-height: 1; color: var(--wine); white-space: nowrap; }
+.pay-box { position: relative; min-height: 150px; }
+.pay-element { position: relative; z-index: 1; }
+.pay-load { position: absolute; inset: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-content: start; }
+.pay-load i { display: block; height: 46px; border-radius: 12px; border: 1px solid var(--line); background: linear-gradient(90deg, var(--paper) 0%, #fff 50%, var(--paper) 100%); background-size: 200% 100%; animation: payShimmer 1.4s ease-in-out infinite; }
+.pay-load i:first-child, .pay-load i.w { grid-column: 1 / -1; }
+@keyframes payShimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+.pay-err:empty { display: none; }
+.pay-err { margin: 16px 0 0; padding: 10px 14px; border-radius: 12px; background: rgba(170, 51, 51, .07); border: 1px solid rgba(170, 51, 51, .22); color: #A33; font-size: .9rem; font-weight: 600; line-height: 1.5; }
+.btn-pay-confirm { width: 100%; justify-content: center; margin-top: 18px; font-size: 1.04rem; padding-top: 15px; padding-bottom: 15px; display: inline-flex; align-items: center; gap: 10px; }
+.btn-pay-confirm:not(.is-loading)::after { content: none; }
+.pay-note { font-size: .84rem; line-height: 1.55; color: var(--muted); text-align: center; margin: 12px auto 0; max-width: 46ch; }
+.pay-trust { list-style: none; margin: 20px 0 0; padding: 16px 0 0; border-top: 1px dashed var(--line); display: grid; gap: 10px; }
+.pay-trust li { display: flex; align-items: flex-start; gap: 10px; font-size: .86rem; line-height: 1.5; color: var(--charcoal); }
+.pay-trust svg { color: var(--wine); margin-top: 2px; }
+.pay-back { display: block; margin: 18px auto 0; background: none; border: 0; padding: 6px 4px; color: var(--wine); font: inherit; font-size: .86rem; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.pay-back:focus-visible, .btn:focus-visible, .lang-flag:focus-visible, .no-booking-link:focus-visible { outline: 3px solid rgba(122, 46, 57, .35); outline-offset: 2px; }
+
+@media (max-width: 768px) {
+  .header { padding: 14px 18px 24px; }
+  .header-brand img { height: 46px; }
+  .header-bar { margin-bottom: 16px; }
+  .summary-section { padding: 18px 16px; }
+  .summary-section h3 { text-align: left; }
+}
+@media (max-width: 480px) {
+  .container { border-radius: 18px; }
+  .header-bar { justify-content: center; }
+  .language-selector { justify-content: center; width: 100%; }
+  .header-brand { width: 100%; justify-content: center; }
+  .header-intro { text-align: center; }
+  .pay-due { padding: 12px 14px; }
+}
+@media (prefers-reduced-motion: reduce) { .pay-load i { animation: none; } .pay-panel { animation: none; } }

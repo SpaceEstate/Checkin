@@ -44,8 +44,23 @@ export const numeroPrenotazioneValido = v => {
   return /^[A-Z0-9][A-Z0-9-]{2,39}$/.test(n) ? n : "";
 };
 
+// Pagamento nella pagina del check-in (come sul sito di La Columbera): i campi della carta di Stripe dentro il modulo, con lo stile del sito.
+// Serve la chiave pubblicabile STRIPE_PUBLISHABLE_KEY su Vercel, dello stesso tipo della chiave segreta (prova con prova, reale con reale).
+// Senza, con un formato sbagliato o di tipo diverso si paga sulla pagina di Stripe, come prima. stato: ok | manca | formato | tipo.
+export function chiavePubblicabile(env = process.env) {
+  const pk = String(env.STRIPE_PUBLISHABLE_KEY || '').trim(), tipo = k => (/^[spr]k_(live|test)/.exec(k) || [])[1] || '';
+  if (!pk) return { pk: '', stato: 'manca' };
+  if (!/^pk_(live|test)_\w+$/.test(pk)) return { pk: '', stato: 'formato' };
+  const ts = tipo(String(env.STRIPE_SECRET_KEY || '').trim());
+  return ts && ts !== tipo(pk) ? { pk: '', stato: 'tipo' } : { pk, stato: 'ok' };
+}
+// I campi della carta nella pagina (Checkout Sessions con ui_mode «elements») esistono dalla versione 2026-08-26.dahlia delle API, la stessa del sito
+// di La Columbera. La libreria di questo progetto usa una versione più vecchia: la nuova si chiede SOLO per creare queste sessioni, tutto il resto
+// (webhook, get-session, pagina di Stripe) resta com'era.
+export const VERSIONE_API_NELLA_PAGINA = '2026-08-26.dahlia';
+
 // `stripe` è un parametro per poterlo sostituire nei test (nessuna chiamata reale a Stripe)
-async function gestisciRichiesta(stripe, req, res) {
+async function gestisciRichiesta(stripe, req, res, env = process.env) {
   res.setHeader("Access-Control-Allow-Origin", "https://spaceestate.github.io");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -76,7 +91,8 @@ async function gestisciRichiesta(stripe, req, res) {
               // della pagina di pagamento Stripe e, più avanti, dell'email di
               // benvenuto. Non tocca il TXT Alloggiati né l'email al gestore.
       successUrl,
-      cancelUrl
+      cancelUrl,
+      ui // 'elements' = il modulo chiede i campi della carta nella pagina (vedi chiavePubblicabile)
     } = req.body;
 
     const LINGUE_VALIDE = ['it', 'en', 'de'];
@@ -152,6 +168,53 @@ async function gestisciRichiesta(stripe, req, res) {
     const finalSuccessUrl = urlAmmesso(successUrl) ? successUrl : "https://spaceestate.github.io/Checkin/successo-pagamento.html?session_id={CHECKOUT_SESSION_ID}";
     const finalCancelUrl = urlAmmesso(cancelUrl) ? cancelUrl : "https://spaceestate.github.io/Checkin/index.html?canceled=true";
 
+    const pk = ui === 'elements' ? chiavePubblicabile(env).pk : '';
+    const lineItems = [
+      {
+        price_data: {
+          currency: "eur",
+          product_data: {
+            name: `Tassa soggiorno - ${appartamento}`,
+            description: `Check-in: ${dataCheckin} | Ospiti: ${numeroOspiti} | Notti: ${numeroNotti}`,
+          },
+          unit_amount: Math.round(totaleServer * 100),
+        },
+        quantity: 1,
+      },
+    ];
+    const paymentIntentData = {
+      description: `Tassa soggiorno - ${appartamento.substring(0, 100)}`,
+      metadata: Object.assign({
+        dataCheckin: dataCheckin,
+        appartamento: appartamento.substring(0, 490)
+      }, numero ? { numeroPrenotazione: numero } : {})
+    };
+
+    if (pk) {
+      // Nella pagina: stessi importi, metadati e durata; niente success_url / cancel_url (non ammessi): il modulo resta aperto e, a pagamento
+      // riuscito, porta da sé alla pagina di successo. return_url serve solo se la banca chiede una conferma su un'altra pagina.
+      // La lingua dei campi la decide la pagina (Stripe.js), non la sessione.
+      const nellaPagina = await stripe.checkout.sessions.create({
+        ui_mode: "elements",
+        payment_method_types: ["card"],
+        mode: "payment",
+        customer_email: responsabile.email || undefined,
+        billing_address_collection: 'auto',
+        payment_intent_data: paymentIntentData,
+        line_items: lineItems,
+        return_url: finalSuccessUrl,
+        metadata: metadata,
+        expires_at: Math.floor(Date.now() / 1000) + (30 * 60), // 30 minuti
+      }, { apiVersion: VERSIONE_API_NELLA_PAGINA });
+      console.log("✅ Sessione (nella pagina) creata:", nellaPagina.id);
+      return res.status(200).json({
+        clientSecret: nellaPagina.client_secret,
+        publishableKey: pk,
+        sessionId: nellaPagina.id,
+        totale: totaleServer
+      });
+    }
+
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
       mode: "payment",
@@ -159,29 +222,11 @@ async function gestisciRichiesta(stripe, req, res) {
       locale: linguaOspite, // Stripe accetta 'it' | 'en' | 'de' come codici di locale diretti
       billing_address_collection: 'auto',
       
-      payment_intent_data: {
-        description: `Tassa soggiorno - ${appartamento.substring(0, 100)}`,
-        metadata: Object.assign({
-          dataCheckin: dataCheckin,
-          appartamento: appartamento.substring(0, 490)
-        }, numero ? { numeroPrenotazione: numero } : {})
-      },
+      payment_intent_data: paymentIntentData,
       
       allow_promotion_codes: false,
       
-      line_items: [
-        {
-          price_data: {
-            currency: "eur",
-            product_data: {
-              name: `Tassa soggiorno - ${appartamento}`,
-              description: `Check-in: ${dataCheckin} | Ospiti: ${numeroOspiti} | Notti: ${numeroNotti}`,
-            },
-            unit_amount: Math.round(totaleServer * 100),
-          },
-          quantity: 1,
-        },
-      ],
+      line_items: lineItems,
       
       success_url: finalSuccessUrl,
       cancel_url: finalCancelUrl,
@@ -205,5 +250,5 @@ async function gestisciRichiesta(stripe, req, res) {
   }
 }
 
-export const makeHandler = client => (req, res) => gestisciRichiesta(client, req, res);
+export const makeHandler = (client, env) => (req, res) => gestisciRichiesta(client, req, res, env || process.env);
 export default makeHandler(stripe);

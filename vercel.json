@@ -1,6 +1,8 @@
 {
   "version": 2,
-  "regions": ["fra1"],
+  "regions": [
+    "fra1"
+  ],
   "buildCommand": "bash build.sh",
   "outputDirectory": "public",
   "functions": {
@@ -9,6 +11,24 @@
     }
   },
   "crons": [
-    { "path": "/api/admin-alloggiati", "schedule": "17 3 * * *" }
+    {
+      "path": "/api/admin-alloggiati",
+      "schedule": "17 3 * * *"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/fonts/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=2592000"
+        },
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        }
+      ]
+    }
   ]
 }
