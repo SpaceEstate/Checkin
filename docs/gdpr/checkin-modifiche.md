@@ -31,6 +31,12 @@ La prova di configurazione (`prova-drive`) ha restituito `HTTP 403 · storageQuo
 
 Conseguenza privacy da riportare nell'intervento 3: **i dati anagrafici degli ospiti tornano a essere duplicati nel foglio Google** (e nei TXT creati dallo script). La loro conservazione e cancellazione non è gestita dal codice del check-in ma dal foglio e dallo script del gestore: vanno definite e applicate lì (es. cancellazione delle righe e del TXT dopo la ricevuta Alloggiati). Le parti di questo documento su Drive (§ 2–8) descrivono la soluzione non attivata.
 
+## ⚠️ Aggiornamento 30/10/2026 — collegamento con l'area clienti di La Columbera
+
+- **Arrivo dall'area clienti.** Il riquadro «Check-in online» dell'area clienti apre `index.html#k=<numero prenotazione>&lang=<it|en|de>`. Il frammento `#` non arriva a nessun server (né a GitHub Pages né a Vercel) e la pagina lo toglie subito dall'indirizzo; il numero si verifica da solo e, se la prenotazione c'è, si passa direttamente ai dati del soggiorno (`daAreaClienti()` in `checkin.js`). Se non si trova resta il primo passo, con il numero già scritto.
+- **Numero di prenotazione nei metadati Stripe.** Solo se l'ospite ha verificato la prenotazione nel primo passo, `numeroPrenotazione` va nei metadati della sessione e del pagamento (`crea-pagamento-stripe.js`, controllato: lettere e cifre maiuscole, al più qualche trattino, massimo 40 caratteri; altrimenti non c'è). Non è un dato anagrafico: è il riferimento della prenotazione, che Stripe già collega all'email del pagante. Serve al sito di La Columbera, che riceve gli eventi dello stesso account Stripe, per sapere che il check-in di quella prenotazione è fatto (riquadro «Check-in completato» e codice della cassetta nell'area clienti, `LaColumbera/api/_checkin.js`). Chi sceglie «Non ho il numero di prenotazione» non lo porta.
+- **Ricerca del numero** (`verifica-prenotazione.js`): prima la corrispondenza esatta, poi anche senza spazi, punti e trattini (Booking mostra «6877.180.932», l'email di La Columbera il codice a gruppi); se così le righe possibili sono più di una, nessuna.
+
 ---
 
 ## 1. Fonti consultate e cosa dicono

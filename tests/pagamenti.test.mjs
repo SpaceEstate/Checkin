@@ -5,7 +5,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeHandler as makeWebhook } from '../api/stripeWebhook.js';
 import { makeHandler as makeSessione } from '../api/get-session.js';
-import { makeHandler as makePagamento, urlAmmesso } from '../api/crea-pagamento-stripe.js';
+import { makeHandler as makePagamento, urlAmmesso, numeroPrenotazioneValido } from '../api/crea-pagamento-stripe.js';
+import { cercaPrenotazione } from '../api/verifica-prenotazione.js';
 import { elaboraCheckin, checkinIdDa } from '../api/_elabora-checkin.js';
 import { urlBrowserless } from '../api/_pdf-riepilogo.js';
 import { requireApi, memStore, fintoRes, fintoReq, checkinFamiglia, catturaLog, NOW, ENV_DRIVE } from './helpers.mjs';
@@ -136,6 +137,30 @@ test('pagamento: Stripe riporta l\'ospite solo a indirizzi del check-in; qualsia
   assert.equal(r.statusCode, 200);
   assert.equal(creata.success_url, 'https://spaceestate.github.io/Checkin/successo-pagamento.html?session_id={CHECKOUT_SESSION_ID}');
   assert.equal(creata.cancel_url, 'https://spaceestate.github.io/Checkin/index.html?canceled=true');
+});
+
+test('pagamento: il numero di prenotazione verificato nel primo passo va nei metadati (sessione e pagamento) per l\'area clienti di La Columbera; senza verifica o non valido non c\'è', async () => {
+  for (const [v, atteso] of [[' 558r te56 487a9 ', '558RTE56487A9'], ['HMSEDESZCW', 'HMSEDESZCW'], [6877180932, '6877180932'], ['M-ABC1234', 'M-ABC1234'],
+    ['<b>x</b>', ''], ['ab', ''], ['A'.repeat(41), ''], [null, ''], [undefined, ''], [{ a: 1 }, ''], [['ABC123'], '']]) assert.equal(numeroPrenotazioneValido(v), atteso, String(v));
+  let creata = null;
+  const fintoStripe = { checkout: { sessions: { create: async p => { creata = p; return { id: 'cs_test_x', url: 'https://checkout.stripe.invalid/x' }; } } } };
+  const d = checkinFamiglia();
+  let r = fintoRes(); await catturaLog(() => makePagamento(fintoStripe)(fintoReq('POST', Object.assign({}, d, { numeroPrenotazione: '558r te56 487a9' })), r));
+  assert.equal(r.statusCode, 200);
+  assert.equal(creata.metadata.numeroPrenotazione, '558RTE56487A9'); assert.equal(creata.payment_intent_data.metadata.numeroPrenotazione, '558RTE56487A9');
+  assert.equal(creata.metadata.dataCheckin, d.dataCheckin, 'resta un check-in (dataCheckin) anche con il numero');
+  for (const altro of [undefined, '', '<script>']) {
+    r = fintoRes(); await catturaLog(() => makePagamento(fintoStripe)(fintoReq('POST', Object.assign({}, d, { numeroPrenotazione: altro })), r));
+    assert.equal(r.statusCode, 200); assert.ok(!('numeroPrenotazione' in creata.metadata) && !('numeroPrenotazione' in creata.payment_intent_data.metadata), String(altro));
+  }
+});
+
+test('verifica prenotazione: il numero si trova anche scritto con spazi, punti o trattini e in minuscolo; prima vale la corrispondenza esatta', () => {
+  const riga = n => ({ get: k => k === 'Numero Prenotazione' ? n : '' });
+  const rows = [riga('558RTE56487A9'), riga(6877180932), riga('HM-ABC123'), riga('HMABC123')];
+  for (const [n, i] of [['558RTE56487A9', 0], ['558r te56 487a9', 0], ['6877.180.932', 1], ['6877180932', 1], [' hm-abc123 ', 2], ['HMABC123', 3]]) assert.equal(cercaPrenotazione(rows, n), rows[i], n);
+  for (const n of ['558RTE56487A', 'XX', '--']) assert.equal(cercaPrenotazione(rows, n), undefined, n);
+  assert.equal(cercaPrenotazione(rows, 'hm abc123'), undefined, 'due righe possibili (HM-ABC123 e HMABC123): non si indovina');
 });
 
 test('Browserless: di serie Amsterdam (UE); Londra o San Francisco solo se indicati; qualsiasi altro indirizzo è ignorato (i dati non vanno altrove)', () => {

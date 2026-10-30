@@ -5,6 +5,9 @@ let numeroNotti = 0;
 let dataCheckin = ''; 
 let stepGenerated = false;
 window.datiPrecompilati = false; // Flag globale per dati pre-compilati
+// Numero della prenotazione verificata, com'è scritto nel foglio (vuoto se l'ospite salta la verifica). Va nei metadati del pagamento:
+// il sito di La Columbera ci riconosce il check-in fatto per quella prenotazione (area clienti: riquadro «Check-in completato» e codice della cassetta).
+let numeroPrenotazioneVerificato = '';
  
 const API_BASE_URL = 'https://checkin-six-coral.vercel.app/api';
 
@@ -412,6 +415,7 @@ window.verificaPrenotazione = async function() {
     if (result.found && result.dati) {
       showNotification(t('notif.prenotazioneTrovata'), 'success');
       window.datiPrecompilati = true;
+      numeroPrenotazioneVerificato = String(result.dati.numeroPrenotazione || numeroPrenotazione).trim();
       currentStep = 1;
       mostraStepCorrente();
       // precompilaDatiPrenotazione va chiamata dopo mostraStepCorrente(),
@@ -450,6 +454,7 @@ window.verificaPrenotazione = async function() {
 // Funzione per saltare la verifica
 window.saltaVerifica = function() {
   window.datiPrecompilati = false;
+  numeroPrenotazioneVerificato = '';
   currentStep = 1;
   mostraStepCorrente();
   showNotification(t('notif.compilaManualmente'), 'info');
@@ -1921,6 +1926,7 @@ async function creaLinkPagamentoConSessionId(datiPrenotazione, tempSessionId) {
         isResponsabile: o.isResponsabile === true
       })),
       tempSessionId: tempSessionId,
+      numeroPrenotazione: numeroPrenotazioneVerificato || undefined,
       successUrl: `https://spaceestate.github.io/Checkin/successo-pagamento.html?session_id={CHECKOUT_SESSION_ID}&temp_session=${tempSessionId}&lang=${getLingua()}`,
       cancelUrl: `${window.location.href}?canceled=true`
     };
@@ -1970,6 +1976,21 @@ function gestisciRitornoStripe() {
       payButton.innerHTML = t('payment.payButton', { amount: calcolaTotale().toFixed(2) });
     }
   }
+}
+
+// Dall'area clienti di La Columbera il link porta "#k=<numero prenotazione>&lang=<it|en|de>": il frammento "#" non arriva a nessun server
+// e si toglie subito dall'indirizzo. La lingua è quella scelta nell'area; il numero si verifica da solo e, se la prenotazione c'è, si passa
+// direttamente ai dati del soggiorno. Se non si trova, resta il primo passo con il numero già scritto (come se l'ospite l'avesse digitato).
+function daAreaClienti() {
+  if (!window.location.hash) return;
+  const h = new URLSearchParams(window.location.hash.slice(1));
+  const codice = (h.get('k') || '').trim().toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 40), lingua = (h.get('lang') || '').trim();
+  history.replaceState(null, '', window.location.pathname + window.location.search);
+  if (lingua && lingua !== getLingua()) impostaLingua(lingua);      // impostaLingua accetta solo it, en, de
+  const input = document.getElementById('numero-prenotazione');
+  if (!codice || !input) return;
+  input.value = codice;
+  verificaPrenotazione();
 }
 
 // === OTTIMIZZAZIONI MOBILE ===
@@ -2270,6 +2291,9 @@ document.addEventListener('DOMContentLoaded', function() {
   
   // Gestisci ritorno da Stripe
   gestisciRitornoStripe();
+
+  // Arrivo dall'area clienti di La Columbera: il numero di prenotazione si verifica da solo (si salta il primo passo)
+  daAreaClienti();
   
   // Limite ospiti in base all'appartamento/i selezionato/i (Torre 5 · Corte 4 · entrambi 9)
   document.querySelectorAll('.apartment-checkbox').forEach(cb => {

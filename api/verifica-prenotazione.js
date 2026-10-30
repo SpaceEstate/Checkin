@@ -45,6 +45,18 @@ function normalizzaDataISO(valore) {
   return null;
 }
 
+// Cerca la riga della prenotazione (case-insensitive, trim degli spazi); poi anche senza spazi, punti e trattini, come la scrive l'ospite:
+// Booking mostra "6877.180.932", la mail di La Columbera il codice a gruppi "558R TE56 487A9". Se così le righe sono più di una, nessuna.
+export function cercaPrenotazione(rows, numeroPrenotazione) {
+  const numeroNormalizzato = String(numeroPrenotazione).trim().toUpperCase();
+  const esatta = rows.find(row => (row.get('Numero Prenotazione') || '').toString().trim().toUpperCase() === numeroNormalizzato);
+  if (esatta) return esatta;
+  const compatto = v => String(v == null ? '' : v).trim().toUpperCase().replace(/[\s.\-_/]+/g, '');
+  const numeroCompatto = compatto(numeroPrenotazione);
+  const simili = numeroCompatto.length >= 3 ? rows.filter(row => compatto(row.get('Numero Prenotazione')) === numeroCompatto) : [];
+  return simili.length === 1 ? simili[0] : undefined;
+}
+
 export default async function handler(req, res) {
   // CORS Headers
   res.setHeader("Access-Control-Allow-Origin", "https://spaceestate.github.io");
@@ -98,13 +110,7 @@ export default async function handler(req, res) {
     const rows = await sheet.getRows();
     console.log(`📋 Righe totali nel foglio: ${rows.length}`);
 
-    // Cerca la prenotazione (case-insensitive, trim degli spazi)
-    const numeroNormalizzato = numeroPrenotazione.trim().toUpperCase();
-    
-    const prenotazioneTrovata = rows.find(row => {
-      const numeroRiga = (row.get('Numero Prenotazione') || '').toString().trim().toUpperCase();
-      return numeroRiga === numeroNormalizzato;
-    });
+    const prenotazioneTrovata = cercaPrenotazione(rows, numeroPrenotazione);
 
     if (!prenotazioneTrovata) {
       console.log('❌ Prenotazione non trovata');

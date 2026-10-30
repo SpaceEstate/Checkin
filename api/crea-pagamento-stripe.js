@@ -37,6 +37,13 @@ function calcolaTotaleServer(ospiti, numeroNotti) {
 const PREFISSI_URL_AMMESSI = ["https://spaceestate.github.io/Checkin/", "https://checkin-six-coral.vercel.app/"];
 export const urlAmmesso = u => typeof u === "string" && u.length <= 2000 && PREFISSI_URL_AMMESSI.some(p => u.startsWith(p));
 
+// Numero della prenotazione verificata nel primo passo (com'è nel foglio: lettere, cifre, al più un trattino). Non è un dato anagrafico:
+// collega il pagamento alla prenotazione, così il sito di La Columbera (stesso account Stripe) sa che il check-in è fatto. Altro = niente.
+export const numeroPrenotazioneValido = v => {
+  const n = typeof v === "string" || typeof v === "number" ? String(v).trim().toUpperCase().replace(/\s+/g, "") : "";
+  return /^[A-Z0-9][A-Z0-9-]{2,39}$/.test(n) ? n : "";
+};
+
 // `stripe` è un parametro per poterlo sostituire nei test (nessuna chiamata reale a Stripe)
 async function gestisciRichiesta(stripe, req, res) {
   res.setHeader("Access-Control-Allow-Origin", "https://spaceestate.github.io");
@@ -64,6 +71,7 @@ async function gestisciRichiesta(stripe, req, res) {
       ospiti = [],
       timestamp,
       tempSessionId, // ✅ ID sessione temporanea per recuperare documenti
+      numeroPrenotazione, // solo se l'ospite ha verificato la prenotazione nel primo passo
       lingua, // Lingua scelta dall'ospite nel form (it/en/de): guida la lingua
               // della pagina di pagamento Stripe e, più avanti, dell'email di
               // benvenuto. Non tocca il TXT Alloggiati né l'email al gestore.
@@ -117,7 +125,9 @@ async function gestisciRichiesta(stripe, req, res) {
     // (adeguamento GDPR). NON si inviano a Stripe nome, cognome, sesso, data/luogo di nascita, cittadinanza né estremi
     // del documento: prima finivano qui (resp_*) e restavano nei metadati della sessione Stripe. I dati degli ospiti
     // restano solo nei dati temporanei collegati da temp_session_id, cancellati dopo l'elaborazione (_elabora-checkin.js).
+    const numero = numeroPrenotazioneValido(numeroPrenotazione);
     const metadata = {
+      numeroPrenotazione: numero,
       dataCheckin,
       appartamento: appartamento.substring(0, 490), // Max 490 per sicurezza
       numeroOspiti: numeroOspiti.toString(),
@@ -151,10 +161,10 @@ async function gestisciRichiesta(stripe, req, res) {
       
       payment_intent_data: {
         description: `Tassa soggiorno - ${appartamento.substring(0, 100)}`,
-        metadata: {
+        metadata: Object.assign({
           dataCheckin: dataCheckin,
           appartamento: appartamento.substring(0, 490)
-        }
+        }, numero ? { numeroPrenotazione: numero } : {})
       },
       
       allow_promotion_codes: false,
