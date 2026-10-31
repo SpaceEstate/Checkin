@@ -172,7 +172,9 @@ function nomeAppartamentoEmail(valoreOriginale, lingua) {
   return parti.map(p => traduciSingolo(p.trim())).join(' + ');
 }
 
-export default async function handler(req, res) {
+// deps.creaTrasporto: trasporto email iniettabile nelle prove (come gli altri endpoint con makeHandler); in produzione Gmail.
+export function makeHandler(deps = {}) {
+  return async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "https://spaceestate.github.io");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Internal-Secret");
@@ -233,7 +235,7 @@ export default async function handler(req, res) {
     const allegati = await caricaAllegatiFoto();
     console.log(`📎 Foto caricate: ${allegati.length}`);
 
-    await inviaEmailConNodemailer(emailOspite, datiPrenotazione, htmlContent, allegati, lingua);
+    await inviaEmailConNodemailer(emailOspite, datiPrenotazione, htmlContent, allegati, lingua, deps.creaTrasporto);
 
     console.log('✅ Email ospite inviata con successo');
     console.log('📧 === FINE INVIO EMAIL OSPITE ===');
@@ -255,7 +257,10 @@ export default async function handler(req, res) {
       message: error.message
     });
   }
+  };
 }
+
+export default makeHandler();
 
 // ✅ FIX: nomi file corretti (con prefisso numerico)
 async function caricaAllegatiFoto() {
@@ -663,8 +668,8 @@ function generaHTMLEmailOspite(dati, codiciCassetta, lingua) {
   `;
 }
 
-async function inviaEmailConNodemailer(emailDestinatario, dati, htmlContent, allegati, lingua) {
-  const transporter = nodemailer.createTransport({
+async function inviaEmailConNodemailer(emailDestinatario, dati, htmlContent, allegati, lingua, creaTrasporto) {
+  const transporter = creaTrasporto ? creaTrasporto() : nodemailer.createTransport({
     service: 'gmail',
     auth: {
       user: process.env.EMAIL_USER,
