@@ -1,0 +1,57 @@
+# Prove automatiche: a ogni push e a ogni pull request esegue tutte le prove (vedi CLAUDE.md, «Come verificare»), senza saltarne nessuna:
+#  - PostgreSQL DI PROVA creato qui, con SSL come Neon (api/_db.js si collega solo con SSL): mai il database di produzione;
+#  - confronto del tracciato Alloggiati con il modulo originale del sito (repository pubblico SpaceEstate/LaColumbera).
+# Nessuna variabile segreta e nessun servizio reale (Stripe, Google, email sono finti). Non tocca il sito, GitHub Pages né Vercel.
+name: Prove
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sito La Columbera (solo per il confronto del modulo Alloggiati)
+        uses: actions/checkout@v4
+        with:
+          repository: SpaceEstate/LaColumbera
+          path: _lacolumbera
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: PostgreSQL di prova con SSL
+        run: |
+          sudo systemctl start postgresql.service
+          DATI=$(sudo -u postgres psql -tAc "SHOW data_directory")
+          sudo openssl req -new -x509 -days 2 -nodes -subj "/CN=localhost" -keyout "$DATI/prova.key" -out "$DATI/prova.crt"
+          sudo chown postgres:postgres "$DATI/prova.key" "$DATI/prova.crt"
+          sudo chmod 600 "$DATI/prova.key"
+          sudo -u postgres psql -c "ALTER SYSTEM SET ssl = on" -c "ALTER SYSTEM SET ssl_cert_file = '$DATI/prova.crt'" -c "ALTER SYSTEM SET ssl_key_file = '$DATI/prova.key'"
+          sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'postgres'"
+          sudo systemctl restart postgresql.service
+          sudo -u postgres psql -c "CREATE DATABASE checkin_test"
+          test "$(sudo -u postgres psql -tAc 'SHOW ssl')" = "on"
+
+      - name: Librerie (versioni di api/package-lock.json)
+        working-directory: api
+        run: npm ci --no-audit --no-fund
+
+      - name: Prove
+        working-directory: api
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/checkin_test
+          LACOLUMBERA_DIR: ${{ github.workspace }}/_lacolumbera
+        run: |
+          set -o pipefail
+          npm test | tee /tmp/prove.txt
+          # qui ogni prova deve girare: una prova saltata vuol dire che manca il database o il confronto
+          grep -q "^# skipped 0$" /tmp/prove.txt || { echo "::error::alcune prove sono state saltate"; exit 1; }

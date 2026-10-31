@@ -57,6 +57,8 @@ Una modifica a uno di questi punti va verificata anche nel repository LaColumber
 
 ## Come verificare (nessuna rete, nessun servizio reale)
 
+Le stesse prove partono da sole su GitHub a ogni push e a ogni pull request (`.github/workflows/prove.yml`, scheda «Actions»): una spunta rossa vuol dire che qualcosa si è rotto e va sistemato prima di unire o pubblicare.
+
 Per non lasciare `api/node_modules` nel repository, le prove si eseguono su una copia:
 
 ```bash
