@@ -4,6 +4,7 @@
 import nodemailer from 'nodemailer';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
+import { chiaveUguale } from './_admin-auth.js';
 
 // Stesso criterio usato in stripeWebhook.js: mascherare l'indirizzo nei log
 // mantenendo visibile solo il dominio.
@@ -198,7 +199,7 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "Configurazione server incompleta" });
   }
 
-  if (secretRicevuto !== secretAtteso) {
+  if (!chiaveUguale(secretRicevuto, secretAtteso)) {
     console.warn('⚠️ Tentativo di invio email senza secret valido, apartamento:', req.body?.datiPrenotazione?.appartamento);
     return res.status(401).json({ error: "Non autorizzato" });
   }

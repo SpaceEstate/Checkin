@@ -13,6 +13,7 @@ import { makeHandler as makeSalva } from '../api/salva-dati-temporanei.js';
 import { makeHandler as makeVerifica } from '../api/verifica-dati-alloggiati.js';
 import { makeHandler as makeAdmin } from '../api/admin-alloggiati.js';
 import { makeHandler as makeVerificaNumero, LIMITE_FALLITI } from '../api/verifica-prenotazione.js';
+import { chiaveUguale, adminAutorizzato } from '../api/_admin-auth.js';
 import { checkinIdDa } from '../api/_elabora-checkin.js';
 import { makeDrive } from '../api/_drive.js';
 import { requireApi, memStore, fintoRes, fintoReq, checkinFamiglia, caricaTabelleOk, caricaTabelleKo, catturaLog, contieneSensibili, fintoJpeg, fintoPdf, dataUri, NOW, fintaDriveApi, ENV_DRIVE } from './helpers.mjs';
@@ -249,6 +250,34 @@ test('verifica del numero: niente numero né dati nei log, niente dettagli inter
   // richieste non valide: come prima
   const y = fintoRes(); await h(fintoReq('POST', {}, {}), y); assert.equal(y.statusCode, 400);
   const z = fintoRes(); await h(fintoReq('GET', null, {}), z); assert.equal(z.statusCode, 405);
+});
+
+test('endpoint di diagnosi: chiave confrontata a tempo costante, intestazione o ?key= come prima, chiave sbagliata o mancante = 401', async () => {
+  assert.equal(chiaveUguale('segreto-lungo', 'segreto-lungo'), true);
+  for (const [r, a] of [['segreto-lungo', 'segreto-lung'], ['', ''], [undefined, 'x'], ['x', undefined], ['x', '']]) assert.equal(chiaveUguale(r, a), false);
+  const env = { ADMIN_SECRET: 'chiave-admin-di-prova' };
+  assert.equal(adminAutorizzato(fintoReq('GET', null, { 'x-admin-secret': 'chiave-admin-di-prova' }), env), true);
+  assert.equal(adminAutorizzato(fintoReq('GET', null, {}, { key: 'chiave-admin-di-prova' }), env), true, '?key= continua a funzionare');
+  assert.equal(adminAutorizzato(fintoReq('GET', null, { 'x-admin-secret': 'sbagliata' }), env), false);
+  assert.equal(adminAutorizzato({ method: 'GET', headers: {} }, env), false, 'senza query: nessun errore, non autorizzato');
+  assert.equal(adminAutorizzato(fintoReq('GET', null, {}), {}), false, 'ADMIN_SECRET non impostata: mai autorizzato');
+  const prima = process.env.ADMIN_SECRET; process.env.ADMIN_SECRET = 'chiave-admin-di-prova';
+  try {
+    for (const f of ['test-email.js', 'diagnose-missing-emails.js', 'check-webhook-config.js', 'retry-email-from-stripe.js']) {
+      const h = (await import('../api/' + f)).default;
+      for (const [headers, query] of [[{}, {}], [{ 'x-admin-secret': 'sbagliata' }, {}], [{}, { key: 'sbagliata' }]]) {
+        const r = fintoRes(); await catturaLog(() => h(fintoReq('GET', null, headers, query), r));
+        assert.equal(r.statusCode, 401, f + ' ' + JSON.stringify([headers, query]));
+      }
+      const s = fs.readFileSync(path.join(root, 'api', f), 'utf8');
+      assert.ok(s.includes('adminAutorizzato(req)') && !/!==\s*process\.env\.ADMIN_SECRET/.test(s), f + ': confronto a tempo costante');
+    }
+  } finally { if (prima === undefined) delete process.env.ADMIN_SECRET; else process.env.ADMIN_SECRET = prima; }
+  // la diagnosi non usa più il GET dei dati temporanei (tolto per la privacy): legge il registro tecnico
+  const d = fs.readFileSync(path.join(root, 'api', 'diagnose-missing-emails.js'), 'utf8');
+  assert.ok(!/salva-dati-temporanei\?sessionId/.test(d) && d.includes('pgStore.leggiRegistro('));
+  // la chiave interna di invia-email-ospite: stesso confronto
+  assert.ok(fs.readFileSync(path.join(root, 'api', 'invia-email-ospite.js'), 'utf8').includes('chiaveUguale(secretRicevuto, secretAtteso)'));
 });
 
 test('Vercel Hobby: al massimo 12 funzioni nella cartella api/ (file senza "_")', () => {

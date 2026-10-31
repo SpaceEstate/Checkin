@@ -2,6 +2,9 @@
 // Analizza perché le email non vengono inviate dopo il pagamento
 
 import Stripe from 'stripe';
+import { adminAutorizzato } from './_admin-auth.js';
+import { pgStore } from './_db.js';
+import { checkinIdDa } from './_elabora-checkin.js';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -27,10 +30,7 @@ export default async function handler(req, res) {
     console.error('❌ ADMIN_SECRET non configurato sul server');
     return res.status(500).json({ error: 'Configurazione server incompleta' });
   }
-
-  const providedSecret = req.headers['x-admin-secret'] || req.query.key;
-
-  if (providedSecret !== process.env.ADMIN_SECRET) {
+  if (!adminAutorizzato(req)) {
     console.warn('🚫 Tentativo di accesso non autorizzato a diagnose-missing-emails');
     return res.status(401).json({ error: 'Non autorizzato' });
   }
@@ -160,42 +160,28 @@ export default async function handler(req, res) {
       diagnosis.possibleIssues.push('EMAIL_PROPRIETARIO non configurata');
     }
 
-    // 4. Test recupero dati da PostgreSQL (per ultimo pagamento)
-    if (diagnosis.recentPayments.length > 0) {
-      const lastPayment = diagnosis.recentPayments[0];
-      
-      if (lastPayment.tempSessionId) {
-        console.log('\n\n💾 Test recupero dati da PostgreSQL...\n');
-        
-        try {
-          const baseUrl = process.env.VERCEL_URL
-            ? `https://${process.env.VERCEL_URL}`
-            : 'https://checkin-six-coral.vercel.app';
-
-          const pgResponse = await fetch(
-            `${baseUrl}/api/salva-dati-temporanei?sessionId=${lastPayment.tempSessionId}`,
-            {
-              method: 'GET',
-              headers: {
-                'Accept': 'application/json',
-                'x-internal-secret': process.env.INTERNAL_API_SECRET
-              }
-            }
-          );
-
-          if (pgResponse.ok) {
-            const pgData = await pgResponse.json();
-            console.log('   ✅ Dati recuperabili da PostgreSQL');
-            console.log(`   Ospiti: ${pgData.datiPrenotazione?.ospiti?.length || 0}`);
-            console.log(`   Documenti: ${pgData.datiPrenotazione?.documenti?.length || 0}`);
-          } else {
-            console.log(`   ❌ Impossibile recuperare dati (HTTP ${pgResponse.status})`);
-            diagnosis.possibleIssues.push('Dati non disponibili in PostgreSQL');
-          }
-        } catch (pgError) {
-          console.error('   ❌ Errore recupero PostgreSQL:', pgError.message);
-          diagnosis.possibleIssues.push(`Errore PostgreSQL: ${pgError.message}`);
+    // 4. Stato dell'ultimo check-in pagato nel registro tecnico: dice se foglio ed email sono andati a buon fine.
+    // Prima qui si rileggevano i dati temporanei con un GET di salva-dati-temporanei, tolto per la privacy: la prova falliva sempre
+    // e segnalava un problema inesistente. Il registro non contiene dati anagrafici; i dati temporanei, invece, si cancellano
+    // apposta appena tutto è riuscito, quindi la loro assenza non è un problema.
+    const ultimoCheckin = diagnosis.recentPayments.find(p => p.dataCheckin);
+    if (ultimoCheckin) {
+      console.log('\n\n💾 Stato nel registro tecnico (ultimo check-in pagato)...\n');
+      try {
+        const reg = await pgStore.leggiRegistro(checkinIdDa(ultimoCheckin.sessionId));
+        if (!reg) {
+          console.log('   ❌ Nessun registro: il pagamento non è ancora stato elaborato');
+          diagnosis.possibleIssues.push('Ultimo check-in pagato non ancora elaborato (nessun registro): controlla il webhook o usa retry-email-from-stripe');
+        } else {
+          const stato = { foglio: reg.sheet_stato, emailOspite: reg.email_ospite_stato, emailGestore: reg.email_gestore_stato, txt: reg.txt_stato };
+          ultimoCheckin.registro = stato;
+          console.log(`   Foglio: ${stato.foglio} · Email ospite: ${stato.emailOspite} · Email gestore: ${stato.emailGestore}`);
+          if (stato.emailOspite !== 'inviata') diagnosis.possibleIssues.push(`Email all'ospite non inviata (stato nel registro: ${stato.emailOspite})`);
+          if (stato.emailGestore !== 'inviata') diagnosis.possibleIssues.push(`Email al gestore non inviata (stato nel registro: ${stato.emailGestore})`);
         }
+      } catch (dbError) {
+        console.error('   ❌ Registro non leggibile:', dbError && (dbError.code || dbError.name) || 'errore');
+        diagnosis.possibleIssues.push('Registro tecnico non leggibile (database)');
       }
     }
 

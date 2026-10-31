@@ -12,6 +12,7 @@
 import Stripe from 'stripe';
 import { elaboraCheckin } from './_elabora-checkin.js';
 import { dipendenzeProduzione } from './stripeWebhook.js';
+import { adminAutorizzato } from './_admin-auth.js';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -26,8 +27,7 @@ export default async function handler(req, res) {
     console.error('❌ ADMIN_SECRET non configurato sul server');
     return res.status(500).json({ error: 'Configurazione server incompleta' });
   }
-  const providedSecret = req.headers['x-admin-secret'] || req.query.key;
-  if (providedSecret !== process.env.ADMIN_SECRET) {
+  if (!adminAutorizzato(req)) {
     console.warn('🚫 Tentativo di accesso non autorizzato a retry-email-from-stripe');
     return res.status(401).json({ error: 'Non autorizzato' });
   }

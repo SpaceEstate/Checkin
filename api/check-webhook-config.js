@@ -2,6 +2,7 @@
 // Verifica configurazione webhook Stripe
 
 import Stripe from 'stripe';
+import { adminAutorizzato } from './_admin-auth.js';
 
 export default async function handler(req, res) {
   console.log('🔍 Verifica configurazione webhook Stripe');
@@ -21,10 +22,7 @@ export default async function handler(req, res) {
     console.error('❌ ADMIN_SECRET non configurato sul server');
     return res.status(500).json({ error: 'Configurazione server incompleta' });
   }
-
-  const providedSecret = req.headers['x-admin-secret'] || req.query.key;
-
-  if (providedSecret !== process.env.ADMIN_SECRET) {
+  if (!adminAutorizzato(req)) {
     console.warn('🚫 Tentativo di accesso non autorizzato a check-webhook-config');
     return res.status(401).json({ error: 'Non autorizzato' });
   }

@@ -3,6 +3,7 @@
 // (endpoint amministrativo: invia email VERE agli indirizzi configurati, con dati e immagine sintetici)
 import zlib from 'zlib';
 import { inviaImmaginiAlGestore } from './_email-gestore.js';
+import { adminAutorizzato } from './_admin-auth.js';
 
 // PNG 32x32 grigio, generato al volo: immagine sintetica per i test (nessun documento reale).
 function immagineSinteticaPng() {
@@ -33,10 +34,7 @@ export default async function handler(req, res) {
     console.error('❌ ADMIN_SECRET non configurato sul server');
     return res.status(500).json({ error: 'Configurazione server incompleta' });
   }
-
-  const providedSecret = req.headers['x-admin-secret'] || req.query.key;
-
-  if (providedSecret !== process.env.ADMIN_SECRET) {
+  if (!adminAutorizzato(req)) {
     console.warn('🚫 Tentativo di accesso non autorizzato a test-email');
     return res.status(401).json({ error: 'Non autorizzato' });
   }
