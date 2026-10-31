@@ -1949,7 +1949,14 @@ async function creaLinkPagamentoConSessionId(datiPrenotazione, tempSessionId) {
 
     const result = await response.json();
     if (result.clientSecret && result.publishableKey) {
-      await mostraPagamentoNellaPagina(result, tempSessionId);
+      // se i campi della carta non si caricano nella pagina, si paga sulla pagina di Stripe (stessi dati salvati, stesso importo)
+      const paginaStripe = async () => {
+        const r2 = await fetch(API_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, body: JSON.stringify(Object.assign({}, datiConMetadata, { ui: undefined })) });
+        const j2 = r2.ok ? await r2.json() : null;
+        if (!j2 || !j2.checkoutUrl) throw new Error('pagina Stripe non disponibile');
+        window.location.href = j2.checkoutUrl;
+      };
+      await mostraPagamentoNellaPagina(result, tempSessionId, paginaStripe);
       return;
     }
     if (!result.checkoutUrl) {
@@ -2011,7 +2018,7 @@ function chiudiPagamentoNellaPagina(messaggio) {
   if (messaggio) showNotification(messaggio, 'info');
 }
 
-async function mostraPagamentoNellaPagina(result, tempSessionId) {
+async function mostraPagamentoNellaPagina(result, tempSessionId, paginaStripe) {
   const importo = (typeof result.totale === 'number' ? result.totale : calcolaTotale()).toFixed(2);
   const panel = document.getElementById('pay-panel'), btn = document.getElementById('btn-paga-ora'), err = document.getElementById('pay-err');
   document.getElementById('pay-amount').textContent = '€' + importo;
@@ -2043,8 +2050,16 @@ async function mostraPagamentoNellaPagina(result, tempSessionId) {
     document.getElementById('pay-load').hidden = true;
     btn.disabled = false;
   } catch (e) {
+    // Di solito: chiave pubblicabile di un altro account Stripe (o di prova con la segreta reale), Stripe.js bloccato dal browser o dalla rete.
+    // L'ospite non resta bloccato: si passa alla pagina di Stripe con gli stessi dati.
     console.error('Stripe nella pagina:', e && e.message);
-    if (pagamentoNellaPagina === stato) chiudiPagamentoNellaPagina(t('pay.erroreCarica'));
+    if (pagamentoNellaPagina !== stato) return;
+    if (paginaStripe) {
+      document.getElementById('pay-load').hidden = true;
+      err.textContent = t('pay.versoStripe');
+      try { await paginaStripe(); return; } catch (e2) { console.error('pagina Stripe:', e2 && e2.message); }
+    }
+    chiudiPagamentoNellaPagina(t('pay.erroreCarica'));
     return;
   }
 
