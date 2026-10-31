@@ -96,6 +96,7 @@ In questo documento le **prescrizioni normative** (quanto sopra) sono tenute sep
 | Date di nascita (senza nomi) | Richiesta a `crea-pagamento-stripe` (non salvate su Stripe) | Il server ricalcola la tassa (età ≥ 4 anni) | |
 | Registro tecnico: `checkin_id` (hash della sessione Stripe), id della sessione Stripe, `temp_session_id`, data di arrivo, stati, nome e ID del file su Drive, hash del TXT, codici di errore (senza valori) | Neon `checkin_adempimenti` | Idempotenza, promemoria di cancellazione, diagnosi | Nessun dato anagrafico in chiaro. Gli identificativi sono pseudonimi |
 | Tabelle ufficiali Alloggiati (Luoghi, Tipi_Documento, Tipi_Alloggiato) | Neon `alloggiati_tabelle` + memoria | Codici del tracciato | Dati pubblici di riferimento |
+| Contatore dei tentativi falliti di verifica del numero di prenotazione: hash troncato dell'IP (`sha256('ip|'+ip)`, 24 caratteri), numero di tentativi, scadenza | Neon `limiti_tentativi` | Protezione da chi prova numeri a raffica (10 tentativi falliti ogni 15 minuti per IP, come sul sito) | Nessun IP in chiaro, nessun numero di prenotazione. Il numero cercato e i dati trovati non vanno più nei log |
 
 **Servizi esterni coinvolti** (da verificare ai fini dell'art. 28 e dell'informativa: § 10). Vercel (funzioni e log), Neon (database), Stripe, Google (Drive, Gmail SMTP e Sheets in sola lettura per le prenotazioni), GitHub Pages (hosting del modulo), servizio Alloggiati Web (solo lettura delle tabelle, se configurato), Google Fonts (caricato da `index.html`: trasferisce a Google l'indirizzo IP del visitatore; non toccato in questo intervento). **Browserless non è più usato.**
 
@@ -112,6 +113,7 @@ In questo documento le **prescrizioni normative** (quanto sopra) sono tenute sep
 | TXT su Google Drive | **Nessuna cancellazione automatica.** Resta finché il gestore non lo elimina con la procedura del § 8, dopo aver verificato la ricevuta | Azione `elimina-txt` |
 | Email al gestore con le immagini | **Fuori dal controllo del sistema.** Restano nella casella del gestore, in "Posta inviata" della casella mittente, nel cestino ed eventuali backup finché il gestore non le elimina | Promemoria nel corpo dell'email (§ 8) |
 | Tabelle ufficiali | 24 h (fonte servizio) oppure fino alla sostituzione (fonte manuale) | |
+| Contatore dei tentativi falliti (`limiti_tentativi`) | **15 minuti** dal primo tentativo fallito; la riga scaduta si cancella con la pulizia giornaliera | `verifica-prenotazione.js`, `_db.js` (`pulisciScaduti`) |
 | Metadati Stripe | Secondo le regole di Stripe (non verificabile dal codice). Ora senza dati anagrafici | |
 | Log di Vercel | Secondo il piano Vercel (non verificabile dal codice). I nuovi log non contengono dati anagrafici, base64, numeri di documento, contenuti del TXT né oggetti completi di sessione o prenotazione | |
 

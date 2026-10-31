@@ -49,6 +49,32 @@ test('store PostgreSQL: dati temporanei, registro, lease, pulizia, tabelle', { s
   assert.equal(await pgStore.eliminaDatiTemporanei(id), 1);
 });
 
+test('store PostgreSQL: contatore dei tentativi falliti (verifica del numero), finestra e pulizia', { skip: salta }, async () => {
+  process.env.DATABASE_URL = URL_TEST;
+  const { pgStore, getPostgresClient } = await import('../api/_db.js');
+  const sql = getPostgresClient();
+  const k = 'verifica:dbtest' + Date.now();
+  assert.equal(await pgStore.tentativiFalliti(k), 0);
+  assert.equal(await pgStore.registraTentativoFallito(k, 15 * 60e3), 1);
+  assert.equal(await pgStore.registraTentativoFallito(k, 15 * 60e3), 2);
+  assert.equal(await pgStore.registraTentativoFallito(k, 15 * 60e3), 3);
+  assert.equal(await pgStore.tentativiFalliti(k), 3);
+  // finestra scaduta: il contatore non conta più e riparte da 1
+  await sql`UPDATE limiti_tentativi SET scade_at = NOW() - interval '1 minute' WHERE chiave = ${k}`;
+  assert.equal(await pgStore.tentativiFalliti(k), 0);
+  assert.equal(await pgStore.registraTentativoFallito(k, 15 * 60e3), 1);
+  // la pulizia elimina i contatori scaduti e lascia gli altri
+  const k2 = k + 'b';
+  await pgStore.registraTentativoFallito(k2, 15 * 60e3);
+  await sql`UPDATE limiti_tentativi SET scade_at = NOW() - interval '1 minute' WHERE chiave = ${k}`;
+  await pgStore.pulisciScaduti(30);
+  assert.equal((await sql`SELECT 1 FROM limiti_tentativi WHERE chiave = ${k}`).length, 0);
+  assert.equal(await pgStore.tentativiFalliti(k2), 1);
+  // solo chiave (hash), contatore e scadenza: nessun IP né numero di prenotazione
+  const col = (await sql`SELECT column_name FROM information_schema.columns WHERE table_name = 'limiti_tentativi' ORDER BY column_name`).map(r => r.column_name);
+  assert.deepEqual(col, ['chiave', 'conteggio', 'scade_at']);
+});
+
 test('flusso completo sullo store PostgreSQL (foglio ed email simulati)', { skip: salta }, async () => {
   process.env.DATABASE_URL = URL_TEST;
   const { pgStore, getPostgresClient } = await import('../api/_db.js');

@@ -1,8 +1,13 @@
 // api/verifica-prenotazione.js
 // Endpoint per verificare e recuperare dati prenotazione da Google Sheets
+//
+// Il numero di prenotazione vale come chiave dell'area clienti del sito: non va nei log (né i dati trovati), e i tentativi falliti
+// sono limitati per IP come sul sito (10 ogni 15 minuti, vedi LIMITE_FALLITI). Il contatore usa solo un hash troncato dell'IP.
 
+import crypto from 'crypto';
 import { GoogleSpreadsheet } from 'google-spreadsheet';
 import { JWT } from 'google-auth-library';
+import { pgStore } from './_db.js';
 
 // Normalizza una data (proveniente dal foglio Google Sheets, in formato
 // potenzialmente diverso) in una stringa ISO stretta "YYYY-MM-DD", come
@@ -79,133 +84,139 @@ export async function leggiRighePrenotazioni(env = process.env) {
   return doc.sheetsByIndex[0].getRows();
 }
 
-export default async function handler(req, res) {
-  // CORS Headers
-  res.setHeader("Access-Control-Allow-Origin", "https://spaceestate.github.io");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
-  }
-  
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Metodo non consentito" });
-  }
+// Tentativi falliti per IP: come sul sito di La Columbera (api/_accesso.js, failIp). Chi supera il limite riceve 429: la pagina mostra
+// «prenotazione non trovata», come per un numero sbagliato, e l'ospite può sempre proseguire con «Non ho il numero di prenotazione».
+export const LIMITE_FALLITI = { max: 10, finestraMs: 15 * 60 * 1000 };
+const ATTESA_CONTATORE_MS = 3000;      // il contatore non deve mai rallentare la verifica: oltre questo tempo si prosegue senza
 
-  console.log('🔍 === VERIFICA NUMERO PRENOTAZIONE ===');
-
-  try {
-    const { numeroPrenotazione } = req.body;
-
-    if (!numeroPrenotazione || !numeroPrenotazione.trim()) {
-      return res.status(400).json({ 
-        error: "Numero prenotazione richiesto",
-        found: false
-      });
-    }
-
-    console.log('🔑 Numero prenotazione ricercato:', numeroPrenotazione);
-
-    // Connessione a Google Sheets
-    const serviceAccountAuth = new JWT({
-      email: process.env.GOOGLE_CLIENT_EMAIL,
-      key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-      scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-    });
-
-    // IMPORTANTE: Usa lo SHEET_ID_PRENOTAZIONI (nuovo foglio prenotazioni)
-    // Crea un nuovo foglio Google Sheets con colonne:
-    // A: Numero Prenotazione | B: Data Check-in | C: Appartamento | D: Numero Ospiti | E: Numero Notti
-    const SHEET_ID_PRENOTAZIONI = process.env.SHEET_ID_PRENOTAZIONI || process.env.SHEET_ID;
-    
-    const doc = new GoogleSpreadsheet(SHEET_ID_PRENOTAZIONI, serviceAccountAuth);
-    await doc.loadInfo();
-    
-    console.log('📊 Google Sheet caricato:', doc.title);
-    
-    // Cerca nel primo foglio (o specifica il nome del foglio)
-    const sheet = doc.sheetsByIndex[0];
-    console.log('📄 Foglio:', sheet.title);
-    
-    // Carica tutte le righe
-    const rows = await sheet.getRows();
-    console.log(`📋 Righe totali nel foglio: ${rows.length}`);
-
-    const prenotazioneTrovata = cercaPrenotazione(rows, numeroPrenotazione);
-
-    if (!prenotazioneTrovata) {
-      console.log('❌ Prenotazione non trovata');
-      return res.status(404).json({
-        found: false,
-        message: "Numero prenotazione non trovato"
-      });
-    }
-
-    console.log('✅ Prenotazione trovata!');
-
-    // Estrai i dati
-    const datiPrenotazione = {
-      numeroPrenotazione: prenotazioneTrovata.get('Numero Prenotazione'),
-      dataCheckin: prenotazioneTrovata.get('Data Check-in'),
-      appartamento: prenotazioneTrovata.get('Appartamento'),
-      numeroOspiti: parseInt(prenotazioneTrovata.get('Numero Ospiti')) || 0,
-      numeroNotti: parseInt(prenotazioneTrovata.get('Numero Notti')) || 0,
-      // Tipo gruppo rimane vuoto - compilato dall'utente
-      tipoGruppo: null
-    };
-
-    console.log('📦 Dati estratti:', datiPrenotazione);
-
-    // Validazione dati minimi
-    if (!datiPrenotazione.dataCheckin || !datiPrenotazione.appartamento) {
-      console.warn('⚠️ Dati prenotazione incompleti');
-      return res.status(400).json({
-        found: false,
-        error: "Dati prenotazione incompleti nel sistema"
-      });
-    }
-
-    // Converti data in formato ISO (YYYY-MM-DD), qualunque sia il formato
-    // in cui è salvata nel foglio.
-    //
-    // BUG STORICO: il vecchio codice assumeva SEMPRE un formato giorno-primo
-    // (GG/MM/AAAA) e prendeva l'ultimo pezzo come anno. Ma le prenotazioni
-    // create dal sito stesso (dopo pagamento Stripe, vedi stripeWebhook.js)
-    // salvano la data già in formato ISO AAAA-MM-GG. Per una data tipo
-    // "2026-09-22", quel codice produceva "22-09-2026": non valido per un
-    // <input type="date"> (che richiede rigorosamente AAAA-MM-GG). Il campo
-    // risultava quindi vuoto e, siccome veniva comunque bloccato in sola
-    // lettura, anche il selettore calendario del browser restava disabilitato.
-    const dataISO = normalizzaDataISO(datiPrenotazione.dataCheckin);
-
-    if (!dataISO) {
-      console.warn('⚠️ Data check-in non riconosciuta:', datiPrenotazione.dataCheckin);
-      return res.status(400).json({
-        found: false,
-        error: "Data check-in non valida nel sistema",
-        message: `Formato data non riconosciuto: "${datiPrenotazione.dataCheckin}"`
-      });
-    }
-
-    datiPrenotazione.dataCheckin = dataISO;
-
-    console.log('✅ Dati validati e pronti');
-
-    return res.status(200).json({
-      found: true,
-      dati: datiPrenotazione,
-      message: "Prenotazione trovata con successo"
-    });
-
-  } catch (error) {
-    console.error('❌ Errore verifica prenotazione:', error);
-    console.error('Stack:', error.stack);
-    
-    return res.status(500).json({
-      found: false,
-      error: "Errore interno del server",
-      message: error.message
-    });
-  }
+// Chiave del contatore: hash troncato dell'IP (l'IP in chiaro non si salva). Stesso criterio del sito.
+export function chiaveIp(req) {
+  const h = (req && req.headers) || {};
+  const ip = String(h['x-real-ip'] || String(h['x-forwarded-for'] || '').split(',')[0] || (req && req.socket && req.socket.remoteAddress) || 'sconosciuto').trim();
+  return 'verifica:' + crypto.createHash('sha256').update('ip|' + ip).digest('hex').slice(0, 24);
 }
+
+// Esegue p con un tempo massimo; se non risponde o fallisce restituisce `riserva` (il contatore non blocca mai la verifica).
+async function entro(p, ms, riserva) {
+  let timer;
+  try { return await Promise.race([Promise.resolve().then(() => p()), new Promise(ok => { timer = setTimeout(() => ok(riserva), ms); })]); }
+  catch (e) { console.warn('verifica-prenotazione: contatore non disponibile (' + (e && (e.code || e.name) || 'errore') + ')'); return riserva; }
+  finally { clearTimeout(timer); }
+}
+
+// deps: leggiRighe (foglio Prenotazioni), store (contatore dei tentativi: tentativiFalliti, registraTentativoFallito), env, attesaMs (solo test)
+export function makeHandler(deps = {}) {
+  const leggiRighe = deps.leggiRighe || (() => leggiRighePrenotazioni(deps.env || process.env));
+  const store = deps.store || null, attesa = deps.attesaMs || ATTESA_CONTATORE_MS;
+  return async function handler(req, res) {
+    // CORS Headers
+    res.setHeader("Access-Control-Allow-Origin", "https://spaceestate.github.io");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+    if (req.method === "OPTIONS") {
+      return res.status(200).end();
+    }
+
+    if (req.method !== "POST") {
+      return res.status(405).json({ error: "Metodo non consentito" });
+    }
+
+    try {
+      const { numeroPrenotazione } = req.body || {};
+
+      if (!numeroPrenotazione || !String(numeroPrenotazione).trim()) {
+        return res.status(400).json({
+          error: "Numero prenotazione richiesto",
+          found: false
+        });
+      }
+
+      // Il foglio si legge mentre si controlla il contatore: la verifica non diventa più lenta.
+      const chiave = chiaveIp(req);
+      const [falliti, rows] = await Promise.all([
+        store ? entro(() => store.tentativiFalliti(chiave), attesa, 0) : 0,
+        leggiRighe()
+      ]);
+      if (falliti >= LIMITE_FALLITI.max) {
+        console.warn('verifica-prenotazione: troppi tentativi falliti da questo indirizzo');
+        res.setHeader("Retry-After", String(Math.ceil(LIMITE_FALLITI.finestraMs / 1000)));
+        return res.status(429).json({ found: false, error: "Troppi tentativi", message: "Troppi tentativi: riprova più tardi" });
+      }
+
+      const prenotazioneTrovata = cercaPrenotazione(rows, numeroPrenotazione);
+
+      if (!prenotazioneTrovata) {
+        if (store) await entro(() => store.registraTentativoFallito(chiave, LIMITE_FALLITI.finestraMs), attesa, null);
+        console.log('verifica-prenotazione: non trovata');
+        return res.status(404).json({
+          found: false,
+          message: "Numero prenotazione non trovato"
+        });
+      }
+
+      // Estrai i dati
+      const datiPrenotazione = {
+        numeroPrenotazione: prenotazioneTrovata.get('Numero Prenotazione'),
+        dataCheckin: prenotazioneTrovata.get('Data Check-in'),
+        appartamento: prenotazioneTrovata.get('Appartamento'),
+        numeroOspiti: parseInt(prenotazioneTrovata.get('Numero Ospiti')) || 0,
+        numeroNotti: parseInt(prenotazioneTrovata.get('Numero Notti')) || 0,
+        // Tipo gruppo rimane vuoto - compilato dall'utente
+        tipoGruppo: null
+      };
+
+      // Validazione dati minimi
+      if (!datiPrenotazione.dataCheckin || !datiPrenotazione.appartamento) {
+        console.warn('verifica-prenotazione: dati della prenotazione incompleti nel foglio');
+        return res.status(400).json({
+          found: false,
+          error: "Dati prenotazione incompleti nel sistema"
+        });
+      }
+
+      // Converti data in formato ISO (YYYY-MM-DD), qualunque sia il formato
+      // in cui è salvata nel foglio.
+      //
+      // BUG STORICO: il vecchio codice assumeva SEMPRE un formato giorno-primo
+      // (GG/MM/AAAA) e prendeva l'ultimo pezzo come anno. Ma le prenotazioni
+      // create dal sito stesso (dopo pagamento Stripe, vedi stripeWebhook.js)
+      // salvano la data già in formato ISO AAAA-MM-GG. Per una data tipo
+      // "2026-09-22", quel codice produceva "22-09-2026": non valido per un
+      // <input type="date"> (che richiede rigorosamente AAAA-MM-GG). Il campo
+      // risultava quindi vuoto e, siccome veniva comunque bloccato in sola
+      // lettura, anche il selettore calendario del browser restava disabilitato.
+      const dataISO = normalizzaDataISO(datiPrenotazione.dataCheckin);
+
+      if (!dataISO) {
+        console.warn('verifica-prenotazione: data di arrivo non riconosciuta nel foglio');
+        return res.status(400).json({
+          found: false,
+          error: "Data check-in non valida nel sistema",
+          message: `Formato data non riconosciuto: "${datiPrenotazione.dataCheckin}"`
+        });
+      }
+
+      datiPrenotazione.dataCheckin = dataISO;
+
+      console.log('verifica-prenotazione: trovata');
+
+      return res.status(200).json({
+        found: true,
+        dati: datiPrenotazione,
+        message: "Prenotazione trovata con successo"
+      });
+
+    } catch (error) {
+      // Solo il tipo di errore: niente messaggi interni nei log o nella risposta (come gli altri endpoint del check-in)
+      console.error('verifica-prenotazione: errore ' + (error && (error.code || error.name) || 'interno'));
+
+      return res.status(500).json({
+        found: false,
+        error: "Errore interno del server"
+      });
+    }
+  };
+}
+
+export default makeHandler({ store: pgStore });

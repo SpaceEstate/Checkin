@@ -12,6 +12,7 @@ import { makeHandler as makeSessione } from '../api/get-session.js';
 import { makeHandler as makeSalva } from '../api/salva-dati-temporanei.js';
 import { makeHandler as makeVerifica } from '../api/verifica-dati-alloggiati.js';
 import { makeHandler as makeAdmin } from '../api/admin-alloggiati.js';
+import { makeHandler as makeVerificaNumero, LIMITE_FALLITI } from '../api/verifica-prenotazione.js';
 import { checkinIdDa } from '../api/_elabora-checkin.js';
 import { makeDrive } from '../api/_drive.js';
 import { requireApi, memStore, fintoRes, fintoReq, checkinFamiglia, caricaTabelleOk, caricaTabelleKo, catturaLog, contieneSensibili, fintoJpeg, fintoPdf, dataUri, NOW, fintaDriveApi, ENV_DRIVE } from './helpers.mjs';
@@ -209,6 +210,45 @@ test('pulizia programmata: CRON_SECRET rispettata, scaduti eliminati, registri c
   assert.equal(r.statusCode, 200);
   assert.equal(store.sessioni.size, 0);
   assert.deepEqual([...store.registri.keys()], ['ckbbbbbbbbbbbbbbbb'], 'il registro di un TXT non ancora eliminato da Drive resta come promemoria');
+});
+
+test('verifica del numero: niente numero né dati nei log, niente dettagli interni, tentativi falliti limitati per IP', async () => {
+  const riga = v => ({ get: k => v[k] });
+  const righe = [riga({ 'Numero Prenotazione': '6877180932', 'Data Check-in': '2026-11-05', 'Appartamento': 'La Columbera - Torre', 'Numero Ospiti': '3', 'Numero Notti': '2' })];
+  const store = memStore();
+  const h = makeVerificaNumero({ leggiRighe: async () => righe, store });
+  const chiama = async (numero, ip) => { const r = fintoRes(); const { righe: log } = await catturaLog(() => h(fintoReq('POST', { numeroPrenotazione: numero }, { 'x-forwarded-for': ip || '203.0.113.7' }), r)); return { r, log: log.join('\n') }; };
+  // trovata: dati come prima (anche scritto come lo mostra Booking), nessun dato nei log
+  let { r, log } = await chiama('6877.180.932');
+  assert.equal(r.statusCode, 200);
+  assert.deepEqual(r.body.dati, { numeroPrenotazione: '6877180932', dataCheckin: '2026-11-05', appartamento: 'La Columbera - Torre', numeroOspiti: 3, numeroNotti: 2, tipoGruppo: null });
+  for (const v of ['6877180932', '6877.180.932', '2026-11-05', 'Torre']) assert.ok(!log.includes(v), 'nei log: ' + v);
+  // non trovata: 404 come prima, il numero provato non va nei log
+  ({ r, log } = await chiama('ABC999'));
+  assert.equal(r.statusCode, 404); assert.equal(r.body.found, false); assert.ok(!log.includes('ABC999'));
+  // l'IP in chiaro non si salva
+  assert.ok([...store.tentativi.keys()].every(k => /^verifica:[0-9a-f]{24}$/.test(k) && !k.includes('203.0.113.7')));
+  // dopo LIMITE_FALLITI.max tentativi falliti lo stesso IP riceve 429, anche con il numero giusto; un altro IP no
+  for (let i = 1; i < LIMITE_FALLITI.max; i++) assert.equal((await chiama('ABC' + i)).r.statusCode, 404);
+  ({ r } = await chiama('6877180932'));
+  assert.equal(r.statusCode, 429); assert.equal(r.body.found, false); assert.ok(r.headers['retry-after']);
+  assert.equal((await chiama('6877180932', '198.51.100.9')).r.statusCode, 200);
+  // le verifiche riuscite non consumano tentativi
+  const store2 = memStore(), h2 = makeVerificaNumero({ leggiRighe: async () => righe, store: store2 });
+  for (let i = 0; i < LIMITE_FALLITI.max + 5; i++) { const x = fintoRes(); await catturaLog(() => h2(fintoReq('POST', { numeroPrenotazione: '6877180932' }, {}), x)); assert.equal(x.statusCode, 200); }
+  // contatore guasto o lento: la verifica funziona lo stesso (non si blocca mai un ospite per colpa del contatore)
+  for (const guasto of [{ tentativiFalliti: async () => { throw new Error('db giù'); }, registraTentativoFallito: async () => { throw new Error('db giù'); } },
+    { tentativiFalliti: () => new Promise(() => {}), registraTentativoFallito: () => new Promise(() => {}) }]) {
+    const h3 = makeVerificaNumero({ leggiRighe: async () => righe, store: guasto, attesaMs: 50 });
+    for (const [num, atteso] of [['6877180932', 200], ['ZZZ000', 404]]) { const x = fintoRes(); await catturaLog(() => h3(fintoReq('POST', { numeroPrenotazione: num }, {}), x)); assert.equal(x.statusCode, atteso); }
+  }
+  // foglio non raggiungibile: 500 senza il messaggio interno, né nella risposta né nei log
+  const h4 = makeVerificaNumero({ leggiRighe: async () => { const e = new Error('dettaglio-interno-segreto'); e.code = 'ECONNRESET'; throw e; }, store });
+  const x = fintoRes(); const { righe: l4 } = await catturaLog(() => h4(fintoReq('POST', { numeroPrenotazione: '6877180932' }, { 'x-forwarded-for': '192.0.2.1' }), x));
+  assert.equal(x.statusCode, 500); assert.ok(!JSON.stringify(x.body).includes('dettaglio-interno-segreto')); assert.ok(!l4.join(' ').includes('dettaglio-interno-segreto'));
+  // richieste non valide: come prima
+  const y = fintoRes(); await h(fintoReq('POST', {}, {}), y); assert.equal(y.statusCode, 400);
+  const z = fintoRes(); await h(fintoReq('GET', null, {}), z); assert.equal(z.statusCode, 405);
 });
 
 test('Vercel Hobby: al massimo 12 funzioni nella cartella api/ (file senza "_")', () => {

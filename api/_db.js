@@ -9,6 +9,8 @@
 //                         salvataggio su Drive e delle email. Nessun dato anagrafico: solo identificativi tecnici,
 //                         data di arrivo, codici di errore (mai i valori inseriti dall'ospite).
 //  - alloggiati_tabelle   (nuova) copia delle tabelle ufficiali Alloggiati Web (dati pubblici di riferimento, nessun dato personale).
+//  - limiti_tentativi     (nuova) contatori dei tentativi falliti di verifica del numero di prenotazione: hash troncato dell'IP,
+//                         numero di tentativi e scadenza (15 minuti). Nessun IP in chiaro, nessun numero di prenotazione.
 //
 // Nessuna funzione di questo file scrive nei log dati personali o contenuti delle righe.
 import postgres from 'postgres';
@@ -66,6 +68,12 @@ async function initSchema(db) {
       csv_gz_b64 TEXT NOT NULL,
       aggiornata_at TIMESTAMP NOT NULL DEFAULT NOW()
     )`;
+  await db`
+    CREATE TABLE IF NOT EXISTS limiti_tentativi (
+      chiave VARCHAR(64) PRIMARY KEY,
+      conteggio INTEGER NOT NULL,
+      scade_at TIMESTAMP NOT NULL
+    )`;
 }
 
 async function db() {
@@ -118,7 +126,25 @@ export const pgStore = {
       WHERE (drive_file_id IS NULL OR drive_eliminato_at IS NOT NULL)
         AND COALESCE(drive_eliminato_at, updated_at) < NOW() - make_interval(days => ${g})
       RETURNING checkin_id`;
+    await d`DELETE FROM limiti_tentativi WHERE scade_at < NOW()`;
     return { sessioni: s.length, registri: r.length };
+  },
+  // Contatori dei tentativi falliti (verifica del numero di prenotazione). Finestra fissa: si riparte da 1 quando è scaduta.
+  async tentativiFalliti(chiave) {
+    const d = await db();
+    const r = await d`SELECT conteggio FROM limiti_tentativi WHERE chiave = ${chiave} AND scade_at > NOW()`;
+    return r.length ? r[0].conteggio : 0;
+  },
+  async registraTentativoFallito(chiave, finestraMs) {
+    const d = await db();
+    const scade = new Date(Date.now() + finestraMs);
+    const r = await d`
+      INSERT INTO limiti_tentativi (chiave, conteggio, scade_at) VALUES (${chiave}, 1, ${scade})
+      ON CONFLICT (chiave) DO UPDATE SET
+        conteggio = CASE WHEN limiti_tentativi.scade_at < NOW() THEN 1 ELSE limiti_tentativi.conteggio + 1 END,
+        scade_at = CASE WHEN limiti_tentativi.scade_at < NOW() THEN EXCLUDED.scade_at ELSE limiti_tentativi.scade_at END
+      RETURNING conteggio`;
+    return r[0].conteggio;
   },
   async ottieniOCreaRegistro({ checkinId, stripeSessionId, tempSessionId, dataArrivo }) {
     const d = await db();

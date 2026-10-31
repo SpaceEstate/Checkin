@@ -83,6 +83,9 @@ export function memStore(clock) {
     async acquisisciLease(id, ms) { const r = registri.get(id); if (r.in_corso_fino && +r.in_corso_fino > now()) return false; r.in_corso_fino = new Date(now() + ms); return true; },
     async rilasciaLease(id) { const r = registri.get(id); if (r) r.in_corso_fino = null; },
     async aggiornaRegistro(id, patch) { Object.assign(registri.get(id), JSON.parse(JSON.stringify(patch)), { updated_at: new Date(now()) }); },
+    tentativi: new Map(),
+    async tentativiFalliti(chiave) { const x = s.tentativi.get(chiave); return x && x.scade > now() ? x.n : 0; },
+    async registraTentativoFallito(chiave, ms) { const x = s.tentativi.get(chiave); if (!x || x.scade <= now()) s.tentativi.set(chiave, { n: 1, scade: now() + ms }); else x.n++; return s.tentativi.get(chiave).n; },
     async leggiTabella(nome) { return tab.get(nome) || null; },
     async salvaTabella(nome, fonte, csvGzB64) { tab.set(nome, { fonte, csvGzB64, aggiornataMs: now() }); }
   };
