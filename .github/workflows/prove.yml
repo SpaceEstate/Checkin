@@ -16,15 +16,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Sito La Columbera (solo per il confronto del modulo Alloggiati)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: SpaceEstate/LaColumbera
           path: _lacolumbera
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
 
