@@ -42,6 +42,7 @@ Un test cambiato o tolto va dichiarato e motivato nel messaggio di commit; un te
 | Elaborazione dopo il pagamento (foglio, email, nuovi tentativi) | `api/_elabora-checkin.js`, `api/_sheet-checkin.js`, `api/_email-gestore.js` | `tests/flusso.test.mjs` | – |
 | Dati temporanei, registro, pulizia (Neon PostgreSQL) | `api/_db.js`, `api/salva-dati-temporanei.js`, `api/_pulizia.js` | `tests/db.test.mjs` (con `TEST_DATABASE_URL`) | `docs/gdpr/checkin-modifiche.md` |
 | Verifica del numero di prenotazione e abbinamento (foglio Prenotazioni) | `api/verifica-prenotazione.js`, `api/crea-pagamento-stripe.js` | `tests/pagamenti.test.mjs` | `docs/pagamento.md` |
+| Email all'ospite dopo il pagamento (aspetto, indirizzi e link di Maps, codice della cassetta) | `api/invia-email-ospite.js` | `tests/email-ospite.test.mjs` | `docs/pagamento.md` |
 | Alloggiati Web (TXT e servizio) | `api/_alloggiati*.js`, `api/_checkin-alloggiati.js`, `api/admin-alloggiati.js` | `tests/alloggiati.test.mjs` | – |
 | Informativa e link | `index.html`, `successo-pagamento.html` | `tests/informativa.test.mjs` | `docs/gdpr/` |
 
@@ -70,12 +71,12 @@ Facoltativi, per non saltare nessuna prova:
 - `LACOLUMBERA_DIR=/percorso/di/LaColumbera`: confronto del tracciato Alloggiati con il modulo originale.
 - `TEST_DATABASE_URL=postgres://…`: un database PostgreSQL **di prova locale, mai quello di produzione**. `api/_db.js` si collega solo con SSL (`ssl: 'require'`), quindi il server di prova deve avere SSL attivo (basta un certificato autofirmato: `ssl=on`, `server.crt`, `server.key`).
 
-## Baseline (31/10/2026, dopo la sistemazione degli endpoint di diagnosi)
+## Baseline (31/10/2026, dopo la nuova email all'ospite)
 
 | Prova | Risultato |
 |---|---|
-| `npm test` senza variabili | 52 ok, 0 falliti, 4 saltati |
-| con `LACOLUMBERA_DIR` e `TEST_DATABASE_URL` (PostgreSQL 16 locale con SSL) | 56 ok, 0 falliti, 0 saltati |
+| `npm test` senza variabili | 60 ok, 0 falliti, 4 saltati |
+| con `LACOLUMBERA_DIR` e `TEST_DATABASE_URL` (PostgreSQL 16 locale con SSL) | 64 ok, 0 falliti, 0 saltati |
 
 Prima di questo intervento (commit `63e4da8`): 50 ok e 3 saltati; 53 ok con le variabili.
 

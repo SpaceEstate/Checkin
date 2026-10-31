@@ -29,6 +29,17 @@ I campi della carta nella pagina usano la versione delle API `2026-08-26.dahlia`
 
 Tutto il check-in (modulo e pagina di esito) usa lo stile del sito di La Columbera: fondo carta, carte bianche arrotondate, titoli in Fraunces corsivo, parola calligrafica in Pinyon Script (servito dal sito, licenza in `fonts/`), etichette bordeaux maiuscole, campi su fondo carta, pulsanti a pillola bordeaux, righe di riepilogo come il conto del sito. Le regole stanno in fondo a `checkin.css` («TEMA LA COLUMBERA») e in fondo allo stile di `successo-pagamento.html`; i nomi delle classi usate da `checkin.js` non sono cambiati.
 
+## Email all'ospite dopo il pagamento
+
+Dal 31/10/2026 l'email che l'ospite riceve dopo il check-in (`api/invia-email-ospite.js`) ha lo stesso aspetto delle email del sito di La Columbera (`api/_mail.js` di quel progetto): testata bordeaux con il logo, riga oro, riepilogo a righe, pulsante bordeaux, piè di pagina scuro con i recapiti. È costruita solo con tabelle e stili in linea, così si vede uguale in Gmail, Outlook e Apple Mail; c'è anche la versione di solo testo.
+
+- **Contenuto** come prima, in italiano, inglese o tedesco: codice della cassetta (stessa regola di prima), dettagli della prenotazione, come accedere alla struttura, orari, istruzioni e le tre foto (allegati come prima).
+- **Indirizzi**: l'ospite legge «Via Centrale, 48» e, per il parcheggio, «Via Val Gola, 22»; ognuno è un link di Google Maps, gli stessi del sito (pagina «Come trovarci» e area clienti). Se cambiano sul sito vanno cambiati anche qui (`MAPS_STRUTTURA`, `MAPS_PARCHEGGIO`): la prova li confronta con il sito quando è impostata `LACOLUMBERA_DIR`.
+- **Orari fissi**: check-in dalle 16:00 alle 00:00, check-out entro le 10:00 (`CHECKIN_OPEN_TIME`, `CHECKIN_CLOSE_TIME`, `CHECKOUT_CLOSE_TIME`): si cambiano a mano.
+- **Niente risposte**: la casella che invia (`EMAIL_USER`) serve solo per gli avvisi e non viene letta. L'email chiede di non rispondere e indica telefono ed email del titolare (`CONTATTI`); non c'è un Reply-To.
+- **Area clienti**: pulsante per entrare con il codice di prenotazione (anche Booking.com o Airbnb).
+- Oggetto, come sul sito: `Check-in completato · La Columbera Torre · 05/11/2026` (in inglese «Check-in completed», in tedesco «Check-in abgeschlossen»).
+
 ## Numero di prenotazione nel pagamento e nell'email
 
 - Il numero di prenotazione va nei metadati del pagamento Stripe (`numeroPrenotazione`): il sito di La Columbera lo legge da lì e nell'area clienti il riquadro diventa «Check-in completato».

@@ -64,3 +64,78 @@ test('email ospite: lingua dell\'ospite (it, en, de; altro = italiano)', async (
     assert.match(mail.html, new RegExp('<html lang="' + attesa + '"'), String(lingua));
   }
 });
+
+// ---------------- aspetto e contenuto (dal 31/10/2026: stesso stile delle email del sito) ----------------
+const MAPS = 'https://maps.app.goo.gl/mVBZWREejSuVEGqQ7?g_st=ic', PARK = 'https://maps.app.goo.gl/VWHWQCMWUzAvgSYM7?g_st=ic';
+
+test('email ospite: stile del sito (tabelle e stili in linea, niente blocco <style>, sfumature, emoji), sotto il limite di Gmail', async () => {
+  for (const lingua of ['it', 'en', 'de']) {
+    const { mail } = await inviaProva({ emailOspite: 'g@esempio.invalid', datiPrenotazione: dati({ lingua }) });
+    const h = mail.html;
+    assert.ok(!/<style|class=|linear-gradient|box-shadow|display:\s*flex/i.test(h), lingua + ': solo stili in linea');
+    assert.ok(!/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(h), lingua + ': niente emoji');
+    assert.ok(h.includes('role="presentation"') && h.includes('#5F222B') && h.includes('#B08D3C'), lingua + ': testata bordeaux e riga oro del sito');
+    assert.ok(Buffer.byteLength(h) < 100 * 1024, lingua + ': Gmail taglia le email oltre 102 KB');
+    assert.ok(!/Generat[ao] il|Generated on|Erstellt am/.test(h), lingua + ': niente data tecnica di generazione');
+  }
+});
+
+test('email ospite: indirizzi come oggi (Via Centrale 48, parcheggio Via Val Gola 22) con i link di Google Maps del sito', async () => {
+  const { mail } = await inviaProva({ emailOspite: 'g@esempio.invalid', datiPrenotazione: dati() });
+  for (const [via, link] of [['Via Centrale, 48', MAPS], ['Via Val Gola, 22', PARK]]) {
+    const i = mail.html.indexOf(via); assert.ok(i > 0, via);
+    assert.ok(mail.html.lastIndexOf('href="' + link + '"', i) > mail.html.lastIndexOf('</a>', i), via + ': il testo dell\'indirizzo è il link alla mappa');
+    assert.ok(mail.text.includes(via) && mail.text.includes(link), via + ': anche nella versione di solo testo');
+  }
+  // gli stessi link del sito (pagina «Come trovarci» e area clienti), se il repository del sito è disponibile
+  if (process.env.LACOLUMBERA_DIR) {
+    const area = (await import('fs')).readFileSync(path.join(process.env.LACOLUMBERA_DIR, 'js', 'area.js'), 'utf8');
+    assert.ok(area.includes("MAPS='" + MAPS + "'") && area.includes("MAPS_PARCHEGGIO='" + PARK + "'"), 'link uguali a quelli del sito');
+  }
+  assert.ok(mail.html.includes('Check-in: dalle 16:00 alle 00:00') && mail.html.includes('Check-out: entro le 10:00'), 'orari fissi');
+});
+
+test('email ospite: recapiti e niente risposte alla casella degli avvisi; area clienti e informativa del sito', async () => {
+  const attese = { it: 'non rispondere a questo messaggio', en: 'please do not reply to this message', de: 'Bitte antworten Sie nicht auf diese Nachricht' };
+  for (const [lingua, nonRispondere] of Object.entries(attese)) {
+    const { mail } = await inviaProva({ emailOspite: 'g@esempio.invalid', datiPrenotazione: dati({ lingua }) });
+    for (const x of ['mailto:lacolumbera@gmail.com', 'tel:+393517043594', 'https://la-columbera.vercel.app/area-clienti.html', 'https://la-columbera.vercel.app/privacy.html']) assert.ok(mail.html.includes(x), lingua + ': ' + x);
+    assert.ok(mail.html.includes(nonRispondere) && mail.text.includes(nonRispondere), lingua + ': avviso di non rispondere');
+    assert.ok(!/rispondi pure|reply to this email|antworten Sie auf diese/i.test(mail.html), lingua + ': nessun invito a rispondere');
+    assert.equal(mail.replyTo, undefined, lingua + ': nessun Reply-To');
+  }
+});
+
+test('email ospite: saluto tradotto con il nome (testo dell\'ospite reso innocuo), oggetto senza ripetizioni, importo nel formato della lingua', async () => {
+  const titoli = { it: 'Grazie, Giulia!', en: 'Thank you, Giulia!', de: 'Vielen Dank, Giulia!' };
+  for (const [lingua, saluto] of Object.entries(titoli)) {
+    const { mail } = await inviaProva({ emailOspite: 'g@esempio.invalid', datiPrenotazione: dati({ lingua }) });
+    assert.ok(mail.html.includes(saluto), lingua + ': ' + saluto);
+    if (lingua !== 'it') assert.ok(!mail.html.includes('Gentile'), lingua + ': niente «Gentile» in italiano');
+  }
+  const x = await inviaProva({ emailOspite: 'g@esempio.invalid', datiPrenotazione: dati({ ospiti: [{ nome: '<img src=x onerror=alert(1)>', cognome: '' }] }) });
+  assert.ok(!x.mail.html.includes('<img src=x') && x.mail.html.includes('&lt;img src=x'), 'nome dell\'ospite trattato come testo');
+  const senzaNome = await inviaProva({ emailOspite: 'g@esempio.invalid', datiPrenotazione: dati({ ospiti: [] }) });
+  assert.ok(senzaNome.mail.html.includes('Grazie!<br>'), 'senza nome: «Grazie!»');
+  // oggetto: come le email del sito, senza «La Columbera - La Columbera»
+  assert.equal((await inviaProva({ emailOspite: 'g@esempio.invalid', datiPrenotazione: dati() })).mail.subject, 'Check-in completato · La Columbera Torre · 05/11/2026');
+  const due = await inviaProva({ emailOspite: 'g@esempio.invalid', datiPrenotazione: dati({ appartamento: CORTE + ' + ' + TORRE, lingua: 'en' }) });
+  assert.equal(due.mail.subject, 'Check-in completed · La Columbera Corte and Torre · 05/11/2026');
+  assert.ok(!/La Columbera - La Columbera/.test(due.mail.subject));
+  // importo: virgola in italiano e tedesco, punto in inglese
+  for (const [lingua, euro] of [['it', '€ 13,50'], ['de', '€ 13,50'], ['en', '€ 13.50']]) {
+    const { mail } = await inviaProva({ emailOspite: 'g@esempio.invalid', datiPrenotazione: dati({ lingua, totale: '13.5' }) });
+    assert.ok(mail.html.includes(euro) && mail.text.includes(euro), lingua + ': ' + euro);
+  }
+});
+
+test('email ospite: codice mancante = «Codice non disponibile…» (mai «null»); versione di solo testo con il codice', async () => {
+  const { mail } = await inviaProva({ emailOspite: 'g@esempio.invalid', datiPrenotazione: dati() }, { env: Object.assign({}, ENV, { CODICE_CASSETTA_TORRE: undefined }) });
+  assert.ok(mail.html.includes('Codice non disponibile, contatta il proprietario') && !/null/.test(mail.html) && !/null/.test(mail.text));
+  assert.ok(mail.text.includes('Torre: Codice non disponibile') || mail.text.includes(': Codice non disponibile'), 'anche nel testo');
+  // appartamento non riconosciuto: stesso messaggio (come prima), nessun codice
+  const g = await inviaProva({ emailOspite: 'g@esempio.invalid', datiPrenotazione: dati({ appartamento: 'Altro' }) });
+  assert.ok(g.mail.html.includes('Codice non disponibile, contatta il proprietario') && !g.mail.html.includes('4821') && !g.mail.html.includes('9375'));
+  const t = (await inviaProva({ emailOspite: 'g@esempio.invalid', datiPrenotazione: dati() })).mail.text;
+  for (const x of ['4821', 'Torre', 'Giovedì 5 novembre 2026', 'https://la-columbera.vercel.app/area-clienti.html', 'lacolumbera@gmail.com']) assert.ok(t.includes(x), 'testo: ' + x);
+});

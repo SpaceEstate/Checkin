@@ -24,126 +24,149 @@ function maskEmail(email) {
 // ------------------------------------------------------------------
 const LINGUE_VALIDE = ['it', 'en', 'de'];
 
+// Sito di La Columbera: stessi indirizzi e stessi link di Google Maps della pagina «Come trovarci» (mappa.html: «Portami qui» e
+// «Naviga al parcheggio») e dell'area clienti (js/area.js). L'ospite legge l'indirizzo, il link porta al punto giusto sulla mappa.
+const SITO = 'https://la-columbera.vercel.app';
+const MAPS_STRUTTURA = 'https://maps.app.goo.gl/mVBZWREejSuVEGqQ7?g_st=ic';
+const MAPS_PARCHEGGIO = 'https://maps.app.goo.gl/VWHWQCMWUzAvgSYM7?g_st=ic';
+// Recapiti del titolare, come nel piè di pagina delle email del sito. La casella che invia (EMAIL_USER) serve solo per gli avvisi e
+// non viene letta: l'email chiede di non rispondere e indica questi recapiti.
+const CONTATTI = { email: 'lacolumbera@gmail.com', tel: '+39 351 704 3594', telLink: 'tel:+393517043594' };
+// Orari fissi (scelta del titolare, 31/10/2026): si cambiano qui a mano.
+const CHECKIN_OPEN_TIME = '16:00', CHECKIN_CLOSE_TIME = '00:00', CHECKOUT_CLOSE_TIME = '10:00';
+
 const EMAIL_TESTI = {
   it: {
-    headerTitle: 'Benvenuto a La Columbera!',
-    headerSubtitle: 'Il tuo soggiorno sta per iniziare',
-    guestFallback: 'Ospite',
+    eyebrow: 'Check-in completato',
+    preheader: "Il codice della cassetta, come arrivare e le foto per trovare l'ingresso.",
+    title: nome => [nome ? `Grazie, ${nome}!` : 'Grazie!', 'Ti aspettiamo alla Columbera'],
     thanksText: 'Grazie per aver completato il check-in e il pagamento della tassa di soggiorno. Siamo felici di accoglierti nella nostra struttura!',
-    codeTitleSingle: '🔑 Codice Cassetta Sicurezza',
-    codeTitleMulti: '🔑 Codici Cassette Sicurezza',
+    codeTitleSingle: 'Codice della cassetta di sicurezza',
+    codeTitleMulti: 'Codici delle cassette di sicurezza',
     codeNoteSingle: 'Conserva questo codice con cura',
     bothApartmentsNote: 'Hai prenotato entrambi gli appartamenti',
-    infoTitle: '📋 Dettagli della tua prenotazione',
-    labelCheckin: 'Data Check-in:',
-    labelApartment: 'Appartamento:',
-    labelGuests: 'Numero Ospiti:',
-    labelNights: 'Numero Notti:',
-    labelTaxPaid: 'Tassa Soggiorno Pagata:',
-    instructionsTitle: '📍 Come accedere alla struttura',
-    addressPropertyLabel: '📍 Indirizzo Struttura:',
-    addressParkingLabel: '📍 Indirizzo Parcheggio:',
-    hoursLabel: '⏰ Orari:',
+    infoTitle: 'Dettagli della tua prenotazione',
+    labelCheckin: 'Data check-in',
+    labelApartment: 'Appartamento',
+    labelGuests: 'Ospiti',
+    labelNights: 'Notti',
+    labelTaxPaid: 'Tassa di soggiorno pagata',
+    instructionsTitle: 'Come accedere alla struttura',
+    addressPropertyLabel: 'Indirizzo della struttura',
+    addressParkingLabel: 'Indirizzo del parcheggio',
+    mapsLink: 'Apri in Google Maps',
+    hoursLabel: 'Orari',
     checkinHoursText: (open, close) => `Check-in: dalle ${open} alle ${close}`,
     checkoutHoursText: (close) => `Check-out: entro le ${close}`,
     instruction1: 'Entrando dal cancello principale, dirigiti verso la palazzina sulla sinistra. Troverai due porte-finestre al piano terra, come mostrato in foto.',
     instruction2: "La cassetta si trova nella nicchia accanto all'ultimo scuro in legno sulla destra della facciata (vedi foto cerchiata in giallo).",
     instruction3: 'La sosta all\'interno della proprietà è consentita esclusivamente per le operazioni di carico e scarico dei bagagli.',
-    galleryTitle: "📸 Foto di riferimento per l'accesso",
+    galleryTitle: "Foto di riferimento per l'accesso",
     photo1Caption: '1. Ingresso della proprietà',
     photo2Caption: (multi, codes) => `2. Cassetta di sicurezza con ${multi ? 'codici' : 'codice'} ${codes}`,
+    photo2CaptionNoCode: '2. Cassetta di sicurezza',
     photo3Caption: (multi) => `3. Ubicazione esatta ${multi ? 'delle cassette' : 'della cassetta'}`,
-    closingText: 'Per qualsiasi necessità o domanda, non esitare a contattarci. Ti auguriamo un soggiorno piacevole e confortevole! 🌟',
-    footerTagline: 'La Columbera - Appartamenti turistici',
-    footerAutomated: 'Questa è una email automatica, per favore non rispondere direttamente.',
-    footerGenerated: (data) => `Generata il ${data}`,
-    subjectLine: (appartamento, data) => `Benvenuto a La Columbera - ${appartamento} - Check-in ${data}`,
+    areaTitle: 'La tua area personale',
+    areaText: "Con il codice di prenotazione (anche quello di Booking.com o Airbnb) entri nell'area personale del nostro sito: informazioni sulla casa, Wi-Fi nei giorni del soggiorno, dintorni e Trentino Guest Card.",
+    areaButton: 'Vai alla mia area personale',
+    contactText: (email, tel) => `Per qualsiasi necessità o domanda scrivici a ${email} o chiamaci al ${tel}.`,
+    closingText: 'Ti auguriamo un soggiorno piacevole e confortevole!',
+    footerAutomated: (email) => `Questa è un'email automatica: non rispondere a questo messaggio. Per scriverci usa ${email}.`,
+    privacy: 'Informativa privacy',
+    subjectLine: (appartamento, data) => `Check-in completato · La Columbera${appartamento ? ' ' + appartamento : ''} · ${data}`,
+    and: ' e ',
     genericName: 'Generico',
     fallbackDescrizione: 'Codice non disponibile, contatta il proprietario',
     corteDescrizione: 'Appartamento con 1 camera da letto',
-    torreDescrizione: 'Appartamento con 2 camere da letto',
-    corteNomeCompleto: 'La Columbera - Corte',
-    torreNomeCompleto: 'La Columbera - Torre'
+    torreDescrizione: 'Appartamento con 2 camere da letto'
   },
   en: {
-    headerTitle: 'Welcome to La Columbera!',
-    headerSubtitle: 'Your stay is about to begin',
-    guestFallback: 'Guest',
+    eyebrow: 'Check-in completed',
+    preheader: 'Your lockbox code, how to get here and photos to find the entrance.',
+    title: nome => [nome ? `Thank you, ${nome}!` : 'Thank you!', 'We look forward to welcoming you'],
     thanksText: "Thank you for completing check-in and paying the tourist tax. We're delighted to welcome you to our property!",
-    codeTitleSingle: '🔑 Security Lockbox Code',
-    codeTitleMulti: '🔑 Security Lockbox Codes',
+    codeTitleSingle: 'Security lockbox code',
+    codeTitleMulti: 'Security lockbox codes',
     codeNoteSingle: 'Keep this code somewhere safe',
     bothApartmentsNote: 'You have booked both apartments',
-    infoTitle: '📋 Your booking details',
-    labelCheckin: 'Check-in date:',
-    labelApartment: 'Apartment:',
-    labelGuests: 'Number of guests:',
-    labelNights: 'Number of nights:',
-    labelTaxPaid: 'Tourist tax paid:',
-    instructionsTitle: '📍 How to get into the property',
-    addressPropertyLabel: '📍 Property address:',
-    addressParkingLabel: '📍 Parking address:',
-    hoursLabel: '⏰ Hours:',
+    infoTitle: 'Your booking details',
+    labelCheckin: 'Check-in date',
+    labelApartment: 'Apartment',
+    labelGuests: 'Guests',
+    labelNights: 'Nights',
+    labelTaxPaid: 'Tourist tax paid',
+    instructionsTitle: 'How to get into the property',
+    addressPropertyLabel: 'Property address',
+    addressParkingLabel: 'Parking address',
+    mapsLink: 'Open in Google Maps',
+    hoursLabel: 'Hours',
     checkinHoursText: (open, close) => `Check-in: from ${open} to ${close}`,
     checkoutHoursText: (close) => `Check-out: by ${close}`,
     instruction1: "Through the main gate, head to the building on the left. You'll find two French doors on the ground floor, as shown in the photo.",
     instruction2: 'The lockbox is in the recess next to the last wooden shutter on the right side of the façade (see the photo, circled in yellow).',
     instruction3: 'Parking inside the property is allowed only for loading and unloading luggage.',
-    galleryTitle: '📸 Reference photos for access',
+    galleryTitle: 'Reference photos for access',
     photo1Caption: '1. Entrance to the property',
     photo2Caption: (multi, codes) => `2. Lockbox with ${multi ? 'codes' : 'code'} ${codes}`,
+    photo2CaptionNoCode: '2. Lockbox',
     photo3Caption: (multi) => `3. Exact location of the ${multi ? 'lockboxes' : 'lockbox'}`,
-    closingText: "If you need anything or have any questions, please don't hesitate to contact us. We wish you a pleasant and comfortable stay! 🌟",
-    footerTagline: 'La Columbera - Holiday apartments',
-    footerAutomated: 'This is an automated email, please do not reply directly to it.',
-    footerGenerated: (data) => `Generated on ${data}`,
-    subjectLine: (appartamento, data) => `Welcome to La Columbera - ${appartamento} - Check-in ${data}`,
+    areaTitle: 'Your personal area',
+    areaText: 'With your booking code (including the Booking.com or Airbnb one) you can open your personal area on our website: house information, Wi-Fi during your stay, things to do nearby and the Trentino Guest Card.',
+    areaButton: 'Go to my personal area',
+    contactText: (email, tel) => `If you need anything, email us at ${email} or call us on ${tel}.`,
+    closingText: 'We wish you a pleasant and comfortable stay!',
+    footerAutomated: (email) => `This is an automated email: please do not reply to this message. To contact us, write to ${email}.`,
+    privacy: 'Privacy notice',
+    subjectLine: (appartamento, data) => `Check-in completed · La Columbera${appartamento ? ' ' + appartamento : ''} · ${data}`,
+    and: ' and ',
     genericName: 'Generic',
     fallbackDescrizione: 'Code not available, please contact the owner',
     corteDescrizione: 'Apartment with 1 bedroom',
-    torreDescrizione: 'Apartment with 2 bedrooms',
-    corteNomeCompleto: 'La Columbera - Corte',
-    torreNomeCompleto: 'La Columbera - Torre'
+    torreDescrizione: 'Apartment with 2 bedrooms'
   },
   de: {
-    headerTitle: 'Willkommen bei La Columbera!',
-    headerSubtitle: 'Ihr Aufenthalt beginnt bald',
-    guestFallback: 'Gast',
+    eyebrow: 'Check-in abgeschlossen',
+    preheader: 'Ihr Code für die Sicherheitsbox, die Anfahrt und Fotos zum Eingang.',
+    title: nome => [nome ? `Vielen Dank, ${nome}!` : 'Vielen Dank!', 'Wir freuen uns auf Sie'],
     thanksText: 'Vielen Dank für den Abschluss des Check-ins und die Zahlung der Kurtaxe. Wir freuen uns, Sie in unserer Unterkunft begrüßen zu dürfen!',
-    codeTitleSingle: '🔑 Code für die Sicherheitsbox',
-    codeTitleMulti: '🔑 Codes für die Sicherheitsboxen',
+    codeTitleSingle: 'Code für die Sicherheitsbox',
+    codeTitleMulti: 'Codes für die Sicherheitsboxen',
     codeNoteSingle: 'Bewahren Sie diesen Code sorgfältig auf',
     bothApartmentsNote: 'Sie haben beide Wohnungen gebucht',
-    infoTitle: '📋 Details Ihrer Buchung',
-    labelCheckin: 'Check-in-Datum:',
-    labelApartment: 'Wohnung:',
-    labelGuests: 'Anzahl der Gäste:',
-    labelNights: 'Anzahl der Nächte:',
-    labelTaxPaid: 'Bezahlte Kurtaxe:',
-    instructionsTitle: '📍 So gelangen Sie zur Unterkunft',
-    addressPropertyLabel: '📍 Adresse der Unterkunft:',
-    addressParkingLabel: '📍 Adresse des Parkplatzes:',
-    hoursLabel: '⏰ Zeiten:',
+    infoTitle: 'Details Ihrer Buchung',
+    labelCheckin: 'Check-in-Datum',
+    labelApartment: 'Wohnung',
+    labelGuests: 'Gäste',
+    labelNights: 'Nächte',
+    labelTaxPaid: 'Bezahlte Kurtaxe',
+    instructionsTitle: 'So gelangen Sie zur Unterkunft',
+    addressPropertyLabel: 'Adresse der Unterkunft',
+    addressParkingLabel: 'Adresse des Parkplatzes',
+    mapsLink: 'In Google Maps öffnen',
+    hoursLabel: 'Zeiten',
     checkinHoursText: (open, close) => `Check-in: von ${open} bis ${close}`,
     checkoutHoursText: (close) => `Check-out: bis ${close}`,
     instruction1: 'Gehen Sie durch das Haupttor zum Gebäude auf der linken Seite. Im Erdgeschoss finden Sie zwei Fenstertüren, wie auf dem Foto gezeigt.',
     instruction2: 'Die Box befindet sich in der Nische neben dem letzten Holzfensterladen auf der rechten Seite der Fassade (siehe gelb umkreistes Foto).',
     instruction3: 'Das Parken innerhalb des Grundstücks ist ausschließlich zum Be- und Entladen von Gepäck gestattet.',
-    galleryTitle: '📸 Referenzfotos für den Zugang',
+    galleryTitle: 'Referenzfotos für den Zugang',
     photo1Caption: '1. Eingang zur Unterkunft',
     photo2Caption: (multi, codes) => `2. Sicherheitsbox mit ${multi ? 'Codes' : 'Code'} ${codes}`,
+    photo2CaptionNoCode: '2. Sicherheitsbox',
     photo3Caption: (multi) => `3. Genaue Lage der ${multi ? 'Sicherheitsboxen' : 'Sicherheitsbox'}`,
-    closingText: 'Bei Fragen oder Anliegen jeglicher Art zögern Sie nicht, uns zu kontaktieren. Wir wünschen Ihnen einen angenehmen und komfortablen Aufenthalt! 🌟',
-    footerTagline: 'La Columbera - Ferienwohnungen',
-    footerAutomated: 'Dies ist eine automatische E-Mail, bitte antworten Sie nicht direkt darauf.',
-    footerGenerated: (data) => `Erstellt am ${data}`,
-    subjectLine: (appartamento, data) => `Willkommen bei La Columbera - ${appartamento} - Check-in ${data}`,
+    areaTitle: 'Ihr persönlicher Bereich',
+    areaText: 'Mit Ihrer Buchungsnummer (auch der von Booking.com oder Airbnb) öffnen Sie Ihren persönlichen Bereich auf unserer Website: Informationen zum Haus, WLAN während Ihres Aufenthalts, Ausflugstipps und die Trentino Guest Card.',
+    areaButton: 'Zu meinem persönlichen Bereich',
+    contactText: (email, tel) => `Bei Fragen oder Anliegen schreiben Sie uns an ${email} oder rufen Sie uns an: ${tel}.`,
+    closingText: 'Wir wünschen Ihnen einen angenehmen und komfortablen Aufenthalt!',
+    footerAutomated: (email) => `Dies ist eine automatische E-Mail: Bitte antworten Sie nicht auf diese Nachricht. Schreiben Sie uns an ${email}.`,
+    privacy: 'Datenschutzhinweis',
+    subjectLine: (appartamento, data) => `Check-in abgeschlossen · La Columbera${appartamento ? ' ' + appartamento : ''} · ${data}`,
+    and: ' und ',
     genericName: 'Allgemein',
     fallbackDescrizione: 'Code nicht verfügbar, bitte kontaktieren Sie den Eigentümer',
     corteDescrizione: 'Wohnung mit 1 Schlafzimmer',
-    torreDescrizione: 'Wohnung mit 2 Schlafzimmern',
-    corteNomeCompleto: 'La Columbera - Corte',
-    torreNomeCompleto: 'La Columbera - Torre'
+    torreDescrizione: 'Wohnung mit 2 Schlafzimmern'
   }
 };
 
@@ -151,25 +174,32 @@ function linguaValida(lingua) {
   return LINGUE_VALIDE.includes(lingua) ? lingua : 'it';
 }
 
-// Locale BCP47 per Intl/toLocaleDateString (usato per Data Check-in e per il
-// timestamp "Generata il" in fondo all'email).
+// Locale BCP47 per Intl/toLocaleDateString (data di arrivo, importo).
 function localeEmail(lingua) {
   return { it: 'it-IT', en: 'en-GB', de: 'de-DE' }[lingua] || 'it-IT';
 }
 
-// Nome appartamento mostrato all'ospite nell'email. Il valore che arriva in
-// dati.appartamento resta sempre quello italiano: qui si traduce solo l'etichetta.
-function nomeAppartamentoEmail(valoreOriginale, lingua) {
-  const T = EMAIL_TESTI[linguaValida(lingua)];
-  if (lingua === 'it' || !valoreOriginale) return valoreOriginale;
-  const parti = valoreOriginale.includes(' + ') ? valoreOriginale.split(' + ') : [valoreOriginale];
-  const traduciSingolo = (val) => {
-    const v = val.toLowerCase();
-    if (v.includes('torre')) return `${T.torreNomeCompleto}, ${T.torreDescrizione}`;
-    if (v.includes('corte')) return `${T.corteNomeCompleto}, ${T.corteDescrizione}`;
-    return val.trim();
-  };
-  return parti.map(p => traduciSingolo(p.trim())).join(' + ');
+// Appartamenti del check-in, dal testo del modulo («La Columbera - Torre, …»): stesso criterio e stesso ordine di
+// determinaCodiciCassetta (prima Corte, poi Torre). Il nome resta quello italiano; la descrizione è tradotta.
+function appartamentiDi(valore, T) {
+  const v = String(valore || '').toLowerCase(), l = [];
+  if (v.includes('corte')) l.push({ nome: 'Corte', descrizione: T.corteDescrizione });
+  if (v.includes('torre')) l.push({ nome: 'Torre', descrizione: T.torreDescrizione });
+  return l;
+}
+
+// Data di arrivo: lunga nel testo (Giovedì 5 novembre 2026), corta nell'oggetto (5/11/2026). Le date arrivano come AAAA-MM-GG (mezzanotte UTC).
+function dataArrivo(iso, L, lunga) {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return String(iso || '');
+  const s = d.toLocaleDateString(localeEmail(L), lunga ? { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' } : { timeZone: 'UTC' });
+  return lunga ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+}
+
+// Oggetto: come le email del sito («Prenotazione confermata · La Columbera Torre · …»), senza ripetere il nome della struttura.
+export function oggettoEmailOspite(dati, lingua) {
+  const L = linguaValida(lingua), T = EMAIL_TESTI[L];
+  return T.subjectLine(appartamentiDi(dati.appartamento, T).map(a => a.nome).join(T.and), dataArrivo(dati.dataCheckin, L, false));
 }
 
 // deps.creaTrasporto: trasporto email iniettabile nelle prove (come gli altri endpoint con makeHandler); in produzione Gmail.
@@ -231,11 +261,12 @@ export function makeHandler(deps = {}) {
     }
 
     const htmlContent = generaHTMLEmailOspite(datiPrenotazione, codiciCassetta, lingua);
+    const testoContent = generaTestoEmailOspite(datiPrenotazione, codiciCassetta, lingua);
 
     const allegati = await caricaAllegatiFoto();
     console.log(`📎 Foto caricate: ${allegati.length}`);
 
-    await inviaEmailConNodemailer(emailOspite, datiPrenotazione, htmlContent, allegati, lingua, deps.creaTrasporto);
+    await inviaEmailConNodemailer(emailOspite, datiPrenotazione, htmlContent, allegati, lingua, deps.creaTrasporto, testoContent);
 
     console.log('✅ Email ospite inviata con successo');
     console.log('📧 === FINE INVIO EMAIL OSPITE ===');
@@ -381,294 +412,136 @@ function determinaCodiciCassetta(appartamento, lingua) {
   return codici;
 }
 
+// ------------------------------------------------------------------
+// Aspetto: lo stesso delle email del sito di La Columbera (api/_mail.js del progetto LaColumbera): stessi colori e caratteri,
+// testata bordeaux con il logo, riga oro, riepilogo a righe, pulsante bordeaux, piè di pagina scuro con i recapiti.
+// Solo tabelle e stili scritti dentro ogni elemento (niente blocco <style>, sfumature, ombre o flex): è il modo per vederla
+// uguale in Gmail, Outlook e Apple Mail. Le immagini sono gli allegati di sempre (cid:), quindi si vedono anche senza internet.
+// ------------------------------------------------------------------
+const C = { wine: '#7A2E39', wine2: '#5F222B', wine3: '#3A151B', ink: '#1E1917', muted: '#6C5F55', paper: '#FAF5EC', paper2: '#F1E9D9', line: '#DCCFB6', gold: '#B08D3C', white: '#FFFDF7' };
+const SERIF = "Georgia,'Times New Roman',serif", SANS = "'Helvetica Neue',Helvetica,Arial,sans-serif", MONO = "'SFMono-Regular',Menlo,Consolas,'Courier New',monospace";
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const euro = (v, L) => '€ ' + (Number(v) || 0).toLocaleString(localeEmail(L), { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const nomeOspite = dati => String((dati && Array.isArray(dati.ospiti) && dati.ospiti[0] && dati.ospiti[0].nome) || '').trim();
+const totaleDi = dati => (typeof dati.totale === 'string' ? parseFloat(dati.totale) : (dati.totale || 0)) || 0;
+const INDIRIZZI = T => [
+  { etichetta: T.addressPropertyLabel, righe: ['Via Centrale, 48', '38123 Trento (TN)'], link: MAPS_STRUTTURA },
+  { etichetta: T.addressParkingLabel, righe: ['Via Val Gola, 22', '38123 Trento (TN)'], link: MAPS_PARCHEGGIO }
+];
+const didascaliaCassetta = (codiciCassetta, T) => {
+  const noti = codiciCassetta.map(c => c.codice).filter(Boolean);
+  return noti.length ? T.photo2Caption(codiciCassetta.length > 1, noti.join(' / ')) : T.photo2CaptionNoCode;
+};
+
 function generaHTMLEmailOspite(dati, codiciCassetta, lingua) {
-  const L = linguaValida(lingua);
-  const T = EMAIL_TESTI[L];
+  const L = linguaValida(lingua), T = EMAIL_TESTI[L];
+  const multi = codiciCassetta.length > 1, apts = appartamentiDi(dati.appartamento, T);
+  const sec = (inner, pad) => `<tr><td style="padding:${pad || '22px 32px 0'}">${inner}</td></tr>`;
+  const etichetta = (t, centro) => `<div style="font-family:${SANS};font-size:11px;letter-spacing:2.2px;text-transform:uppercase;color:${C.muted};font-weight:700;padding-bottom:12px${centro ? ';text-align:center' : ''}">${esc(t)}</div>`;
+  const testo = (html, extra) => `<p style="margin:0;font-family:${SANS};font-size:15px;line-height:24px;color:${C.ink}${extra || ''}">${html}</p>`;
+  const riga = (k, v, ultima) => `<tr><td valign="top" style="padding:13px 12px 13px 0;${ultima ? '' : `border-bottom:1px solid ${C.line};`}font-family:${SANS};font-size:14px;color:${C.muted}">${esc(k)}</td><td align="right" style="padding:13px 0;${ultima ? '' : `border-bottom:1px solid ${C.line};`}font-family:${SANS};font-size:15px;font-weight:700;color:${C.ink}">${v}</td></tr>`;
+  const pulsante = (href, label) => `<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center"><tr><td align="center" bgcolor="${C.wine}" style="border-radius:999px"><a href="${esc(href)}" target="_blank" style="display:inline-block;padding:15px 34px;font-family:${SANS};font-size:15px;font-weight:700;letter-spacing:.3px;color:#ffffff;text-decoration:none;border-radius:999px">${esc(label)}</a></td></tr></table>`;
+  const riquadro = inner => `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${C.paper};border-radius:12px"><tr><td style="padding:22px 22px">${inner}</td></tr></table>`;
 
-  const dataFormattata = new Date(dati.dataCheckin).toLocaleDateString(localeEmail(L), {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  });
+  // Codice (o codici) della cassetta: stesso contenuto di prima (determinaCodiciCassetta), nello stile del codice di prenotazione del sito.
+  // Se un codice non è configurato si legge il messaggio «Codice non disponibile…» (prima compariva la parola «null»).
+  const boxCodice = c => `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${C.paper};border:1px dashed ${C.gold};border-radius:10px"><tr><td align="center" style="padding:18px 16px">`
+    + (multi || (c.nome && c.nome !== T.genericName) ? `<div style="font-family:${SERIF};font-size:18px;line-height:24px;color:${C.ink}">${esc(c.nome)}</div>` : '')
+    + (c.codice
+      ? `<div style="font-family:${MONO};font-size:34px;line-height:44px;font-weight:700;letter-spacing:8px;color:${C.wine};padding:6px 0 0 8px">${esc(c.codice)}</div>`
+      : `<div style="font-family:${SANS};font-size:14px;line-height:21px;color:${C.wine};font-weight:700;padding-top:6px">${esc(T.fallbackDescrizione)}</div>`)
+    + (multi && c.codice ? `<div style="font-family:${SANS};font-size:12px;color:${C.muted};padding-top:4px">${esc(c.descrizione)}</div>` : '')
+    + `</td></tr></table>`;
+  const codici = etichetta(multi ? T.codeTitleMulti : T.codeTitleSingle, true)
+    + (multi ? `<p style="margin:0 0 12px;font-family:${SANS};font-size:13px;color:${C.muted};text-align:center">${esc(T.bothApartmentsNote)}</p>` : '')
+    + codiciCassetta.map(boxCodice).join('<div style="height:10px;line-height:10px;font-size:0">&nbsp;</div>')
+    + (multi ? '' : `<p style="margin:10px 0 0;font-family:${SANS};font-size:12px;color:${C.muted};text-align:center">${esc(T.codeNoteSingle)}</p>`);
 
-  const totale = typeof dati.totale === 'string' ? parseFloat(dati.totale) : (dati.totale || 0);
+  const aptHtml = apts.length
+    ? apts.map(a => `${esc(a.nome)}<div style="font-weight:400;font-size:12px;line-height:17px;color:${C.muted}">${esc(a.descrizione)}</div>`).join('<div style="height:6px;line-height:6px;font-size:0">&nbsp;</div>')
+    : esc(dati.appartamento || 'N/A');
+  const riepilogo = etichetta(T.infoTitle) + `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">`
+    + riga(T.labelCheckin, esc(dataArrivo(dati.dataCheckin, L, true)))
+    + riga(T.labelApartment, aptHtml)
+    + riga(T.labelGuests, esc(dati.numeroOspiti || 0))
+    + riga(T.labelNights, esc(dati.numeroNotti || 0))
+    + `<tr><td style="padding:16px 12px 0 0;font-family:${SANS};font-size:14px;color:${C.muted};vertical-align:middle">${esc(T.labelTaxPaid)}</td><td align="right" style="padding:16px 0 0;font-family:${SERIF};font-size:26px;line-height:32px;color:${C.wine};white-space:nowrap">${esc(euro(totaleDi(dati), L))}</td></tr></table>`;
 
-  const CHECKIN_OPEN_TIME = "16:00";
-  const CHECKIN_CLOSE_TIME = "00:00";
-  const CHECKOUT_CLOSE_TIME = "10:00";
+  const indirizzo = i => `<div style="padding-bottom:16px"><div style="font-family:${SANS};font-size:11px;letter-spacing:1.6px;text-transform:uppercase;color:${C.muted};font-weight:700;padding-bottom:4px">${esc(i.etichetta)}</div>`
+    + `<a href="${esc(i.link)}" target="_blank" style="font-family:${SANS};font-size:15px;line-height:22px;color:${C.ink};text-decoration:none">${i.righe.map(esc).join('<br>')}</a>`
+    + `<div style="padding-top:4px"><a href="${esc(i.link)}" target="_blank" style="font-family:${SANS};font-size:13px;font-weight:700;color:${C.wine};text-decoration:underline">${esc(T.mapsLink)} &#8599;</a></div></div>`;
+  const punto = t => `<tr><td valign="top" width="18" style="font-family:${SANS};font-size:14px;line-height:22px;color:${C.gold};padding:0 0 10px">&#8226;</td><td style="font-family:${SANS};font-size:14px;line-height:22px;color:${C.ink};padding:0 0 10px">${esc(t)}</td></tr>`;
+  const accesso = riquadro(`<div style="font-family:${SERIF};font-size:20px;line-height:26px;color:${C.ink};padding-bottom:16px">${esc(T.instructionsTitle)}</div>`
+    + INDIRIZZI(T).map(indirizzo).join('')
+    + `<div style="padding-bottom:16px"><div style="font-family:${SANS};font-size:11px;letter-spacing:1.6px;text-transform:uppercase;color:${C.muted};font-weight:700;padding-bottom:4px">${esc(T.hoursLabel)}</div>`
+    + `<div style="font-family:${SANS};font-size:15px;line-height:22px;color:${C.ink}">${esc(T.checkinHoursText(CHECKIN_OPEN_TIME, CHECKIN_CLOSE_TIME))}<br>${esc(T.checkoutHoursText(CHECKOUT_CLOSE_TIME))}</div></div>`
+    + `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${punto(T.instruction1)}${punto(T.instruction2)}${punto(T.instruction3)}</table>`);
 
-  let codiciHTML = '';
-  
-  if (codiciCassetta.length === 1) {
-    codiciHTML = `
-      <div class="code-section">
-        <div class="code-title">${T.codeTitleSingle}</div>
-        <div class="code-subtitle">${codiciCassetta[0].nome}</div>
-        <div class="code-box">${codiciCassetta[0].codice}</div>
-        <div class="code-note">${T.codeNoteSingle}</div>
-      </div>
-    `;
-  } else {
-    codiciHTML = `
-      <div class="code-section">
-        <div class="code-title">${T.codeTitleMulti}</div>
-        <div class="code-note" style="margin-bottom: 20px;">${T.bothApartmentsNote}</div>
-        
-        ${codiciCassetta.map(cassetta => `
-          <div class="code-sub-section">
-            <div class="code-subtitle">🏠 ${cassetta.nome}</div>
-            <div class="code-box">${cassetta.codice}</div>
-            <small style="display: block; margin-top: 5px; opacity: 0.9; font-size: 14px;">
-              ${cassetta.descrizione}
-            </small>
-          </div>
-        `).join('')}
-      </div>
-    `;
-  }
+  const foto = (cid, didascalia) => `<img src="cid:${cid}" width="536" alt="${esc(didascalia)}" style="display:block;width:100%;max-width:536px;height:auto;border:0;border-radius:10px">`
+    + `<p style="margin:8px 0 22px;font-family:${SANS};font-size:12px;line-height:18px;color:${C.muted};font-style:italic;text-align:center">${esc(didascalia)}</p>`;
+  const galleria = etichetta(T.galleryTitle, true)
+    + foto('ingresso_proprieta', T.photo1Caption) + foto('cassetta_sicurezza', didascaliaCassetta(codiciCassetta, T)) + foto('ubicazione_cassetta', T.photo3Caption(multi));
 
-  return `
-    <!DOCTYPE html>
-    <html lang="${L}">
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <style>
-        body {
-          font-family: 'Georgia', 'Times New Roman', serif;
-          line-height: 1.6;
-          color: #1e1917;
-          background-color: #f1e9d9;
-          margin: 0;
-          padding: 0;
-        }
-        .container {
-          max-width: 600px;
-          margin: 20px auto;
-          background: #fffdf7;
-          border-radius: 16px;
-          overflow: hidden;
-          box-shadow: 0 4px 20px rgba(58,21,27,0.12);
-          border: 1px solid rgba(220, 207, 182, 0.5);
-        }
-        .header {
-          background: linear-gradient(135deg, #8c6f2e 0%, #7a2e39 100%);
-          color: #fffdf7;
-          padding: 36px 20px 32px;
-          text-align: center;
-        }
-        .header img.brand-logo { height: 46px; width: auto; margin-bottom: 16px; }
-        .header h1 { margin: 0; font-size: 26px; font-weight: 500; font-family: 'Georgia', 'Times New Roman', serif; }
-        .header p { margin: 10px 0 0 0; font-size: 16px; opacity: 0.95; font-family: 'Arial', sans-serif; }
-        .content { padding: 40px 30px; font-family: 'Arial', sans-serif; }
-        .welcome-text { font-size: 18px; color: #6c5f55; margin-bottom: 20px; }
-        .code-section {
-          background: linear-gradient(135deg, #7a2e39 0%, #5f222b 100%);
-          color: white;
-          padding: 30px;
-          border-radius: 12px;
-          text-align: center;
-          margin: 30px 0;
-        }
-        .code-title { font-size: 20px; font-weight: 600; margin-bottom: 15px; }
-        .code-subtitle { font-size: 16px; margin-bottom: 10px; font-weight: 500; }
-        .code-box {
-          background: rgba(255, 255, 255, 0.2);
-          padding: 20px;
-          border-radius: 8px;
-          font-size: 48px;
-          font-weight: bold;
-          letter-spacing: 8px;
-          margin: 15px 0;
-        }
-        .code-sub-section {
-          background: rgba(255, 255, 255, 0.1);
-          padding: 20px;
-          border-radius: 8px;
-          margin: 15px 0;
-        }
-        .code-sub-section .code-box { font-size: 40px; padding: 15px; background: rgba(255, 255, 255, 0.2); }
-        .code-note { font-size: 14px; opacity: 0.9; margin-top: 10px; }
-        .info-section {
-          background: #f1e9d9;
-          padding: 20px;
-          border-radius: 8px;
-          margin: 20px 0;
-          border-left: 4px solid #b08d3c;
-        }
-        .info-title { font-size: 18px; font-weight: 600; color: #6c5f55; margin-bottom: 15px; }
-        .info-item {
-          display: flex;
-          justify-content: space-between;
-          padding: 8px 0;
-          border-bottom: 1px solid #dccfb6;
-        }
-        .info-item:last-child { border-bottom: none; }
-        .info-label { font-weight: 500; color: #6c5f55; }
-        .info-value { font-weight: 600; color: #1e1917; }
-        .instructions {
-          background: #fff9e6;
-          padding: 20px;
-          border-radius: 8px;
-          margin: 20px 0;
-          border-left: 4px solid #b08d3c;
-        }
-        .instructions h3 { color: #7a2e39; margin-top: 0; font-size: 18px; margin-bottom: 15px; }
-        .instructions p { margin: 10px 0; color: #6c5f55; line-height: 1.8; }
-        .address-block {
-          background: white;
-          padding: 12px;
-          border-radius: 6px;
-          margin: 10px 0;
-          border-left: 3px solid #b08d3c;
-        }
-        .photo-gallery { margin: 30px 0; }
-        .photo-gallery h3 { color: #6c5f55; font-size: 20px; margin-bottom: 20px; text-align: center; }
-        .photo-item { margin: 20px 0; text-align: center; }
-        .photo-item img {
-          max-width: 100%;
-          height: auto;
-          border-radius: 12px;
-          box-shadow: 0 4px 15px rgba(58,21,27,0.18);
-          margin-bottom: 10px;
-        }
-        .photo-caption { font-size: 14px; color: #6c5f55; font-style: italic; }
-        .footer {
-          background: #f1e9d9;
-          padding: 30px;
-          text-align: center;
-          color: #6c5f55;
-          font-size: 14px;
-          font-family: 'Arial', sans-serif;
-        }
-        .footer p { margin: 5px 0; }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <img src="cid:logo_columbera" alt="La Columbera" class="brand-logo">
-          <h1>${T.headerTitle}</h1>
-          <p>${T.headerSubtitle}</p>
-        </div>
-        
-        <div class="content">
-          <p class="welcome-text">
-            Gentile <strong>${dati.ospiti?.[0]?.nome || T.guestFallback} ${dati.ospiti?.[0]?.cognome || ''}</strong>,
-          </p>
-          
-          <p>
-            ${T.thanksText}
-          </p>
-          
-          ${codiciHTML}
-          
-          <div class="info-section">
-            <div class="info-title">${T.infoTitle}</div>
-            <div class="info-item">
-              <span class="info-label">${T.labelCheckin}</span>
-              <span class="info-value">${dataFormattata}</span>
-            </div>
-            <div class="info-item">
-              <span class="info-label">${T.labelApartment}</span>
-              <span class="info-value">${nomeAppartamentoEmail(dati.appartamento, L) || 'N/A'}</span>
-            </div>
-            <div class="info-item">
-              <span class="info-label">${T.labelGuests}</span>
-              <span class="info-value">${dati.numeroOspiti || 0}</span>
-            </div>
-            <div class="info-item">
-              <span class="info-label">${T.labelNights}</span>
-              <span class="info-value">${dati.numeroNotti || 0}</span>
-            </div>
-            <div class="info-item">
-              <span class="info-label">${T.labelTaxPaid}</span>
-              <span class="info-value">€${totale.toFixed(2)}</span>
-            </div>
-          </div>
-          
-          <div class="instructions">
-            <h3>${T.instructionsTitle}</h3>
-            
-            <div class="address-block">
-              <strong>${T.addressPropertyLabel}</strong>
-              <p style="margin: 5px 0;">
-                Via Centrale, 48<br>
-                38123 Trento (TN)
-              </p>
-            </div>
+  const area = riquadro(`<div style="font-family:${SERIF};font-size:20px;line-height:26px;color:${C.ink};padding-bottom:8px">${esc(T.areaTitle)}</div>`
+    + `<p style="margin:0 0 18px;font-family:${SANS};font-size:14px;line-height:22px;color:${C.muted}">${esc(T.areaText)}</p>` + pulsante(SITO + '/area-clienti.html', T.areaButton));
 
-            <div class="address-block">
-              <strong>${T.addressParkingLabel}</strong>
-              <p style="margin: 5px 0;">
-                Via Val Gola, 22<br>
-                38123 Trento (TN)
-              </p>
-            </div>
+  const mail = `<a href="mailto:${CONTATTI.email}" style="color:${C.wine}">${CONTATTI.email}</a>`, tel = `<a href="${CONTATTI.telLink}" style="color:${C.wine};white-space:nowrap">${esc(CONTATTI.tel)}</a>`;
+  const chiusura = `<p style="margin:0;font-family:${SANS};font-size:14px;line-height:22px;color:${C.muted};text-align:center">${T.contactText(mail, tel)}<br>${esc(T.closingText)}</p>`;
+  const [titolo1, titolo2] = T.title(nomeOspite(dati));
 
-            <div class="address-block">
-              <strong>${T.hoursLabel}</strong>
-              <p style="margin: 5px 0;">
-                ${T.checkinHoursText(CHECKIN_OPEN_TIME, CHECKIN_CLOSE_TIME)}<br>
-                ${T.checkoutHoursText(CHECKOUT_CLOSE_TIME)}
-              </p>
-            </div>
-
-            <p style="margin-top: 20px;">
-              • ${T.instruction1}
-            </p>
-
-            <p>
-              • ${T.instruction2}
-            </p>
-
-            <p>
-              • ${T.instruction3}
-            </p>
-          </div>
-
-          <div class="photo-gallery">
-            <h3>${T.galleryTitle}</h3>
-            
-            <div class="photo-item">
-              <img src="cid:ingresso_proprieta" alt="Ingresso Proprietà">
-              <p class="photo-caption">${T.photo1Caption}</p>
-            </div>
-
-            <div class="photo-item">
-              <img src="cid:cassetta_sicurezza" alt="Cassetta di Sicurezza">
-              <p class="photo-caption">${T.photo2Caption(codiciCassetta.length > 1, codiciCassetta.map(c => c.codice).join(' / '))}</p>
-            </div>
-
-            <div class="photo-item">
-              <img src="cid:ubicazione_cassetta" alt="Ubicazione Cassetta">
-              <p class="photo-caption">${T.photo3Caption(codiciCassetta.length > 1)}</p>
-            </div>
-          </div>
-          
-          <p style="margin-top: 30px; color: #6c5f55;">
-            ${T.closingText}
-          </p>
-        </div>
-        
-        <div class="footer">
-          <p><strong>La Columbera</strong></p>
-          <p>${T.footerTagline}</p>
-          <p style="margin-top: 15px; font-size: 12px;">
-            ${T.footerAutomated}
-          </p>
-          <p style="font-size: 12px;">
-            ${T.footerGenerated(new Date().toLocaleString(localeEmail(L)))}
-          </p>
-        </div>
-      </div>
-    </body>
-    </html>
-  `;
+  return `<!doctype html>
+<html lang="${L}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="x-apple-disable-message-reformatting"><title>${esc(T.eyebrow)}</title></head>
+<body style="margin:0;padding:0;background:${C.paper2};-webkit-text-size-adjust:100%">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">${esc(T.preheader)}&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${C.paper2}"><tr><td align="center" style="padding:24px 12px">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;background:${C.white};border-radius:14px;overflow:hidden;border:1px solid ${C.line}">
+<tr><td align="center" bgcolor="${C.wine2}" style="background:${C.wine2};padding:22px 24px 18px">
+<a href="${SITO}" target="_blank" style="text-decoration:none"><img src="cid:logo_columbera" width="240" alt="La Columbera" style="display:block;width:240px;max-width:100%;height:auto;border:0;color:#F1E9D9;font-family:${SERIF};font-size:24px"></a></td></tr>
+<tr><td height="4" style="height:4px;line-height:4px;font-size:0;background:${C.gold}">&nbsp;</td></tr>
+<tr><td style="padding:34px 32px 8px" align="center">
+<div style="font-family:${SANS};font-size:11px;letter-spacing:2.6px;text-transform:uppercase;color:${C.gold};font-weight:700">${esc(T.eyebrow)}</div>
+<h1 style="margin:10px 0 0;font-family:${SERIF};font-weight:400;font-size:29px;line-height:36px;color:${C.ink}">${esc(titolo1)}<br>${esc(titolo2)}</h1></td></tr>
+${sec(testo(esc(T.thanksText), ';text-align:center'), '14px 32px 0')}
+${sec(codici, '26px 32px 0')}
+${sec(riepilogo, '30px 32px 0')}
+${sec(accesso, '30px 32px 0')}
+${sec(galleria, '30px 32px 0')}
+${sec(area, '8px 32px 0')}
+${sec(chiusura, '26px 32px 30px')}
+<tr><td bgcolor="${C.wine3}" style="background:${C.wine3};padding:24px 32px" align="center">
+<div style="font-family:${SERIF};font-size:16px;color:#F1E9D9">La Columbera</div>
+<div style="font-family:${SANS};font-size:12px;line-height:19px;color:#CDBFAE;padding-top:6px">Dimora storica del XV secolo · Ravina, Trento<br><a href="${CONTATTI.telLink}" style="color:#CDBFAE;text-decoration:none">${esc(CONTATTI.tel)}</a> · <a href="mailto:${CONTATTI.email}" style="color:#CDBFAE;text-decoration:none">${CONTATTI.email}</a></div>
+<div style="font-family:${SANS};font-size:11px;line-height:17px;color:#A8988A;padding-top:12px">${esc(T.footerAutomated(CONTATTI.email))}<br><a href="${SITO}/privacy.html" target="_blank" style="color:#A8988A">${esc(T.privacy)}</a></div></td></tr>
+</table></td></tr></table></body></html>`;
 }
 
-async function inviaEmailConNodemailer(emailDestinatario, dati, htmlContent, allegati, lingua, creaTrasporto) {
+// Versione di solo testo (programmi di posta senza HTML, anteprime, filtri antispam): stesse informazioni, link scritti per esteso.
+function generaTestoEmailOspite(dati, codiciCassetta, lingua) {
+  const L = linguaValida(lingua), T = EMAIL_TESTI[L], multi = codiciCassetta.length > 1, apts = appartamentiDi(dati.appartamento, T);
+  const [titolo1, titolo2] = T.title(nomeOspite(dati));
+  const codici = codiciCassetta.map(c => (multi || (c.nome && c.nome !== T.genericName) ? c.nome + ': ' : '') + (c.codice || T.fallbackDescrizione));
+  return [
+    titolo1 + ' ' + titolo2 + '.', T.thanksText, '',
+    (multi ? T.codeTitleMulti : T.codeTitleSingle).toUpperCase() + ': ' + codici.join(' · '), multi ? T.bothApartmentsNote : T.codeNoteSingle, '',
+    T.infoTitle.toUpperCase(),
+    T.labelCheckin + ': ' + dataArrivo(dati.dataCheckin, L, true),
+    T.labelApartment + ': ' + (apts.length ? apts.map(a => a.nome + ' (' + a.descrizione + ')').join(T.and) : (dati.appartamento || 'N/A')),
+    T.labelGuests + ': ' + (dati.numeroOspiti || 0),
+    T.labelNights + ': ' + (dati.numeroNotti || 0),
+    T.labelTaxPaid + ': ' + euro(totaleDi(dati), L), '',
+    T.instructionsTitle.toUpperCase(),
+    ...INDIRIZZI(T).map(i => i.etichetta + ': ' + i.righe.join(', ') + ' — ' + i.link),
+    T.hoursLabel + ': ' + T.checkinHoursText(CHECKIN_OPEN_TIME, CHECKIN_CLOSE_TIME) + ' · ' + T.checkoutHoursText(CHECKOUT_CLOSE_TIME),
+    '- ' + T.instruction1, '- ' + T.instruction2, '- ' + T.instruction3, '',
+    T.areaTitle.toUpperCase(), T.areaText, SITO + '/area-clienti.html', '',
+    T.contactText(CONTATTI.email, CONTATTI.tel), T.closingText, '',
+    T.footerAutomated(CONTATTI.email),
+    'La Columbera · Dimora storica del XV secolo · Ravina, Trento',
+    T.privacy + ': ' + SITO + '/privacy.html'
+  ].join('\n');
+}
+
+async function inviaEmailConNodemailer(emailDestinatario, dati, htmlContent, allegati, lingua, creaTrasporto, testoContent) {
   const transporter = creaTrasporto ? creaTrasporto() : nodemailer.createTransport({
     service: 'gmail',
     auth: {
@@ -677,19 +550,14 @@ async function inviaEmailConNodemailer(emailDestinatario, dati, htmlContent, all
     }
   });
 
-  const L = linguaValida(lingua);
-  const T = EMAIL_TESTI[L];
-
-  const oggetto = T.subjectLine(
-    nomeAppartamentoEmail(dati.appartamento, L) || 'Appartamento',
-    new Date(dati.dataCheckin).toLocaleDateString(localeEmail(L))
-  );
+  const oggetto = oggettoEmailOspite(dati, lingua);
 
   const mailOptions = {
     from: '"La Columbera" <' + process.env.EMAIL_USER + '>',
     to: emailDestinatario,
     subject: oggetto,
     html: htmlContent,
+    text: testoContent,
     attachments: allegati.length > 0 ? allegati : undefined
   };
 
