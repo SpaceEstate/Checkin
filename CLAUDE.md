@@ -60,7 +60,7 @@ Una modifica a uno di questi punti va verificata anche nel repository LaColumber
 Per non lasciare `api/node_modules` nel repository, le prove si eseguono su una copia:
 
 ```bash
-cp -r . /tmp/ck && cd /tmp/ck/api && npm install && npm test
+cp -r . /tmp/ck && cd /tmp/ck/api && npm ci && npm test      # npm ci installa esattamente le versioni di api/package-lock.json
 ```
 
 Facoltativi, per non saltare nessuna prova:
