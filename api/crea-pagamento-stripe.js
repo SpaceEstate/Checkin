@@ -1,4 +1,5 @@
 import Stripe from "stripe";
+import { leggiRighePrenotazioni, trovaPerDataEAppartamento } from "./verifica-prenotazione.js";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -59,8 +60,21 @@ export function chiavePubblicabile(env = process.env) {
 // (webhook, get-session, pagina di Stripe) resta com'era.
 export const VERSIONE_API_NELLA_PAGINA = '2026-08-26.dahlia';
 
-// `stripe` è un parametro per poterlo sostituire nei test (nessuna chiamata reale a Stripe)
-async function gestisciRichiesta(stripe, req, res, env = process.env) {
+// Check-in senza numero («Non ho il numero di prenotazione»): il numero si cerca nel foglio Prenotazioni per data di arrivo e appartamento
+// (trovaPerDataEAppartamento). Al massimo 5 secondi: se il foglio non risponde si paga lo stesso, senza numero.
+async function numeroDaFoglio(dataCheckin, appartamento, notti, env) {
+  if (!(env.GOOGLE_CLIENT_EMAIL && env.GOOGLE_PRIVATE_KEY && (env.SHEET_ID_PRENOTAZIONI || env.SHEET_ID))) return '';      // foglio non configurato
+  let timer;
+  const tempo = new Promise(ok => { timer = setTimeout(() => ok(null), 5000); });
+  try {
+    const rows = await Promise.race([leggiRighePrenotazioni(env), tempo]);
+    return rows ? trovaPerDataEAppartamento(rows, dataCheckin, appartamento, notti) : '';
+  } catch (e) { console.warn('numero dal foglio non trovato: ' + (e && (e.code || e.name) || 'errore')); return ''; }
+  finally { clearTimeout(timer); }
+}
+
+// `stripe` è un parametro per poterlo sostituire nei test (nessuna chiamata reale a Stripe); deps.cercaNumero idem (foglio Prenotazioni)
+async function gestisciRichiesta(stripe, req, res, env = process.env, deps = {}) {
   res.setHeader("Access-Control-Allow-Origin", "https://spaceestate.github.io");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -141,9 +155,17 @@ async function gestisciRichiesta(stripe, req, res, env = process.env) {
     // (adeguamento GDPR). NON si inviano a Stripe nome, cognome, sesso, data/luogo di nascita, cittadinanza né estremi
     // del documento: prima finivano qui (resp_*) e restavano nei metadati della sessione Stripe. I dati degli ospiti
     // restano solo nei dati temporanei collegati da temp_session_id, cancellati dopo l'elaborazione (_elabora-checkin.js).
-    const numero = numeroPrenotazioneValido(numeroPrenotazione);
+    // Il numero della prenotazione va nel pagamento (e nell'oggetto dell'email al gestore): quello verificato dall'ospite nel primo passo,
+    // altrimenti quello trovato nel foglio per data di arrivo e appartamento (numeroDa = 'foglio'). Il sito di La Columbera lo legge dal
+    // pagamento e segna il check-in come fatto nell'area clienti.
+    let numero = numeroPrenotazioneValido(numeroPrenotazione), numeroDa = numero ? 'ospite' : '';
+    if (!numero) {
+      numero = numeroPrenotazioneValido(await (deps.cercaNumero || ((d, a, n) => numeroDaFoglio(d, a, n, env)))(dataCheckin, appartamento, numeroNotti).catch(() => ''));
+      if (numero) numeroDa = 'foglio';
+    }
     const metadata = {
       numeroPrenotazione: numero,
+      numeroDa,
       dataCheckin,
       appartamento: appartamento.substring(0, 490), // Max 490 per sicurezza
       numeroOspiti: numeroOspiti.toString(),
@@ -250,5 +272,5 @@ async function gestisciRichiesta(stripe, req, res, env = process.env) {
   }
 }
 
-export const makeHandler = (client, env) => (req, res) => gestisciRichiesta(client, req, res, env || process.env);
+export const makeHandler = (client, env, deps) => (req, res) => gestisciRichiesta(client, req, res, env || process.env, deps || {});
 export default makeHandler(stripe);

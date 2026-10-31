@@ -25,9 +25,13 @@ export function preparaAllegati(documenti) {
 const dataIt = d => /^\d{4}-\d{2}-\d{2}$/.test(d || '') ? d.split('-').reverse().join('/') : (d || '—');
 export function componiEmail({ riferimento, statoTxt, numeroAllegati, pdf, riepilogo }) {
   const r = riepilogo || null;
-  const oggetto = r ? 'Nuovo check-in ricevuto · ' + dataIt(r.dataCheckin) + ' (rif. ' + riferimento + ')' : 'Check-in La Columbera - documento e riepilogo (rif. ' + riferimento + ')';
+  // Oggetto: il numero di prenotazione per primo (lo stesso che il sito legge dal pagamento per segnare il check-in fatto), poi appartamento e data
+  const apt = r ? (/torre/i.test(r.appartamento || '') && /corte/i.test(r.appartamento || '') ? 'Torre + Corte' : /torre/i.test(r.appartamento || '') ? 'Torre' : /corte/i.test(r.appartamento || '') ? 'Corte' : '') : '';
+  const oggetto = r ? 'Check-in · ' + (r.numeroPrenotazione ? 'Prenotazione ' + r.numeroPrenotazione : 'senza numero di prenotazione') + (apt ? ' · ' + apt : '') + ' · ' + dataIt(r.dataCheckin) + ' (rif. ' + riferimento + ')'
+    : 'Check-in La Columbera - documento e riepilogo (rif. ' + riferimento + ')';
   const righe = ['Nuovo check-in ricevuto!', ''];
   if (r) {
+    righe.push('Numero prenotazione: ' + (r.numeroPrenotazione ? r.numeroPrenotazione + (r.numeroDa === 'foglio' ? ' (trovato per data di arrivo e appartamento: l\'ospite non l\'ha inserito)' : '') : 'non indicato e non trovato nel foglio Prenotazioni (puoi segnare il check-in fatto da Gestione → Prenotazioni)'), '');
     righe.push('DETTAGLI SOGGIORNO:',
       '- Data check-in: ' + dataIt(r.dataCheckin),
       '- Appartamento: ' + (r.appartamento || '—'),

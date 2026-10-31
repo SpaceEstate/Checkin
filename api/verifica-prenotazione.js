@@ -57,6 +57,28 @@ export function cercaPrenotazione(rows, numeroPrenotazione) {
   return simili.length === 1 ? simili[0] : undefined;
 }
 
+// Appartamento di un testo («La Columbera - Torre, …»): 'torre' | 'corte'; '' se sono tutti e due o nessuno.
+const aptDi = a => { const t = /torre/i.test(String(a || '')), c = /corte/i.test(String(a || '')); return t === c ? '' : t ? 'torre' : 'corte'; };
+// Numero della prenotazione di un check-in fatto SENZA numero (l'ospite ha scelto «Non ho il numero di prenotazione»): la riga del foglio
+// Prenotazioni con la stessa data di arrivo e lo stesso appartamento, non annullata. Solo se è una sola (con più righe possibili decidono le
+// notti); altrimenti '' (meglio nessun numero che quello di un'altra prenotazione). Stessa regola del sito di La Columbera.
+export function trovaPerDataEAppartamento(rows, dataISO, appartamento, notti) {
+  const apt = aptDi(appartamento);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dataISO || '') || !apt) return '';
+  let c = (rows || []).filter(r => String(r.get('Numero Prenotazione') || '').trim() && String(r.get('STATO') || '').trim().toUpperCase() !== 'ANNULLATA'
+    && normalizzaDataISO(r.get('Data Check-in')) === dataISO && aptDi(r.get('Appartamento')) === apt);
+  const n = parseInt(notti, 10);
+  if (c.length > 1 && n > 0) c = c.filter(r => parseInt(r.get('Numero Notti'), 10) === n);
+  return c.length === 1 ? String(c[0].get('Numero Prenotazione')).trim() : '';
+}
+// Righe del foglio Prenotazioni (lo stesso della verifica del numero). Lancia se il foglio non risponde.
+export async function leggiRighePrenotazioni(env = process.env) {
+  const auth = new JWT({ email: env.GOOGLE_CLIENT_EMAIL, key: env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'), scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
+  const doc = new GoogleSpreadsheet(env.SHEET_ID_PRENOTAZIONI || env.SHEET_ID, auth);
+  await doc.loadInfo();
+  return doc.sheetsByIndex[0].getRows();
+}
+
 export default async function handler(req, res) {
   // CORS Headers
   res.setHeader("Access-Control-Allow-Origin", "https://spaceestate.github.io");

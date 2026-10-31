@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { makeHandler as makeWebhook } from '../api/stripeWebhook.js';
 import { makeHandler as makeSessione } from '../api/get-session.js';
 import { makeHandler as makePagamento, urlAmmesso, numeroPrenotazioneValido, chiavePubblicabile } from '../api/crea-pagamento-stripe.js';
-import { cercaPrenotazione } from '../api/verifica-prenotazione.js';
+import { cercaPrenotazione, trovaPerDataEAppartamento } from '../api/verifica-prenotazione.js';
 import { elaboraCheckin, checkinIdDa } from '../api/_elabora-checkin.js';
 import { urlBrowserless } from '../api/_pdf-riepilogo.js';
 import { requireApi, memStore, fintoRes, fintoReq, checkinFamiglia, catturaLog, NOW, ENV_DRIVE } from './helpers.mjs';
@@ -187,6 +187,33 @@ test('chiave pubblicabile: ok solo se ha il formato giusto ed è dello stesso ti
   assert.deepEqual(chiavePubblicabile({ STRIPE_PUBLISHABLE_KEY: 'sk_test_x' }), { pk: '', stato: 'formato' });
   assert.deepEqual(chiavePubblicabile({ STRIPE_SECRET_KEY: 'sk_live_x', STRIPE_PUBLISHABLE_KEY: 'pk_test_x' }), { pk: '', stato: 'tipo' });
   assert.deepEqual(chiavePubblicabile({ STRIPE_SECRET_KEY: 'rk_live_x', STRIPE_PUBLISHABLE_KEY: ' pk_live_abc ' }), { pk: 'pk_live_abc', stato: 'ok' });
+});
+
+test('check-in senza numero («Non ho il numero di prenotazione»): il numero si cerca nel foglio Prenotazioni per data di arrivo e appartamento e va nel pagamento; solo se la prenotazione possibile è una sola', async () => {
+  const riga = (n, d, a, notti, stato) => ({ get: k => ({ 'Numero Prenotazione': n, 'Data Check-in': d, 'Appartamento': a, 'Numero Notti': notti, 'STATO': stato })[k] });
+  const T = '"La Columbera - Torre, Appartamento con 2 camere da letto"', C = '"La Columbera - Corte, Appartamento con 1 camere da letto"';
+  const rows = [riga('6397656355', '30/10/2026', T, '2', 'DA_VERIFICARE'), riga('5679231822', '26/10/2026', T, '4', 'CONFERMATA'), riga('5956862602', '27/11/2026', C, '2', 'ANNULLATA'),
+    riga('111', '2026-12-10', T, '2', 'CONFERMATA'), riga('222', '10/12/2026', T, '5', 'CONFERMATA'), riga('', '01/12/2026', C, '3', '')];
+  assert.equal(trovaPerDataEAppartamento(rows, '2026-10-30', 'La Columbera - Torre, Appartamento con 2 camere da letto', '2'), '6397656355', 'unica (anche «da verificare»)');
+  assert.equal(trovaPerDataEAppartamento(rows, '2026-10-30', 'La Columbera - Corte', '2'), '', 'appartamento diverso');
+  assert.equal(trovaPerDataEAppartamento(rows, '2026-10-30', 'La Columbera - Torre + La Columbera - Corte', '2'), '', 'tutti e due gli appartamenti: non si indovina');
+  assert.equal(trovaPerDataEAppartamento(rows, '2026-11-27', 'Corte', '2'), '', 'annullata');
+  assert.equal(trovaPerDataEAppartamento(rows, '2026-12-10', 'Torre', '3'), '', 'due possibili, notti diverse da entrambe');
+  assert.equal(trovaPerDataEAppartamento(rows, '2026-12-10', 'Torre', '5'), '222', 'le notti scelgono (date in formati diversi nel foglio)');
+  assert.equal(trovaPerDataEAppartamento(rows, '2026-12-01', 'Corte', '3'), '', 'riga senza numero');
+  // nel pagamento: numero trovato nel foglio (numeroDa = foglio); se l'ospite l'ha verificato vale il suo e il foglio non si interroga
+  let creata = null, cercate = 0;
+  const fintoStripe = { checkout: { sessions: { create: async p => { creata = p; return { id: 'cs_test_x', url: 'https://checkout.stripe.invalid/x' }; } } } };
+  const deps = { cercaNumero: async (d, a, n) => { cercate++; return trovaPerDataEAppartamento(rows, d, a, n); } };
+  const d = Object.assign(checkinFamiglia(), { dataCheckin: '2026-10-30', appartamento: 'La Columbera - Torre, Appartamento con 2 camere da letto', numeroNotti: 2 });
+  let r = fintoRes(); await catturaLog(() => makePagamento(fintoStripe, undefined, deps)(fintoReq('POST', d), r));
+  assert.equal(r.statusCode, 200);
+  assert.deepEqual([creata.metadata.numeroPrenotazione, creata.metadata.numeroDa, creata.payment_intent_data.metadata.numeroPrenotazione, cercate], ['6397656355', 'foglio', '6397656355', 1]);
+  r = fintoRes(); await catturaLog(() => makePagamento(fintoStripe, undefined, deps)(fintoReq('POST', Object.assign({}, d, { numeroPrenotazione: 'HMSEDESZCW' })), r));
+  assert.deepEqual([creata.metadata.numeroPrenotazione, creata.metadata.numeroDa, cercate], ['HMSEDESZCW', 'ospite', 1], 'numero dell\'ospite: il foglio non si interroga');
+  // foglio che non risponde: si paga lo stesso, senza numero
+  r = fintoRes(); await catturaLog(() => makePagamento(fintoStripe, undefined, { cercaNumero: async () => { throw new Error('giù'); } })(fintoReq('POST', d), r));
+  assert.equal(r.statusCode, 200); assert.ok(!('numeroPrenotazione' in creata.metadata) && !('numeroDa' in creata.metadata));
 });
 
 test('verifica prenotazione: il numero si trova anche scritto con spazi, punti o trattini e in minuscolo; prima vale la corrispondenza esatta', () => {

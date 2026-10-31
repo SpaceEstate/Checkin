@@ -56,6 +56,8 @@ test('percorso completo: righe nel foglio come prima, email gestore con sole imm
   assert.deepEqual(m.attachments.map(a => [a.filename, a.contentType]), [['checkin-2026-11-05.pdf', 'application/pdf'], ['documento-fronte.jpg', 'image/jpeg'], ['documento-retro.jpg', 'image/jpeg']]);
   assert.deepEqual(contieneSensibili(m.subject), [], 'nessun dato personale nell\'oggetto');
   assert.deepEqual(contieneSensibili(m.text).filter(v => !['Ermenegilda', 'Provaccia'].includes(v)), [], 'nel corpo solo il nome del responsabile: né documento, né nascite, né altri ospiti');
+  assert.match(m.subject, /^Check-in · senza numero di prenotazione · Torre · 05\/11\/2026 \(rif\. ck[0-9a-f]+\)$/, m.subject);
+  assert.match(m.text, /Numero prenotazione: non indicato/);
   assert.match(m.text, /^Nuovo check-in ricevuto!/); assert.match(m.text, /- Data check-in: 05\/11\/2026/); assert.match(m.text, /- Appartamento: La Columbera - Torre/);
   assert.match(m.text, /- Ospiti: 3 \(3 registrati\)/); assert.match(m.text, /- Notti: 3/); assert.match(m.text, /- Totale tassa soggiorno: €13\.50/); assert.match(m.text, /Responsabile: Ermenegilda Provaccia/);
   assert.match(m.text, /riepilogo PDF dei dati inseriti/); assert.ok(!/Dati per Alloggiati Web/.test(m.text), 'con il foglio a posto non serve ripeterlo');
@@ -175,4 +177,14 @@ test('email gestore: allegati solo immagini valide, nomi generici, firma dei byt
   assert.equal(scartati.length, 2);
   const { oggetto, testo } = componiEmail({ riferimento: 'ck01234567', statoTxt: 'x', numeroAllegati: 2 });
   assert.ok(!/Provaccia|ZZ99|nato|nascita/i.test(oggetto + testo));
+});
+
+test('email al gestore: il numero di prenotazione nell\'oggetto (verificato dall\'ospite o trovato nel foglio per data e appartamento)', () => {
+  const base = { dataCheckin: '2026-10-30', appartamento: 'La Columbera - Torre, Appartamento con 2 camere da letto', ospiti: 2, registrati: 2, notti: 2, totale: 6, responsabile: 'X' };
+  let e = componiEmail({ riferimento: 'ck01234567', statoTxt: 'inviati al foglio', numeroAllegati: 1, riepilogo: Object.assign({ numeroPrenotazione: '6397656355', numeroDa: 'ospite' }, base) });
+  assert.equal(e.oggetto, 'Check-in · Prenotazione 6397656355 · Torre · 30/10/2026 (rif. ck01234567)');
+  assert.match(e.testo, /Numero prenotazione: 6397656355\n/);
+  e = componiEmail({ riferimento: 'ck01234567', statoTxt: 'inviati al foglio', numeroAllegati: 1, riepilogo: Object.assign({ numeroPrenotazione: '6397656355', numeroDa: 'foglio' }, base, { appartamento: 'La Columbera - Corte' }) });
+  assert.equal(e.oggetto, 'Check-in · Prenotazione 6397656355 · Corte · 30/10/2026 (rif. ck01234567)');
+  assert.match(e.testo, /trovato per data di arrivo e appartamento/);
 });

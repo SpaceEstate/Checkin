@@ -116,7 +116,8 @@ export async function elaboraCheckin(session, deps) {
             dataCheckin: metadata.dataCheckin || dati.dataCheckin || '', appartamento: metadata.appartamento || dati.appartamento || '',
             ospiti: parseInt(metadata.numeroOspiti, 10) || dati.numeroOspiti || 0, registrati: Array.isArray(dati.ospiti) ? dati.ospiti.length : 0,
             notti: parseInt(metadata.numeroNotti, 10) || dati.numeroNotti || 0, totale: parseFloat(metadata.totale) || 0,
-            responsabile: resp ? [resp.nome, resp.cognome].filter(Boolean).join(' ') : ''
+            responsabile: resp ? [resp.nome, resp.cognome].filter(Boolean).join(' ') : '',
+            numeroPrenotazione: metadata.numeroPrenotazione || '', numeroDa: metadata.numeroDa || ''
           };
           await deps.inviaEmailGestore({ documenti: dati.documenti, riferimento: riferimentoBreve(checkinId), statoTxt: descriviStatoSheet(reg), destinatario: dest, env, generaPdf, riepilogo });
           await aggiorna({ email_gestore_stato: 'inviata' });

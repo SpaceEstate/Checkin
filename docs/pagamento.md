@@ -28,3 +28,10 @@ I campi della carta nella pagina usano la versione delle API `2026-08-26.dahlia`
 ## Aspetto
 
 Tutto il check-in (modulo e pagina di esito) usa lo stile del sito di La Columbera: fondo carta, carte bianche arrotondate, titoli in Fraunces corsivo, parola calligrafica in Pinyon Script (servito dal sito, licenza in `fonts/`), etichette bordeaux maiuscole, campi su fondo carta, pulsanti a pillola bordeaux, righe di riepilogo come il conto del sito. Le regole stanno in fondo a `checkin.css` («TEMA LA COLUMBERA») e in fondo allo stile di `successo-pagamento.html`; i nomi delle classi usate da `checkin.js` non sono cambiati.
+
+## Numero di prenotazione nel pagamento e nell'email
+
+- Il numero di prenotazione va nei metadati del pagamento Stripe (`numeroPrenotazione`): il sito di La Columbera lo legge da lì e nell'area clienti il riquadro diventa «Check-in completato».
+- **Ospite con il numero** (dall'area clienti o scritto nel primo passo): vale quello (`numeroDa = ospite`).
+- **Ospite senza numero** («Non ho il numero di prenotazione»): al pagamento il Check-in cerca nel foglio **Prenotazioni** la riga con la stessa **data di arrivo** e lo stesso **appartamento**, non annullata (anche «da verificare»); se è **una sola** (con più righe possibili decidono le notti) usa quel numero (`numeroDa = foglio`). Se il check-in è per tutti e due gli appartamenti, se non c'è nessuna riga o ne restano più di una, o se il foglio non risponde entro 5 secondi, il pagamento parte lo stesso senza numero.
+- **Email al gestore**: l'oggetto comincia con il numero, per esempio `Check-in · Prenotazione 6397656355 · Torre · 30/10/2026 (rif. ck…)`, oppure `Check-in · senza numero di prenotazione · …`; nel testo la riga «Numero prenotazione» dice anche se l'ha inserito l'ospite o se è stato trovato nel foglio. Senza numero, il check-in si può segnare fatto a mano in Gestione → Prenotazioni.
