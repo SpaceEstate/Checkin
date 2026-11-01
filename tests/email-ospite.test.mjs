@@ -75,7 +75,7 @@ test('email ospite: stile del sito (tabelle e stili in linea; un solo blocco <st
     assert.ok(!/box-shadow|display:\s*flex/i.test(h), lingua + ': solo stili semplici');
     assert.equal((h.match(/<style/g) || []).length, 1, lingua + ': un solo blocco <style> (le regole per Gmail, prova sotto)');
     assert.ok(!/<style/.test(corpo), lingua + ': niente <style> nel corpo');
-    assert.deepEqual([...new Set(h.match(/class="[^"]*"/g) || [])].sort(), ['class="body"', 'class="gm-difference"', 'class="gm-screen"', 'class="gm-wine"', 'class="gm-wine3"'], lingua + ': solo le classi delle regole per Gmail');
+    assert.deepEqual([...new Set(h.match(/class="[^"]*"/g) || [])].sort(), ['class="body"', 'class="gm-difference"', 'class="gm-screen"', 'class="gm-wine"'], lingua + ': solo le classi delle regole per Gmail');
     // l'unica «sfumatura» in linea: la tinta unita di testata e riga oro, che l'app Gmail in modalità scura non capovolge (stessa scelta delle email del sito)
     assert.deepEqual(corpo.match(/linear-gradient\([^)]*\)/g), ['linear-gradient(#5F222B,#5F222B)', 'linear-gradient(#B08D3C,#B08D3C)'], lingua + ': nessuna sfumatura vera, solo le due tinte unite');
     assert.ok(!/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(h), lingua + ': niente emoji');
@@ -87,21 +87,23 @@ test('email ospite: stile del sito (tabelle e stili in linea; un solo blocco <st
   }
 });
 
-test('email ospite nell\'app Gmail in modalità scura: pulsante e piè di pagina restano bordeaux con le scritte chiare (regole solo per Gmail, come le email del sito)', async () => {
-  const CSS = '<style>u + .body .gm-wine{background-image:linear-gradient(#7A2E39,#7A2E39)}u + .body .gm-wine3{background-image:linear-gradient(#3A151B,#3A151B)}u + .body .gm-screen{background:#000;mix-blend-mode:screen}u + .body .gm-difference{background:#000;mix-blend-mode:difference}</style>';
+test('email ospite nell\'app Gmail in modalità scura: pulsante e piè di pagina restano bordeaux con le scritte chiare (regole solo per Gmail, come le email del sito), dello stesso bordeaux della testata in tutti i programmi', async () => {
+  const CSS = '<style>u + .body .gm-wine{background-image:linear-gradient(#5F222B,#5F222B)}u + .body .gm-screen{background:#000;mix-blend-mode:screen}u + .body .gm-difference{background:#000;mix-blend-mode:difference}</style>';
   for (const lingua of ['it', 'en', 'de']) {
     const { mail } = await inviaProva({ emailOspite: 'g@esempio.invalid', datiPrenotazione: dati({ lingua }) });
     const h = mail.html;
     assert.ok(h.split('</head>')[0].endsWith(CSS), lingua + ': regole per Gmail nell\'intestazione del documento, ognuna solo per Gmail (u + .body)');
     assert.ok(/<body class="body" style="margin:0;padding:0;background:#F1E9D9;/.test(h), lingua + ': il corpo ha la classe che le regole cercano');
-    const btn = h.match(/<td align="center" bgcolor="#7A2E39"[^>]*>[\s\S]*?<\/td>/g) || [];
-    assert.ok(btn.length === 1 && /^<td align="center" bgcolor="#7A2E39" class="gm-wine" style="border-radius:999px"><div class="gm-screen"><div class="gm-difference"><a [^>]*color:#ffffff[^>]*>[^<]+<\/a><\/div><\/div><\/td>$/.test(btn[0]), lingua + ': pulsante ' + btn.join(' | ').slice(0, 300));
-    // piè di pagina: background-color (la forma breve annullerebbe l'immagine della regola) e i due livelli attorno a tutte le scritte
-    assert.ok(/<td bgcolor="#3A151B" class="gm-wine3" style="background-color:#3A151B;padding:24px 32px" align="center"><div class="gm-screen"><div class="gm-difference">\s*<div style="[^"]*color:#F1E9D9">La Columbera<\/div>[\s\S]*?privacy\.html"[^>]*>[^<]+<\/a><\/div><\/div><\/div><\/td><\/tr>/.test(h), lingua + ': piè di pagina');
+    const btn = h.match(/<td align="center" bgcolor="#5F222B" class="gm-wine"[^>]*>[\s\S]*?<\/td>/g) || [];
+    assert.ok(btn.length === 1 && /^<td align="center" bgcolor="#5F222B" class="gm-wine" style="border-radius:999px"><div class="gm-screen"><div class="gm-difference"><a [^>]*color:#ffffff[^>]*>[^<]+<\/a><\/div><\/div><\/td>$/.test(btn[0]), lingua + ': pulsante ' + btn.join(' | ').slice(0, 300));
+    // piè di pagina: lo stesso bordeaux della testata; background-color (la forma breve annullerebbe l'immagine della regola) e i due livelli attorno a tutte le scritte
+    assert.ok(/<td bgcolor="#5F222B" class="gm-wine" style="background-color:#5F222B;padding:24px 32px" align="center"><div class="gm-screen"><div class="gm-difference">\s*<div style="[^"]*color:#F1E9D9">La Columbera<\/div>[\s\S]*?privacy\.html"[^>]*>[^<]+<\/a><\/div><\/div><\/div><\/td><\/tr>/.test(h), lingua + ': piè di pagina');
     assert.equal((h.match(/<div/g) || []).length, (h.match(/<\/div>/g) || []).length, lingua + ': div bilanciati');
+    assert.ok(!/bgcolor="#(7A2E39|3A151B)"|background(-color)?:#(7A2E39|3A151B)/i.test(h), lingua + ': nessuno sfondo di un bordeaux diverso da quello della testata');
+    assert.ok(!h.includes('#A8988A') && h.includes('color:#ADA090'), lingua + ': riga piccola del piè di pagina leggibile sul bordeaux della testata');
     if (process.env.LACOLUMBERA_DIR) {      // stesse regole delle email del sito
       const sito = (await import('fs')).readFileSync(path.join(process.env.LACOLUMBERA_DIR, 'api', '_mail.js'), 'utf8');
-      assert.ok(sito.includes("const GMAIL_CSS=`<style>u + .body .gm-wine{background-image:linear-gradient(${C.wine},${C.wine})}u + .body .gm-wine3{background-image:linear-gradient(${C.wine3},${C.wine3})}u + .body .gm-screen{background:#000;mix-blend-mode:screen}u + .body .gm-difference{background:#000;mix-blend-mode:difference}</style>`;"), 'regole uguali a quelle del sito');
+      assert.ok(sito.includes("const GMAIL_CSS=`<style>u + .body .gm-wine{background-image:linear-gradient(${C.wine2},${C.wine2})}u + .body .gm-screen{background:#000;mix-blend-mode:screen}u + .body .gm-difference{background:#000;mix-blend-mode:difference}</style>`;"), 'regole uguali a quelle del sito');
     }
   }
 });
