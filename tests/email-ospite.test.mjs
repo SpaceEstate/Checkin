@@ -68,19 +68,41 @@ test('email ospite: lingua dell\'ospite (it, en, de; altro = italiano)', async (
 // ---------------- aspetto e contenuto (dal 31/10/2026: stesso stile delle email del sito) ----------------
 const MAPS = 'https://maps.app.goo.gl/mVBZWREejSuVEGqQ7?g_st=ic', PARK = 'https://maps.app.goo.gl/VWHWQCMWUzAvgSYM7?g_st=ic';
 
-test('email ospite: stile del sito (tabelle e stili in linea, niente blocco <style>, sfumature vere, emoji), sotto il limite di Gmail', async () => {
+test('email ospite: stile del sito (tabelle e stili in linea; un solo blocco <style>, con le regole per Gmail; niente sfumature vere, emoji), sotto il limite di Gmail', async () => {
   for (const lingua of ['it', 'en', 'de']) {
     const { mail } = await inviaProva({ emailOspite: 'g@esempio.invalid', datiPrenotazione: dati({ lingua }) });
-    const h = mail.html;
-    assert.ok(!/<style|class=|box-shadow|display:\s*flex/i.test(h), lingua + ': solo stili in linea');
-    // l'unica «sfumatura» ammessa: la tinta unita di testata e riga oro, che l'app Gmail in modalità scura non capovolge (stessa scelta delle email del sito)
-    assert.deepEqual(h.match(/linear-gradient\([^)]*\)/g), ['linear-gradient(#5F222B,#5F222B)', 'linear-gradient(#B08D3C,#B08D3C)'], lingua + ': nessuna sfumatura vera, solo le due tinte unite');
+    const h = mail.html, corpo = h.split('</head>')[1];
+    assert.ok(!/box-shadow|display:\s*flex/i.test(h), lingua + ': solo stili semplici');
+    assert.equal((h.match(/<style/g) || []).length, 1, lingua + ': un solo blocco <style> (le regole per Gmail, prova sotto)');
+    assert.ok(!/<style/.test(corpo), lingua + ': niente <style> nel corpo');
+    assert.deepEqual([...new Set(h.match(/class="[^"]*"/g) || [])].sort(), ['class="body"', 'class="gm-difference"', 'class="gm-screen"', 'class="gm-wine"', 'class="gm-wine3"'], lingua + ': solo le classi delle regole per Gmail');
+    // l'unica «sfumatura» in linea: la tinta unita di testata e riga oro, che l'app Gmail in modalità scura non capovolge (stessa scelta delle email del sito)
+    assert.deepEqual(corpo.match(/linear-gradient\([^)]*\)/g), ['linear-gradient(#5F222B,#5F222B)', 'linear-gradient(#B08D3C,#B08D3C)'], lingua + ': nessuna sfumatura vera, solo le due tinte unite');
     assert.ok(!/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(h), lingua + ': niente emoji');
     assert.ok(h.includes('role="presentation"') && h.includes('#5F222B') && h.includes('#B08D3C'), lingua + ': testata bordeaux e riga oro del sito');
     assert.ok(h.includes('<td align="center" bgcolor="#5F222B" style="background:#5F222B;background-image:linear-gradient(#5F222B,#5F222B);padding:22px 24px 18px">'), lingua + ': testata bordeaux anche nell\'app Gmail in modalità scura');
     assert.ok(h.includes('<td height="4" bgcolor="#B08D3C" style="height:4px;line-height:4px;font-size:0;background:#B08D3C;background-image:linear-gradient(#B08D3C,#B08D3C)">'), lingua + ': riga oro anche in modalità scura');
     assert.ok(Buffer.byteLength(h) < 100 * 1024, lingua + ': Gmail taglia le email oltre 102 KB');
     assert.ok(!/Generat[ao] il|Generated on|Erstellt am/.test(h), lingua + ': niente data tecnica di generazione');
+  }
+});
+
+test('email ospite nell\'app Gmail in modalità scura: pulsante e piè di pagina restano bordeaux con le scritte chiare (regole solo per Gmail, come le email del sito)', async () => {
+  const CSS = '<style>u + .body .gm-wine{background-image:linear-gradient(#7A2E39,#7A2E39)}u + .body .gm-wine3{background-image:linear-gradient(#3A151B,#3A151B)}u + .body .gm-screen{background:#000;mix-blend-mode:screen}u + .body .gm-difference{background:#000;mix-blend-mode:difference}</style>';
+  for (const lingua of ['it', 'en', 'de']) {
+    const { mail } = await inviaProva({ emailOspite: 'g@esempio.invalid', datiPrenotazione: dati({ lingua }) });
+    const h = mail.html;
+    assert.ok(h.split('</head>')[0].endsWith(CSS), lingua + ': regole per Gmail nell\'intestazione del documento, ognuna solo per Gmail (u + .body)');
+    assert.ok(/<body class="body" style="margin:0;padding:0;background:#F1E9D9;/.test(h), lingua + ': il corpo ha la classe che le regole cercano');
+    const btn = h.match(/<td align="center" bgcolor="#7A2E39"[^>]*>[\s\S]*?<\/td>/g) || [];
+    assert.ok(btn.length === 1 && /^<td align="center" bgcolor="#7A2E39" class="gm-wine" style="border-radius:999px"><div class="gm-screen"><div class="gm-difference"><a [^>]*color:#ffffff[^>]*>[^<]+<\/a><\/div><\/div><\/td>$/.test(btn[0]), lingua + ': pulsante ' + btn.join(' | ').slice(0, 300));
+    // piè di pagina: background-color (la forma breve annullerebbe l'immagine della regola) e i due livelli attorno a tutte le scritte
+    assert.ok(/<td bgcolor="#3A151B" class="gm-wine3" style="background-color:#3A151B;padding:24px 32px" align="center"><div class="gm-screen"><div class="gm-difference">\s*<div style="[^"]*color:#F1E9D9">La Columbera<\/div>[\s\S]*?privacy\.html"[^>]*>[^<]+<\/a><\/div><\/div><\/div><\/td><\/tr>/.test(h), lingua + ': piè di pagina');
+    assert.equal((h.match(/<div/g) || []).length, (h.match(/<\/div>/g) || []).length, lingua + ': div bilanciati');
+    if (process.env.LACOLUMBERA_DIR) {      // stesse regole delle email del sito
+      const sito = (await import('fs')).readFileSync(path.join(process.env.LACOLUMBERA_DIR, 'api', '_mail.js'), 'utf8');
+      assert.ok(sito.includes("const GMAIL_CSS=`<style>u + .body .gm-wine{background-image:linear-gradient(${C.wine},${C.wine})}u + .body .gm-wine3{background-image:linear-gradient(${C.wine3},${C.wine3})}u + .body .gm-screen{background:#000;mix-blend-mode:screen}u + .body .gm-difference{background:#000;mix-blend-mode:difference}</style>`;"), 'regole uguali a quelle del sito');
+    }
   }
 });
 

@@ -440,7 +440,7 @@ function generaHTMLEmailOspite(dati, codiciCassetta, lingua) {
   const etichetta = (t, centro) => `<div style="font-family:${SANS};font-size:11px;letter-spacing:2.2px;text-transform:uppercase;color:${C.muted};font-weight:700;padding-bottom:12px${centro ? ';text-align:center' : ''}">${esc(t)}</div>`;
   const testo = (html, extra) => `<p style="margin:0;font-family:${SANS};font-size:15px;line-height:24px;color:${C.ink}${extra || ''}">${html}</p>`;
   const riga = (k, v, ultima) => `<tr><td valign="top" style="padding:13px 12px 13px 0;${ultima ? '' : `border-bottom:1px solid ${C.line};`}font-family:${SANS};font-size:14px;color:${C.muted}">${esc(k)}</td><td align="right" style="padding:13px 0;${ultima ? '' : `border-bottom:1px solid ${C.line};`}font-family:${SANS};font-size:15px;font-weight:700;color:${C.ink}">${v}</td></tr>`;
-  const pulsante = (href, label) => `<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center"><tr><td align="center" bgcolor="${C.wine}" style="border-radius:999px"><a href="${esc(href)}" target="_blank" style="display:inline-block;padding:15px 34px;font-family:${SANS};font-size:15px;font-weight:700;letter-spacing:.3px;color:#ffffff;text-decoration:none;border-radius:999px">${esc(label)}</a></td></tr></table>`;
+  const pulsante = (href, label) => `<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center"><tr><td align="center" bgcolor="${C.wine}" class="gm-wine" style="border-radius:999px"><div class="gm-screen"><div class="gm-difference"><a href="${esc(href)}" target="_blank" style="display:inline-block;padding:15px 34px;font-family:${SANS};font-size:15px;font-weight:700;letter-spacing:.3px;color:#ffffff;text-decoration:none;border-radius:999px">${esc(label)}</a></div></div></td></tr></table>`;
   const riquadro = inner => `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${C.paper};border-radius:12px"><tr><td style="padding:22px 22px">${inner}</td></tr></table>`;
 
   // Codice (o codici) della cassetta: stesso contenuto di prima (determinaCodiciCassetta), nello stile del codice di prenotazione del sito.
@@ -489,11 +489,15 @@ function generaHTMLEmailOspite(dati, codiciCassetta, lingua) {
   const chiusura = `<p style="margin:0;font-family:${SANS};font-size:14px;line-height:22px;color:${C.muted};text-align:center">${T.contactText(mail, tel)}<br>${esc(T.closingText)}</p>`;
   const [titolo1, titolo2] = T.title(nomeOspite(dati));
 
-  // Testata e riga oro ripetono il colore come immagine a tinta unita: l'app Gmail in modalità scura capovolge i colori di sfondo (il bordeaux diventava
-  // rosa) ma non le immagini di sfondo. Solo dove non c'è testo (le scritte chiare su un bordeaux bloccato Gmail le scurirebbe). Come in api/_mail.js del sito.
+  // Modalità scura dell'app Gmail: capovolge i colori (sfondi e scritte; il bordeaux diventava rosa), non le immagini di sfondo. Testata e riga oro
+  // ripetono il colore come immagine a tinta unita, in linea. Pulsante e piè di pagina hanno scritte chiare: per loro la tinta unita sta nelle regole di
+  // GMAIL_CSS, che valgono solo in Gmail («u + .body»), con due livelli mix-blend-mode (screen e difference, tecnica di Rémi Parmentier) che riportano
+  // chiare le scritte. Dove Gmail non legge il blocco <style> (account non Google nell'app) restano rosati ma leggibili; gli altri programmi non le
+  // applicano. Come in api/_mail.js del sito (stesse regole: il test lo controlla con LACOLUMBERA_DIR).
+  const GMAIL_CSS = `<style>u + .body .gm-wine{background-image:linear-gradient(${C.wine},${C.wine})}u + .body .gm-wine3{background-image:linear-gradient(${C.wine3},${C.wine3})}u + .body .gm-screen{background:#000;mix-blend-mode:screen}u + .body .gm-difference{background:#000;mix-blend-mode:difference}</style>`;
   return `<!doctype html>
-<html lang="${L}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="x-apple-disable-message-reformatting"><title>${esc(T.eyebrow)}</title></head>
-<body style="margin:0;padding:0;background:${C.paper2};-webkit-text-size-adjust:100%">
+<html lang="${L}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="x-apple-disable-message-reformatting"><title>${esc(T.eyebrow)}</title>${GMAIL_CSS}</head>
+<body class="body" style="margin:0;padding:0;background:${C.paper2};-webkit-text-size-adjust:100%">
 <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">${esc(T.preheader)}&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${C.paper2}"><tr><td align="center" style="padding:24px 12px">
 <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;background:${C.white};border-radius:14px;overflow:hidden;border:1px solid ${C.line}">
@@ -510,10 +514,10 @@ ${sec(accesso, '30px 32px 0')}
 ${sec(galleria, '30px 32px 0')}
 ${sec(area, '8px 32px 0')}
 ${sec(chiusura, '26px 32px 30px')}
-<tr><td bgcolor="${C.wine3}" style="background:${C.wine3};padding:24px 32px" align="center">
+<tr><td bgcolor="${C.wine3}" class="gm-wine3" style="background-color:${C.wine3};padding:24px 32px" align="center"><div class="gm-screen"><div class="gm-difference">
 <div style="font-family:${SERIF};font-size:16px;color:#F1E9D9">La Columbera</div>
 <div style="font-family:${SANS};font-size:12px;line-height:19px;color:#CDBFAE;padding-top:6px">Dimora storica del XV secolo · Ravina, Trento<br><a href="${CONTATTI.telLink}" style="color:#CDBFAE;text-decoration:none">${esc(CONTATTI.tel)}</a> · <a href="mailto:${CONTATTI.email}" style="color:#CDBFAE;text-decoration:none">${CONTATTI.email}</a></div>
-<div style="font-family:${SANS};font-size:11px;line-height:17px;color:#A8988A;padding-top:12px">${esc(T.footerAutomated(CONTATTI.email))}<br><a href="${SITO}/privacy.html" target="_blank" style="color:#A8988A">${esc(T.privacy)}</a></div></td></tr>
+<div style="font-family:${SANS};font-size:11px;line-height:17px;color:#A8988A;padding-top:12px">${esc(T.footerAutomated(CONTATTI.email))}<br><a href="${SITO}/privacy.html" target="_blank" style="color:#A8988A">${esc(T.privacy)}</a></div></div></div></td></tr>
 </table></td></tr></table></body></html>`;
 }
 

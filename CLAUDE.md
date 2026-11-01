@@ -71,13 +71,13 @@ Facoltativi, per non saltare nessuna prova:
 - `LACOLUMBERA_DIR=/percorso/di/LaColumbera`: confronto del tracciato Alloggiati con il modulo originale.
 - `TEST_DATABASE_URL=postgres://…`: un database PostgreSQL **di prova locale, mai quello di produzione**. `api/_db.js` si collega solo con SSL (`ssl: 'require'`), quindi il server di prova deve avere SSL attivo (basta un certificato autofirmato: `ssl=on`, `server.crt`, `server.key`).
 
-## Baseline (31/10/2026, dopo la nuova email all'ospite)
+## Baseline (01/11/2026, dopo le regole per la modalità scura di Gmail nell'email all'ospite)
 
 | Prova | Risultato |
 |---|---|
-| `npm test` senza variabili | 60 ok, 0 falliti, 4 saltati |
-| con `LACOLUMBERA_DIR` e `TEST_DATABASE_URL` (PostgreSQL 16 locale con SSL) | 64 ok, 0 falliti, 0 saltati |
+| `npm test` senza variabili | 61 ok, 0 falliti, 4 saltati |
+| con `LACOLUMBERA_DIR` e `TEST_DATABASE_URL` (PostgreSQL 16 locale con SSL) | 65 ok, 0 falliti, 0 saltati (verificato il 01/11/2026 con il solo `LACOLUMBERA_DIR`: 62 ok, 3 saltati, quelli del database) |
 
-Prima di questo intervento (commit `63e4da8`): 50 ok e 3 saltati; 53 ok con le variabili.
+Prima di questo intervento (commit `c37476d`): 60 ok e 4 saltati; 64 ok con le variabili. Prima della nuova email all'ospite (commit `63e4da8`): 50 ok e 3 saltati; 53 ok con le variabili.
 
 Quando un intervento aggiunge prove, aggiornare questa tabella nello stesso commit.
