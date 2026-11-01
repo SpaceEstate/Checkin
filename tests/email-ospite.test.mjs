@@ -68,13 +68,17 @@ test('email ospite: lingua dell\'ospite (it, en, de; altro = italiano)', async (
 // ---------------- aspetto e contenuto (dal 31/10/2026: stesso stile delle email del sito) ----------------
 const MAPS = 'https://maps.app.goo.gl/mVBZWREejSuVEGqQ7?g_st=ic', PARK = 'https://maps.app.goo.gl/VWHWQCMWUzAvgSYM7?g_st=ic';
 
-test('email ospite: stile del sito (tabelle e stili in linea, niente blocco <style>, sfumature, emoji), sotto il limite di Gmail', async () => {
+test('email ospite: stile del sito (tabelle e stili in linea, niente blocco <style>, sfumature vere, emoji), sotto il limite di Gmail', async () => {
   for (const lingua of ['it', 'en', 'de']) {
     const { mail } = await inviaProva({ emailOspite: 'g@esempio.invalid', datiPrenotazione: dati({ lingua }) });
     const h = mail.html;
-    assert.ok(!/<style|class=|linear-gradient|box-shadow|display:\s*flex/i.test(h), lingua + ': solo stili in linea');
+    assert.ok(!/<style|class=|box-shadow|display:\s*flex/i.test(h), lingua + ': solo stili in linea');
+    // l'unica «sfumatura» ammessa: la tinta unita di testata e riga oro, che l'app Gmail in modalità scura non capovolge (stessa scelta delle email del sito)
+    assert.deepEqual(h.match(/linear-gradient\([^)]*\)/g), ['linear-gradient(#5F222B,#5F222B)', 'linear-gradient(#B08D3C,#B08D3C)'], lingua + ': nessuna sfumatura vera, solo le due tinte unite');
     assert.ok(!/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(h), lingua + ': niente emoji');
     assert.ok(h.includes('role="presentation"') && h.includes('#5F222B') && h.includes('#B08D3C'), lingua + ': testata bordeaux e riga oro del sito');
+    assert.ok(h.includes('<td align="center" bgcolor="#5F222B" style="background:#5F222B;background-image:linear-gradient(#5F222B,#5F222B);padding:22px 24px 18px">'), lingua + ': testata bordeaux anche nell\'app Gmail in modalità scura');
+    assert.ok(h.includes('<td height="4" bgcolor="#B08D3C" style="height:4px;line-height:4px;font-size:0;background:#B08D3C;background-image:linear-gradient(#B08D3C,#B08D3C)">'), lingua + ': riga oro anche in modalità scura');
     assert.ok(Buffer.byteLength(h) < 100 * 1024, lingua + ': Gmail taglia le email oltre 102 KB');
     assert.ok(!/Generat[ao] il|Generated on|Erstellt am/.test(h), lingua + ': niente data tecnica di generazione');
   }
