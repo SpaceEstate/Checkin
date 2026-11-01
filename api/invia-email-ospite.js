@@ -418,7 +418,9 @@ function determinaCodiciCassetta(appartamento, lingua) {
 // Solo tabelle e stili scritti dentro ogni elemento (niente blocco <style>, sfumature, ombre o flex): è il modo per vederla
 // uguale in Gmail, Outlook e Apple Mail. Le immagini sono gli allegati di sempre (cid:), quindi si vedono anche senza internet.
 // ------------------------------------------------------------------
-const C = { wine: '#7A2E39', wine2: '#5F222B', wine3: '#3A151B', ink: '#1E1917', muted: '#6C5F55', paper: '#FAF5EC', paper2: '#F1E9D9', line: '#DCCFB6', gold: '#B08D3C', white: '#FFFDF7' };
+// oro: le scritte di risalto (codice della cassetta, importo, link), come nelle email del sito. Leggibile su tutti i fondi chiari (contrasto da 4,8
+// a 5,7:1, WCAG AA); nell'app Gmail in modalità scura diventa oro chiaro (il bordeaux di prima diventava rosa).
+const C = { wine: '#7A2E39', wine2: '#5F222B', wine3: '#3A151B', ink: '#1E1917', muted: '#6C5F55', paper: '#FAF5EC', paper2: '#F1E9D9', line: '#DCCFB6', gold: '#B08D3C', oro: '#806120', white: '#FFFDF7' };
 const SERIF = "Georgia,'Times New Roman',serif", SANS = "'Helvetica Neue',Helvetica,Arial,sans-serif", MONO = "'SFMono-Regular',Menlo,Consolas,'Courier New',monospace";
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const euro = (v, L) => '€ ' + (Number(v) || 0).toLocaleString(localeEmail(L), { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -448,8 +450,8 @@ function generaHTMLEmailOspite(dati, codiciCassetta, lingua) {
   const boxCodice = c => `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${C.paper};border:1px dashed ${C.gold};border-radius:10px"><tr><td align="center" style="padding:18px 16px">`
     + (multi || (c.nome && c.nome !== T.genericName) ? `<div style="font-family:${SERIF};font-size:18px;line-height:24px;color:${C.ink}">${esc(c.nome)}</div>` : '')
     + (c.codice
-      ? `<div style="font-family:${MONO};font-size:34px;line-height:44px;font-weight:700;letter-spacing:8px;color:${C.wine};padding:6px 0 0 8px">${esc(c.codice)}</div>`
-      : `<div style="font-family:${SANS};font-size:14px;line-height:21px;color:${C.wine};font-weight:700;padding-top:6px">${esc(T.fallbackDescrizione)}</div>`)
+      ? `<div style="font-family:${MONO};font-size:34px;line-height:44px;font-weight:700;letter-spacing:8px;color:${C.oro};padding:6px 0 0 8px">${esc(c.codice)}</div>`
+      : `<div style="font-family:${SANS};font-size:14px;line-height:21px;color:${C.oro};font-weight:700;padding-top:6px">${esc(T.fallbackDescrizione)}</div>`)
     + (multi && c.codice ? `<div style="font-family:${SANS};font-size:12px;color:${C.muted};padding-top:4px">${esc(c.descrizione)}</div>` : '')
     + `</td></tr></table>`;
   const codici = etichetta(multi ? T.codeTitleMulti : T.codeTitleSingle, true)
@@ -465,11 +467,11 @@ function generaHTMLEmailOspite(dati, codiciCassetta, lingua) {
     + riga(T.labelApartment, aptHtml)
     + riga(T.labelGuests, esc(dati.numeroOspiti || 0))
     + riga(T.labelNights, esc(dati.numeroNotti || 0))
-    + `<tr><td style="padding:16px 12px 0 0;font-family:${SANS};font-size:14px;color:${C.muted};vertical-align:middle">${esc(T.labelTaxPaid)}</td><td align="right" style="padding:16px 0 0;font-family:${SERIF};font-size:26px;line-height:32px;color:${C.wine};white-space:nowrap">${esc(euro(totaleDi(dati), L))}</td></tr></table>`;
+    + `<tr><td style="padding:16px 12px 0 0;font-family:${SANS};font-size:14px;color:${C.muted};vertical-align:middle">${esc(T.labelTaxPaid)}</td><td align="right" style="padding:16px 0 0;font-family:${SERIF};font-size:26px;line-height:32px;color:${C.oro};white-space:nowrap">${esc(euro(totaleDi(dati), L))}</td></tr></table>`;
 
   const indirizzo = i => `<div style="padding-bottom:16px"><div style="font-family:${SANS};font-size:11px;letter-spacing:1.6px;text-transform:uppercase;color:${C.muted};font-weight:700;padding-bottom:4px">${esc(i.etichetta)}</div>`
     + `<a href="${esc(i.link)}" target="_blank" style="font-family:${SANS};font-size:15px;line-height:22px;color:${C.ink};text-decoration:none">${i.righe.map(esc).join('<br>')}</a>`
-    + `<div style="padding-top:4px"><a href="${esc(i.link)}" target="_blank" style="font-family:${SANS};font-size:13px;font-weight:700;color:${C.wine};text-decoration:underline">${esc(T.mapsLink)} &#8599;</a></div></div>`;
+    + `<div style="padding-top:4px"><a href="${esc(i.link)}" target="_blank" style="font-family:${SANS};font-size:13px;font-weight:700;color:${C.oro};text-decoration:underline">${esc(T.mapsLink)} &#8599;</a></div></div>`;
   const punto = t => `<tr><td valign="top" width="18" style="font-family:${SANS};font-size:14px;line-height:22px;color:${C.gold};padding:0 0 10px">&#8226;</td><td style="font-family:${SANS};font-size:14px;line-height:22px;color:${C.ink};padding:0 0 10px">${esc(t)}</td></tr>`;
   const accesso = riquadro(`<div style="font-family:${SERIF};font-size:20px;line-height:26px;color:${C.ink};padding-bottom:16px">${esc(T.instructionsTitle)}</div>`
     + INDIRIZZI(T).map(indirizzo).join('')
@@ -485,7 +487,7 @@ function generaHTMLEmailOspite(dati, codiciCassetta, lingua) {
   const area = riquadro(`<div style="font-family:${SERIF};font-size:20px;line-height:26px;color:${C.ink};padding-bottom:8px">${esc(T.areaTitle)}</div>`
     + `<p style="margin:0 0 18px;font-family:${SANS};font-size:14px;line-height:22px;color:${C.muted}">${esc(T.areaText)}</p>` + pulsante(SITO + '/area-clienti.html', T.areaButton));
 
-  const mail = `<a href="mailto:${CONTATTI.email}" style="color:${C.wine}">${CONTATTI.email}</a>`, tel = `<a href="${CONTATTI.telLink}" style="color:${C.wine};white-space:nowrap">${esc(CONTATTI.tel)}</a>`;
+  const mail = `<a href="mailto:${CONTATTI.email}" style="color:${C.oro}">${CONTATTI.email}</a>`, tel = `<a href="${CONTATTI.telLink}" style="color:${C.oro};white-space:nowrap">${esc(CONTATTI.tel)}</a>`;
   const chiusura = `<p style="margin:0;font-family:${SANS};font-size:14px;line-height:22px;color:${C.muted};text-align:center">${T.contactText(mail, tel)}<br>${esc(T.closingText)}</p>`;
   const [titolo1, titolo2] = T.title(nomeOspite(dati));
 

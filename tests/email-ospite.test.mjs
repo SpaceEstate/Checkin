@@ -108,6 +108,24 @@ test('email ospite nell\'app Gmail in modalità scura: pulsante e piè di pagina
   }
 });
 
+test('email ospite: le scritte di risalto (codice della cassetta, importo, link) sono in oro leggibile su tutti i fondi chiari, non più in bordeaux (in Gmail scuro diventava rosa)', async () => {
+  const ORO = '#806120';
+  const lum = h => { const c = [1, 3, 5].map(i => parseInt(h.substr(i, 2), 16) / 255).map(v => v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
+  const contrasto = (a, f) => { const [x, y] = [lum(a), lum(f)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+  for (const lingua of ['it', 'en', 'de']) {
+    const { mail } = await inviaProva({ emailOspite: 'g@esempio.invalid', datiPrenotazione: dati({ lingua }) });
+    const h = mail.html;
+    assert.ok(!/(^|[^-])color:#(7A2E39|5F222B|3A151B)/i.test(h), lingua + ': nessuna scritta in bordeaux');
+    assert.ok((h.match(/(^|[^-])color:#806120/gi) || []).length >= 3, lingua + ': scritte di risalto in oro');
+    // l'oro resta leggibile (WCAG, almeno 4,5:1) su ogni fondo chiaro usato nell'email
+    for (const f of (h.match(/(?:^|[^-])background(?:-color)?:(#[0-9A-F]{6})/gi) || []).map(z => z.slice(-7)).filter(c => lum(c) > 0.5)) assert.ok(contrasto(ORO, f) >= 4.5, lingua + ': oro leggibile su ' + f + ' (' + contrasto(ORO, f).toFixed(2) + ')');
+  }
+  if (process.env.LACOLUMBERA_DIR) {      // lo stesso oro delle email del sito
+    const sito = (await import('fs')).readFileSync(path.join(process.env.LACOLUMBERA_DIR, 'api', '_mail.js'), 'utf8');
+    assert.ok(sito.includes("oro:'" + ORO + "'"), 'stesso oro delle email del sito');
+  }
+});
+
 test('email ospite: indirizzi come oggi (Via Centrale 48, parcheggio Via Val Gola 22) con i link di Google Maps del sito', async () => {
   const { mail } = await inviaProva({ emailOspite: 'g@esempio.invalid', datiPrenotazione: dati() });
   for (const [via, link] of [['Via Centrale, 48', MAPS], ['Via Val Gola, 22', PARK]]) {
