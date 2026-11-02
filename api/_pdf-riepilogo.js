@@ -8,6 +8,22 @@
 // Privacy: per generare il PDF l'HTML con TUTTI i dati degli ospiti viene inviato a Browserless (servizio esterno):
 // è un responsabile del trattamento da verificare (art. 28 GDPR). Variabile richiesta: BROWSERLESS_API_TOKEN.
 import { calcolaEta } from './_sheet-checkin.js';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+// Aspetto del sito (02/11/2026, su richiesta del gestore): bordeaux, oro e crema di La Columbera, logo in testata e i caratteri del sito
+// (Fraunces per i titoli, Manrope per il testo). Logo e caratteri sono i file già pubblicati in public/ (come il logo dell'email
+// all'ospite, api/invia-email-ospite.js) e vanno nel PDF come data: URI, così Browserless non scarica nulla. Se un file non si legge
+// il PDF si genera lo stesso: al posto del logo la scritta «La Columbera», al posto dei caratteri Georgia e Helvetica.
+const C = { wine: '#7A2E39', wine2: '#5F222B', ink: '#1E1917', muted: '#6C5F55', paper: '#FAF5EC', paper2: '#F1E9D9', stone: '#E6DBC6', line: '#DCCFB6', gold: '#B08D3C', oro: '#806120', white: '#FFFDF7' };
+let risorse = null;
+function risorseSito() {
+  if (risorse) return risorse;
+  // prima accanto al modulo (../public: così il file segue la funzione su Vercel e si trova anche nelle prove), poi dalla radice del progetto
+  const leggi = (rel, mime) => { for (const f of [() => new URL('../public/' + rel, import.meta.url), () => join(process.cwd(), 'public', rel)]) { try { return 'data:' + mime + ';base64,' + readFileSync(f()).toString('base64'); } catch {} } return ''; };
+  risorse = { logo: leggi('img/brand/email-logo.png', 'image/png'), fraunces: leggi('fonts/fraunces-latin-full-normal.woff2', 'font/woff2'), manrope: leggi('fonts/manrope-latin-wght-normal.woff2', 'font/woff2') };
+  return risorse;
+}
 
 function escapeHtml(value) {
   if (value === null || value === undefined) return '';
@@ -138,7 +154,7 @@ function generaHTMLRiepilogo(dati) {
 
         ${documento ? `
         <div class="documento-note">
-          <strong>📎 Documento allegato:</strong> ${escapeHtml(documento.nomeFile) || 'Documento'}
+          <strong>Documento allegato:</strong> ${escapeHtml(documento.nomeFile) || 'Documento'}
           (${Math.round((documento.dimensione || 0) / 1024)} KB) -
           <em>Vedi allegati email separati</em>
         </div>
@@ -147,49 +163,67 @@ function generaHTMLRiepilogo(dati) {
     `;
   }).join('');
 
+  const R = risorseSito();
+  const font = [R.fraunces && `@font-face { font-family: 'Fraunces'; font-weight: 100 900; src: url(${R.fraunces}) format('woff2'); }`,
+    R.manrope && `@font-face { font-family: 'Manrope'; font-weight: 200 800; src: url(${R.manrope}) format('woff2'); }`].filter(Boolean).join('\n        ');
+  const SERIF = "'Fraunces', Georgia, 'Times New Roman', serif", SANS = "'Manrope', 'Helvetica Neue', Helvetica, Arial, sans-serif";
+
   return `
     <!DOCTYPE html>
     <html lang="it">
     <head>
       <meta charset="UTF-8">
       <style>
+        ${font}
         @page { size: A4; margin: 12mm; }
-        body { font-family: 'Arial', sans-serif; line-height: 1.3; color: #333; margin: 0; padding: 0; font-size: 11px; }
-        .header { text-align: center; margin-bottom: 8px; border-bottom: 2px solid #3498db; padding-bottom: 8px; }
-        .header h1 { color: #2c3e50; font-size: 18px; margin: 0 0 4px 0; }
-        .header p { font-size: 10px; margin: 0; color: #7f8c8d; }
-        .section { margin: 6px 0; background: #f8f9fa; padding: 6px 8px; border-radius: 4px; border-left: 3px solid #3498db; }
-        .section h2 { font-size: 13px; margin: 0 0 6px 0; color: #2c3e50; }
+        * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        body { font-family: ${SANS}; line-height: 1.35; color: ${C.ink}; margin: 0; padding: 0; font-size: 11px; background: ${C.white}; }
+        .header { background: ${C.wine2}; border-radius: 10px 10px 0 0; text-align: center; padding: 14px 16px 12px; }
+        .header img { display: block; width: 190px; height: auto; margin: 0 auto; }
+        .header .marchio { font-family: ${SERIF}; font-size: 22px; color: ${C.paper2}; }
+        .riga-oro { height: 3px; background: ${C.gold}; margin-bottom: 12px; }
+        .titolo { text-align: center; margin: 4px 0 10px; }
+        .titolo .eyebrow { font-size: 9px; letter-spacing: 2.4px; text-transform: uppercase; color: ${C.gold}; font-weight: 700; }
+        .titolo h1 { font-family: ${SERIF}; font-weight: 400; font-size: 22px; line-height: 1.2; margin: 4px 0 2px; color: ${C.ink}; }
+        .titolo p { font-size: 9.5px; margin: 0; color: ${C.muted}; }
+        .section { margin: 8px 0; background: ${C.paper}; padding: 8px 10px; border-radius: 8px; border-left: 3px solid ${C.gold}; }
+        .section h2 { font-size: 9.5px; letter-spacing: 1.8px; text-transform: uppercase; margin: 0 0 6px 0; color: ${C.muted}; font-weight: 700; }
         .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 6px 0; }
-        .info-item { background: white; padding: 5px 7px; border-radius: 3px; border: 1px solid #e9ecef; }
-        .info-label { font-weight: bold; color: #495057; font-size: 9px; text-transform: uppercase; line-height: 1.2; }
-        .info-value { color: #2c3e50; font-size: 11px; margin-top: 2px; line-height: 1.2; }
-        .totale-section { background: #e8f5e8; border: 2px solid #28a745; padding: 8px; border-radius: 4px; text-align: center; margin: 6px 0; }
-        .totale-section h2 { font-size: 13px; margin: 0 0 6px 0; color: #28a745; }
-        .totale-amount { font-size: 20px; font-weight: bold; color: #28a745; margin: 4px 0; }
-        .ospite { background: white; border: 1px solid #dee2e6; border-radius: 4px; padding: 8px; margin: 6px 0; page-break-inside: avoid; }
-        .ospite.responsabile { border-color: #28a745; background: #f8fff9; }
-        .ospite-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid #dee2e6; }
-        .ospite-nome { font-size: 13px; font-weight: bold; color: #2c3e50; }
-        .ospite-badge { background: #28a745; color: white; padding: 2px 8px; border-radius: 10px; font-size: 9px; }
-        .ospite-number { background: #6c757d; color: white; padding: 2px 8px; border-radius: 10px; font-size: 9px; }
+        .info-item { background: ${C.white}; padding: 5px 8px; border-radius: 6px; border: 1px solid ${C.line}; }
+        .info-label { font-weight: 700; color: ${C.muted}; font-size: 8.5px; letter-spacing: .6px; text-transform: uppercase; line-height: 1.2; }
+        .info-value { color: ${C.ink}; font-size: 11px; font-weight: 600; margin-top: 2px; line-height: 1.25; }
+        .totale-section { background: ${C.paper}; border: 1px dashed ${C.gold}; padding: 8px; border-radius: 10px; text-align: center; margin: 8px 0; }
+        .totale-section h2 { font-size: 9.5px; letter-spacing: 1.8px; text-transform: uppercase; margin: 0 0 2px 0; color: ${C.muted}; font-weight: 700; }
+        .totale-amount { font-family: ${SERIF}; font-size: 24px; font-weight: 400; color: ${C.oro}; margin: 2px 0; }
+        .ospite { background: ${C.white}; border: 1px solid ${C.line}; border-radius: 8px; padding: 8px 10px; margin: 6px 0; page-break-inside: avoid; }
+        .ospite.responsabile { border-color: ${C.gold}; background: ${C.paper}; }
+        .ospite-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; padding-bottom: 5px; border-bottom: 1px solid ${C.line}; }
+        .ospite-nome { font-family: ${SERIF}; font-size: 14px; font-weight: 500; color: ${C.ink}; }
+        .ospite-badge { background: ${C.wine2}; color: ${C.paper2}; padding: 2px 9px; border-radius: 999px; font-size: 8.5px; font-weight: 700; letter-spacing: .8px; }
+        .ospite-number { background: ${C.stone}; color: ${C.ink}; padding: 2px 9px; border-radius: 999px; font-size: 8.5px; font-weight: 700; }
         .ospite .info-grid { grid-template-columns: 1fr 1fr; gap: 5px; }
-        .ospite .info-item { padding: 4px 6px; }
-        .ospite .info-label { font-size: 8px; }
+        .ospite .info-item { padding: 4px 7px; }
+        .ospite .info-label { font-size: 7.5px; }
         .ospite .info-value { font-size: 10px; }
-        .documento-note { background: #fff3cd; border: 1px solid #ffc107; padding: 5px 7px; border-radius: 3px; margin-top: 6px; font-size: 9px; }
+        .documento-note { background: ${C.paper2}; border: 1px solid ${C.line}; padding: 5px 8px; border-radius: 6px; margin-top: 6px; font-size: 9px; }
         .section ul { margin: 6px 0 0 0; padding-left: 18px; }
         .section li { font-size: 10px; margin: 3px 0; }
+        .avviso { color: ${C.wine}; font-weight: 600; }
+        .piede { margin-top: 12px; padding-top: 7px; border-top: 1px solid ${C.line}; text-align: center; font-size: 8.5px; color: ${C.muted}; }
+        .piede b { font-family: ${SERIF}; font-weight: 500; font-size: 10px; color: ${C.ink}; }
       </style>
     </head>
     <body>
-      <div class="header">
+      <div class="header">${R.logo ? `<img src="${R.logo}" alt="La Columbera">` : '<div class="marchio">La Columbera</div>'}</div>
+      <div class="riga-oro"></div>
+      <div class="titolo">
+        <div class="eyebrow">Check-in online</div>
         <h1>Riepilogo Check-in</h1>
         <p>Generato il ${new Date().toLocaleString('it-IT')}</p>
       </div>
 
       <div class="section">
-        <h2>📍 Dettagli Soggiorno</h2>
+        <h2>Dettagli Soggiorno</h2>
         <div class="info-grid">
           <div class="info-item">
             <div class="info-label">Data Check-in</div>
@@ -211,19 +245,19 @@ function generaHTMLRiepilogo(dati) {
       </div>
 
       <div class="totale-section">
-        <h2>💰 Totale Tassa di Soggiorno</h2>
+        <h2>Totale Tassa di Soggiorno</h2>
         <div class="totale-amount">€${totale.toFixed(2)}</div>
       </div>
 
       <div class="section">
-        <h2>👥 Ospiti Registrati (${ospiti.length})</h2>
+        <h2>Ospiti Registrati (${ospiti.length})</h2>
       </div>
 
       ${ospitiHTML}
 
       ${documentiValidi.length > 0 ? `
       <div class="section" style="page-break-before: auto;">
-        <h2>📎 Documenti Allegati</h2>
+        <h2>Documenti Allegati</h2>
         <p style="font-size: 10px; margin: 4px 0;">I documenti di identità sono allegati separatamente a questa email:</p>
         <ul>
           ${documentiValidi.map(doc => `
@@ -233,10 +267,11 @@ function generaHTMLRiepilogo(dati) {
       </div>
       ` : `
       <div class="section" style="page-break-before: auto;">
-        <h2>📎 Documenti</h2>
-        <p style="font-size: 10px; margin: 4px 0; color: #e74c3c;">Nessun documento allegato ricevuto.</p>
+        <h2>Documenti</h2>
+        <p class="avviso" style="font-size: 10px; margin: 4px 0;">Nessun documento allegato ricevuto.</p>
       </div>
       `}
+      <div class="piede"><b>La Columbera</b> · Dimora storica del XV secolo · Ravina, Trento</div>
     </body>
     </html>
   `;

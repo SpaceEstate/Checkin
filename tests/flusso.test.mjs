@@ -103,6 +103,17 @@ test('modello del PDF: tutti gli ospiti, valori inseriti resi come testo (nessun
   for (const n of ['Ermenegilda', 'Teodorico', 'Clotilde', 'ZZ9900011']) assert.ok(html.includes(n), n);
 });
 
+test('modello del PDF nello stile del sito: bordeaux, oro e crema, logo e caratteri del sito incorporati, niente più blu e verde; stessi dati di prima', () => {
+  const d = checkinFamiglia();
+  const html = generaHTMLRiepilogo(Object.assign({}, d, { totale: 13.5, ospiti: d.ospiti.map(o => Object.assign({ eta: 30, isResponsabile: o.numero === 1 }, o)), documenti: [] }));
+  for (const c of ['#5F222B', '#B08D3C', '#FAF5EC', '#806120']) assert.ok(html.includes(c), 'colore del sito ' + c);
+  for (const c of ['#3498db', '#28a745', '#2c3e50', '#e74c3c', '#ffc107']) assert.ok(!html.toLowerCase().includes(c), 'colore di prima ' + c);
+  assert.match(html, /<img src="data:image\/png;base64,[A-Za-z0-9+/=]{1000,}" alt="La Columbera">/, 'logo incorporato: Browserless non scarica nulla');
+  assert.ok(/font-family: 'Fraunces'; font-weight: 100 900; src: url\(data:font\/woff2;base64,/.test(html) && /font-family: 'Manrope'; font-weight: 200 800; src: url\(data:font\/woff2;base64,/.test(html), 'caratteri del sito incorporati');
+  assert.ok(!/(src|href)=["']?https?:/i.test(html) && !/url\(["']?https?:/i.test(html), 'nessuna risorsa esterna');
+  for (const t of ['Riepilogo Check-in', 'Dettagli Soggiorno', 'Totale Tassa di Soggiorno', '€13.50', 'Ospiti Registrati (' + d.ospiti.length + ')', 'RESPONSABILE', 'Nessun documento allegato ricevuto.']) assert.ok(html.includes(t), t);
+});
+
 test('righe del foglio: ospite singolo e campi mancanti come nella versione precedente', () => {
   const d = checkinFamiglia({ numeroOspiti: 1, tipoGruppo: null }); d.ospiti = d.ospiti.slice(0, 1);
   const r = righeSheet(d, { totale: '4.5', timestamp: '2026-11-02T08:00:00.000Z' }, new Date(NOW));
