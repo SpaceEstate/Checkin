@@ -1058,6 +1058,7 @@ function applicaTraduzioni(root) {
 
   scope.querySelectorAll('.lang-flag').forEach(btn => {
     btn.classList.toggle('active', btn.getAttribute('data-lang') === lang);
+    btn.setAttribute('aria-pressed', btn.getAttribute('data-lang') === lang ? 'true' : 'false');
   });
 }
 
@@ -1090,20 +1091,26 @@ function inizializzaSelettoreLingua() {
   const contenitore = document.getElementById('language-selector');
   if (!contenitore || contenitore.dataset.inizializzato === 'true') return;
 
+  // Bandiere disegnate in SVG e non emoji: Windows non disegna le emoji delle bandiere (al loro posto mostra le lettere «IT», «GB», «DE»),
+  // quindi su PC non si capiva che lì si cambia la lingua. Accanto alla bandiera il nome della lingua scritto in quella lingua
+  // (sui telefoni stretti la sigla). Il contenuto è fisso, nessun dato dell'ospite.
+  const SVG = (corpo, vb) => '<svg class="lang-bandiera" viewBox="' + vb + '" width="24" height="16" preserveAspectRatio="none" aria-hidden="true" focusable="false">' + corpo + '</svg>';
   const bandiere = [
-    { lang: 'it', flag: '🇮🇹' },
-    { lang: 'en', flag: '🇬🇧' },
-    { lang: 'de', flag: '🇩🇪' }
+    { lang: 'it', codice: 'IT', svg: SVG('<rect width="1" height="2" fill="#009246"/><rect x="1" width="1" height="2" fill="#fff"/><rect x="2" width="1" height="2" fill="#ce2b37"/>', '0 0 3 2') },
+    { lang: 'en', codice: 'EN', svg: SVG('<clipPath id="lc-uk-t"><path d="M30,15h30v15zv15h-30zh-30v-15zv-15h30z"/></clipPath><path d="M0,0v30h60v-30z" fill="#012169"/><path d="M0,0L60,30M60,0L0,30" stroke="#fff" stroke-width="6"/><path d="M0,0L60,30M60,0L0,30" clip-path="url(#lc-uk-t)" stroke="#C8102E" stroke-width="4"/><path d="M30,0v30M0,15h60" stroke="#fff" stroke-width="10"/><path d="M30,0v30M0,15h60" stroke="#C8102E" stroke-width="6"/>', '0 0 60 30') },
+    { lang: 'de', codice: 'DE', svg: SVG('<rect width="5" height="1" fill="#000"/><rect y="1" width="5" height="1" fill="#DD0000"/><rect y="2" width="5" height="1" fill="#FFCE00"/>', '0 0 5 3') }
   ];
 
-  bandiere.forEach(({ lang, flag }) => {
+  bandiere.forEach(({ lang, codice, svg }) => {
+    const nome = I18N_UI[lang]['lang.' + lang] || lang;
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'lang-flag';
     btn.setAttribute('data-lang', lang);
-    btn.setAttribute('aria-label', I18N_UI[lang]['lang.' + lang] || lang);
-    btn.title = I18N_UI[lang]['lang.' + lang] || lang;
-    btn.textContent = flag;
+    btn.setAttribute('lang', lang);
+    btn.setAttribute('aria-label', nome);
+    btn.title = nome;
+    btn.innerHTML = svg + '<span class="lang-nome" aria-hidden="true">' + nome + '</span><span class="lang-codice" aria-hidden="true">' + codice + '</span>';
     btn.addEventListener('click', () => impostaLingua(lang));
     contenitore.appendChild(btn);
   });

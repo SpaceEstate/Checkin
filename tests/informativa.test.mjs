@@ -73,3 +73,26 @@ test('caratteri serviti dal sito: nessuna richiesta a Google Fonts, file present
   assert.ok(/fonts\.css/.test(read('index.html')) && /fonts\.css/.test(read('successo-pagamento.html')));
   assert.ok(!/'Inter'/.test(read('checkin.css') + read('successo-pagamento.html')), 'Inter non è più disponibile: si usa Manrope');
 });
+
+test('selettore della lingua: bandiere disegnate (non emoji, che su Windows diventano lettere), nome della lingua, tasti grandi, stato premuto', () => {
+  const nodi = [], sel = { dataset: {}, appendChild: n => nodi.push(n) };
+  const el = () => { const a = {}; return { attrs: a, setAttribute: (k, v) => { a[k] = String(v); }, getAttribute: k => a[k], addEventListener() {}, classList: { toggle() {} } }; };
+  const ctx = { window: {}, document: { getElementById: id => id === 'language-selector' ? sel : null, createElement: el, querySelectorAll: () => [], querySelector: () => null, documentElement: { setAttribute() {} }, addEventListener() {} }, localStorage: undefined, console };
+  vm.createContext(ctx);
+  vm.runInContext(read('i18n.js') + '\n;inizializzaSelettoreLingua(); this.__ok = true;', ctx);
+  assert.equal(nodi.length, 3);
+  const attesi = { it: ['Italiano', 'IT'], en: ['English', 'EN'], de: ['Deutsch', 'DE'] };
+  for (const b of nodi) {
+    const [nome, codice] = attesi[b.attrs['data-lang']];
+    assert.equal(b.className, 'lang-flag'); assert.equal(b.type, 'button'); assert.equal(b.attrs['aria-label'], nome, 'nome nella sua lingua');
+    assert.match(b.innerHTML, /^<svg class="lang-bandiera"[^>]*aria-hidden="true"/, 'bandiera SVG');
+    assert.ok(b.innerHTML.includes('<span class="lang-nome" aria-hidden="true">' + nome + '</span>') && b.innerHTML.includes('<span class="lang-codice" aria-hidden="true">' + codice + '</span>'), b.attrs['data-lang']);
+    assert.ok(!/[\u{1F1E6}-\u{1F1FF}]/u.test(b.innerHTML + (b.textContent || '')), 'niente emoji di bandiera');
+  }
+  assert.ok(!/[\u{1F1E6}-\u{1F1FF}]/u.test(read('i18n.js')), 'nessuna emoji di bandiera in i18n.js');
+  assert.match(read('i18n.js'), /btn\.setAttribute\('aria-pressed'/, 'il tasto della lingua scelta risulta premuto');
+  for (const [f, css] of [['checkin.css', read('checkin.css')], ['successo-pagamento.html', read('successo-pagamento.html')]]) {
+    assert.ok(/\.lang-flag\s*\{[^}]*min-height:\s*42px/.test(css), f + ': tasti alti almeno 42px');
+    assert.ok(/@media \(max-width: 400px\)\s*\{[^}]*\.lang-flag[^}]*\}\s*\.lang-nome \{ display: none; \}\s*\.lang-codice \{ display: inline; \}/.test(css.replace(/\s+/g, ' ')), f + ': sigla al posto del nome solo sui telefoni stretti');
+  }
+});

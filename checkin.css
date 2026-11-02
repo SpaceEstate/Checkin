@@ -1996,14 +1996,25 @@ body {
 }
 .header p { color: var(--muted); opacity: 1; font-size: 1.02rem; margin: 0; }
 
-.language-selector { margin: 0; justify-content: flex-end; gap: 6px; }
+.language-selector { margin: 0; justify-content: flex-end; gap: 8px; }
+/* Lingua: bandiera disegnata (SVG, uguale su ogni sistema) e nome della lingua; tasti alti 42px, comodi anche col dito */
 .lang-flag {
-  font-size: 1.15rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  font-family: inherit;
+  font-size: .92rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--ink);
   background: #fff;
   border: 1px solid var(--line);
   border-radius: 999px;
-  padding: 5px 11px;
+  padding: 8px 15px 8px 11px;
 }
+.lang-bandiera { display: block; width: 24px; height: 16px; flex: none; border-radius: 3px; box-shadow: 0 0 0 1px rgba(30, 25, 23, .14); }
+.lang-codice { display: none; }
 .lang-flag:hover { background: #fff; border-color: rgba(122, 46, 57, .45); }
 .lang-flag.active { background: rgba(122, 46, 57, .08); border-color: var(--wine); box-shadow: 0 0 0 3px rgba(122, 46, 57, .1); }
 
@@ -2291,5 +2302,11 @@ body {
   .header-brand { width: 100%; justify-content: center; }
   .header-intro { text-align: center; }
   .pay-due { padding: 12px 14px; }
+}
+/* telefoni stretti: la sigla al posto del nome, così i tre tasti stanno su una riga */
+@media (max-width: 400px) {
+  .lang-flag { padding: 8px 13px 8px 10px; }
+  .lang-nome { display: none; }
+  .lang-codice { display: inline; }
 }
 @media (prefers-reduced-motion: reduce) { .pay-load i { animation: none; } .pay-panel { animation: none; } }
