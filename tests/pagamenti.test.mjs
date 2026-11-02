@@ -4,6 +4,7 @@ import './setup-env.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
+import fs from 'node:fs';
 import { makeHandler as makeWebhook } from '../api/stripeWebhook.js';
 import { makeHandler as makeSessione } from '../api/get-session.js';
 import { makeHandler as makePagamento, urlAmmesso, numeroPrenotazioneValido, chiavePubblicabile } from '../api/crea-pagamento-stripe.js';
@@ -237,8 +238,8 @@ test('Browserless: di serie Amsterdam (UE); Londra o San Francisco solo se indic
 // ---- Pagamento nella pagina, lato browser (checkin.js) ----
 // La parte «PAGAMENTO NELLA PAGINA» di checkin.js si esegue in un contesto isolato con una pagina e uno Stripe.js finti: nessuna rete, nessun
 // browser. Lo Stripe finto si comporta come le Checkout Sessions «elements»: senza email nella sessione la conferma non riesce.
-const CHECKIN_JS = (await import('node:fs')).readFileSync(new URL('../checkin.js', import.meta.url), 'utf8');
-function paginaPagamento({ emailSessione = null, caricamento = 'ok', esitoConferma = 'ok' } = {}) {
+const CHECKIN_JS = fs.readFileSync(new URL('../checkin.js', import.meta.url), 'utf8');
+function paginaPagamento({ emailSessione = null, caricamento = 'ok', esitoConferma = 'ok', rifiutaEmail = false } = {}) {
   const els = new Map(), log = { conferme: [], email: [], redirect: null, paginaStripe: 0, fetch: 0 };
   const el = id => {
     if (!els.has(id)) {
@@ -255,7 +256,7 @@ function paginaPagamento({ emailSessione = null, caricamento = 'ok', esitoConfer
     getSession: () => ({ email: sessione.email, canConfirm: !!sessione.email }),
     updateEmail: async e => {
       log.email.push(e);
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(e || ''))) return { type: 'error', error: { code: e ? 'invalidEmail' : 'incompleteEmail', message: 'Email non valida (Stripe)' } };
+      if (rifiutaEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(e || ''))) return { type: 'error', error: { code: e ? 'invalidEmail' : 'incompleteEmail', message: 'Email non valida (Stripe)' } };
       sessione.email = e; return { type: 'success', session: azioni.getSession() };
     },
     confirm: async args => {
@@ -316,4 +317,71 @@ test('pagamento nella pagina (browser), com\'era: campi di Stripe con la chiave 
   p = paginaPagamento({ caricamento: 'ko' });
   await p.avvia();
   assert.equal(p.log.paginaStripe, 1, 'campi non caricati: si passa alla pagina di Stripe'); assert.equal(p.log.conferme.length, 0);
+});
+
+test('pagamento nella pagina senza email nella sessione (il check-in non la chiede prima del pagamento): campo email nel riquadro, va solo a Stripe (updateEmail) prima della conferma; vuota, sbagliata o rifiutata da Stripe: messaggio e nessuna conferma', async () => {
+  // sessione senza email, come la crea oggi il server del check-in: prima di questa correzione Stripe rifiutava ogni pagamento
+  let p = paginaPagamento();
+  await p.avvia();
+  const campo = p.el('pay-email-campo'), input = p.el('pay-email'), btn = p.el('btn-paga-ora'), err = p.el('pay-err');
+  assert.equal(campo.hidden, false, 'il campo email si vede');
+  await btn.onclick();
+  assert.deepEqual([p.log.conferme.length, p.log.email.length], [0, 0], 'email vuota: nessuna chiamata a Stripe');
+  assert.equal(err.textContent, 'pay.emailManca'); assert.equal(input.getAttribute('aria-invalid'), 'true'); assert.equal(btn.disabled, false);
+  assert.equal(p.log.focus, 'pay-email', 'dopo «Paga» il cursore va sul campo email');
+  input.value = 'mario.rossi@';
+  await btn.onclick();
+  assert.equal(p.log.conferme.length, 0); assert.equal(err.textContent, 'pay.emailNonValida');
+  input.oninput();
+  assert.equal(input.getAttribute('aria-invalid'), null, 'scrivendo si toglie il segno di errore'); assert.equal(err.textContent, '');
+  input.value = '  ospite@esempio.invalid ';
+  await btn.onclick();
+  assert.deepEqual(p.log.email, ['ospite@esempio.invalid'], 'prima l\'email a Stripe (senza spazi)');
+  assert.equal(p.log.conferme.length, 1); assert.equal(p.sessione.email, 'ospite@esempio.invalid');
+  assert.equal(p.log.redirect, 'successo-pagamento.html?session_id=cs_test_el&temp_session=temp_1&lang=it', 'il pagamento riesce');
+  assert.equal(p.log.fetch, 0, 'l\'email va solo a Stripe, non al server del check-in');
+
+  // email scritta e lasciata (change) prima di toccare «Paga»: salvata subito su Stripe, poi la conferma parte dentro il tocco, senza attese
+  p = paginaPagamento(); await p.avvia();
+  p.el('pay-email').value = 'ospite@';
+  await p.el('pay-email').onchange();
+  assert.deepEqual([p.el('pay-err').textContent, p.el('pay-email').getAttribute('aria-invalid'), p.log.focus, p.log.email.length], ['pay.emailNonValida', 'true', undefined, 0],
+    'lasciando il campo con un\'email sbagliata: segno e messaggio, nessuna chiamata a Stripe, il cursore non torna indietro');
+  p.el('pay-email').value = 'ospite@esempio.invalid'; p.el('pay-email').oninput();
+  await p.el('pay-email').onchange();
+  assert.deepEqual(p.log.email, ['ospite@esempio.invalid']);
+  const clic = p.el('btn-paga-ora').onclick();
+  assert.equal(p.log.conferme.length, 1, 'email già su Stripe: la conferma parte subito');
+  await clic;
+  assert.equal(p.log.email.length, 1, 'l\'email non si manda due volte'); assert.ok(p.log.redirect);
+
+  // carta rifiutata dopo l'email: messaggio di Stripe; si riprova senza rimandare l'email
+  p = paginaPagamento({ esitoConferma: 'rifiutata' }); await p.avvia();
+  p.el('pay-email').value = 'ospite@esempio.invalid';
+  await p.el('btn-paga-ora').onclick(); await p.el('btn-paga-ora').onclick();
+  assert.equal(p.el('pay-err').textContent, 'La carta è stata rifiutata.'); assert.deepEqual([p.log.email.length, p.log.conferme.length], [1, 2]);
+
+  // email che Stripe non accetta: messaggio sul campo, nessuna conferma
+  p = paginaPagamento({ rifiutaEmail: true }); await p.avvia();
+  p.el('pay-email').value = 'ospite@esempio.invalid';
+  await p.el('btn-paga-ora').onclick();
+  assert.equal(p.log.conferme.length, 0); assert.equal(p.el('pay-err').textContent, 'pay.emailNonValida');
+  assert.equal(p.el('pay-email').getAttribute('aria-invalid'), 'true'); assert.equal(p.el('btn-paga-ora').disabled, false);
+
+  // sessione che ha già l'email (customer_email): niente campo, come prima
+  p = paginaPagamento({ emailSessione: 'ospite@esempio.invalid' }); await p.avvia();
+  assert.equal(p.el('pay-email-campo').hidden, true);
+});
+
+test('campo email del pagamento: nella pagina (prima dei campi della carta, tipo email, completamento automatico) e testi in it/en/de', () => {
+  const idx = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const campo = (idx.match(/<input[^>]*id="pay-email"[^>]*>/) || [''])[0];
+  assert.ok(campo, 'campo email nel riquadro del pagamento');
+  for (const a of ['type="email"', 'autocomplete="email"', 'required']) assert.ok(campo.includes(a), a);
+  assert.ok(idx.indexOf('id="pay-email-campo"') > idx.indexOf('id="pay-panel"') && idx.indexOf('id="pay-email-campo"') < idx.indexOf('id="pay-element"'), 'nel riquadro, prima dei campi della carta');
+  const ctx = { window: {}, document: { querySelectorAll: () => [], documentElement: {}, addEventListener() {} }, localStorage: undefined, console };
+  vm.createContext(ctx);
+  vm.runInContext(fs.readFileSync(new URL('../i18n.js', import.meta.url), 'utf8') + '\n;this.__UI = I18N_UI;', ctx);
+  for (const l of ['it', 'en', 'de']) for (const k of ['pay.emailLabel', 'pay.emailNota', 'pay.emailManca', 'pay.emailNonValida'])
+    assert.ok(typeof ctx.__UI[l][k] === 'string' && ctx.__UI[l][k].length > 0, l + ': ' + k);
 });

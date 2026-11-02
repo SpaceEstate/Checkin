@@ -2011,6 +2011,7 @@ function chiudiPagamentoNellaPagina(messaggio) {
   const el = document.getElementById('pay-element'); if (el) el.innerHTML = '';
   const load = document.getElementById('pay-load'); if (load) load.hidden = false;
   const err = document.getElementById('pay-err'); if (err) err.textContent = '';
+  const email = document.getElementById('pay-email'); if (email) email.removeAttribute('aria-invalid');
   const gruppo = document.getElementById('final-buttons'); if (gruppo) gruppo.hidden = false;
   const privacy = document.getElementById('privacy-presa-visione'); if (privacy) privacy.disabled = false;
   const payButton = document.querySelector('.btn-payment');
@@ -2028,13 +2029,17 @@ async function mostraPagamentoNellaPagina(result, tempSessionId, paginaStripe) {
   btn.setAttribute('data-i18n-key', 'pay.button'); btn.setAttribute('data-i18n-params', JSON.stringify({ amount: importo }));
   btn.textContent = t('pay.button', { amount: importo }); btn.disabled = true;
   err.textContent = '';
+  // Email dell'ospite per Stripe: le Checkout Sessions «elements» non si confermano senza (sulla pagina di Stripe la chiedeva Stripe stessa) e da
+  // lì arriva l'email con le istruzioni per l'arrivo (customer_details.email). Va SOLO a Stripe con updateEmail, non al server del check-in.
+  const campoEmail = document.getElementById('pay-email-campo'), inputEmail = document.getElementById('pay-email');
+  campoEmail.hidden = false; inputEmail.removeAttribute('aria-invalid');
   // il modulo resta quello: si nasconde solo il pulsante che ha avviato il pagamento (e la presa visione non si cambia più)
   document.getElementById('final-buttons').hidden = true;
   const privacy = document.getElementById('privacy-presa-visione'); if (privacy) privacy.disabled = true;
   panel.hidden = false;
   if (panel.scrollIntoView) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
-  const stato = pagamentoNellaPagina = { element: null, azioni: null, inCorso: false,
+  const stato = pagamentoNellaPagina = { element: null, azioni: null, inCorso: false, emailSalvata: '', salvataggio: null,
     // la sessione di Stripe scade dopo 30 minuti: si torna al pulsante «Continua al pagamento» (i dati restano nel modulo)
     timer: setTimeout(() => { if (pagamentoNellaPagina === stato && !stato.inCorso) chiudiPagamentoNellaPagina(t('pay.scaduto')); }, 29 * 60e3) };
   try {
@@ -2047,6 +2052,8 @@ async function mostraPagamentoNellaPagina(result, tempSessionId, paginaStripe) {
     if (caricate.type !== 'success') throw new Error((caricate.error && caricate.error.message) || 'Stripe');
     if (pagamentoNellaPagina !== stato) return; // nel frattempo l'ospite è tornato ai dati
     stato.azioni = caricate.actions;
+    const giaNota = stato.azioni.getSession && (stato.azioni.getSession() || {}).email;
+    if (giaNota) { stato.emailSalvata = String(giaNota); campoEmail.hidden = true; }
     document.getElementById('pay-load').hidden = true;
     btn.disabled = false;
   } catch (e) {
@@ -2063,12 +2070,53 @@ async function mostraPagamentoNellaPagina(result, tempSessionId, paginaStripe) {
     return;
   }
 
+  const emailScritta = () => String(inputEmail.value || '').trim();
+  const emailValida = e => e.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e);
+  // errore sull'email: segno sul campo e messaggio; il cursore torna sul campo solo dopo «Paga» (lasciando il campo non si riporta indietro l'ospite)
+  const erroreEmail = (chiave, fuoco) => {
+    inputEmail.setAttribute('aria-invalid', 'true'); err.textContent = t(chiave);
+    if (fuoco && inputEmail.focus) inputEmail.focus();
+  };
+  // Salva l'email su Stripe (una volta per indirizzo; se è già in corso per lo stesso indirizzo si aspetta quella): true se Stripe l'ha accettata
+  const salvaEmail = e => {
+    if (stato.emailSalvata && stato.emailSalvata === e) return Promise.resolve(true);
+    if (stato.salvataggio && stato.salvataggio.email === e) return stato.salvataggio.promessa;
+    const promessa = Promise.resolve().then(() => stato.azioni.updateEmail(e)).then(r => {
+      if (r && r.type === 'success') { stato.emailSalvata = e; return true; }
+      return false;
+    }, () => false).then(ok => { if (stato.salvataggio && stato.salvataggio.promessa === promessa) stato.salvataggio = null; return ok; });
+    stato.salvataggio = { email: e, promessa };
+    return promessa;
+  };
+  inputEmail.oninput = () => {
+    if (inputEmail.getAttribute('aria-invalid') === 'true') { inputEmail.removeAttribute('aria-invalid'); if (!stato.inCorso) err.textContent = ''; }
+  };
+  // lasciando il campo l'email va subito a Stripe: così al tocco di «Paga» la conferma parte senza attese (Apple Pay e Google Pay lo richiedono)
+  inputEmail.onchange = async () => {
+    if (!stato.azioni || campoEmail.hidden || pagamentoNellaPagina !== stato) return;
+    const e = emailScritta();
+    if (!e) return;
+    if (!emailValida(e)) { erroreEmail('pay.emailNonValida'); return; }
+    if (!(await salvaEmail(e)) && pagamentoNellaPagina === stato && emailScritta() === e && !stato.inCorso) erroreEmail('pay.emailNonValida');
+  };
+
   btn.onclick = async () => {
     if (stato.inCorso || !stato.azioni || pagamentoNellaPagina !== stato) return;
+    const email = campoEmail.hidden ? '' : emailScritta();
+    if (!campoEmail.hidden && !emailValida(email)) { erroreEmail(email ? 'pay.emailNonValida' : 'pay.emailManca', true); return; }
     stato.inCorso = true; btn.disabled = true; btn.classList.add('is-loading'); btn.textContent = t('pay.inCorso'); err.textContent = '';
     let r;
-    try { r = await stato.azioni.confirm({ redirect: 'if_required' }); }
+    try {
+      // email già su Stripe (o nella sessione): la conferma parte subito, dentro il tocco dell'ospite
+      if (email && email !== stato.emailSalvata && !(await salvaEmail(email))) r = { type: 'email' };
+      else r = await stato.azioni.confirm({ redirect: 'if_required' });
+    }
     catch (e) { r = { type: 'error', error: {} }; }
+    if (r && r.type === 'email') {
+      stato.inCorso = false; btn.disabled = false; btn.classList.remove('is-loading'); btn.textContent = t('pay.button', { amount: importo });
+      erroreEmail('pay.emailNonValida', true);
+      return;
+    }
     if (r && r.type === 'success') {
       clearTimeout(stato.timer);
       // stessa pagina di successo del pagamento sulla pagina di Stripe: stato del pagamento, codici della cassetta, elaborazione di riserva

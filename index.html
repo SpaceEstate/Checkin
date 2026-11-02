@@ -16,8 +16,8 @@
 
   <title>Check-in Ospiti · La Columbera</title>
 
-  <link rel="stylesheet" href="fonts.css?v=20261031a">
-  <link rel="stylesheet" href="checkin.css?v=20261031a">
+  <link rel="stylesheet" href="fonts.css?v=20261102a">
+  <link rel="stylesheet" href="checkin.css?v=20261102a">
 
   <!-- Preconnect solo al backend del check-in. Niente preconnect verso Stripe: Stripe.js si carica solo quando l'ospite preme
        «Continua al pagamento» e il browser non deve collegarsi a server di terzi prima che l'ospite scelga di pagare. -->
@@ -205,6 +205,13 @@
               <div><span data-i18n="pay.due">Da pagare ora</span><small id="pay-due-sub"></small></div>
               <b id="pay-amount"></b>
             </div>
+            <!-- Email per Stripe: senza, il pagamento nella pagina non si conferma (sulla pagina di Stripe la chiedeva Stripe stessa). Va solo a Stripe
+                 (updateEmail), non al server del check-in; da lì arriva l'email con le istruzioni per l'arrivo. Nascosto se la sessione ha già l'email. -->
+            <div class="pay-email" id="pay-email-campo">
+              <label class="pay-email-label" for="pay-email" data-i18n="pay.emailLabel">Email</label>
+              <input type="email" id="pay-email" class="pay-email-input" autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false" maxlength="254" required aria-describedby="pay-email-nota">
+              <small class="pay-email-nota" id="pay-email-nota" data-i18n="pay.emailNota">Qui ricevi l'email con le istruzioni per l'arrivo.</small>
+            </div>
             <div class="pay-box">
               <div class="pay-load" id="pay-load" aria-hidden="true"><i></i><i class="w"></i><i></i><i></i></div>
               <div class="pay-element" id="pay-element"></div>
@@ -242,7 +249,7 @@
     <p class="page-privacy"><a href="https://la-columbera.vercel.app/privacy.html" target="_blank" rel="noopener noreferrer" data-i18n="footer.privacy" data-testid="checkin-footer-privacy">Informativa privacy</a></p>
   </div>
 
-  <script src="i18n.js?v=20261031a"></script>
-  <script src="checkin.js?v=20261031a"></script>
+  <script src="i18n.js?v=20261102a"></script>
+  <script src="checkin.js?v=20261102a"></script>
 </body>
 </html>

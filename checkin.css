@@ -2252,6 +2252,14 @@ body {
 .pay-due span { font-size: .72rem; letter-spacing: .14em; text-transform: uppercase; font-weight: 700; color: var(--wine); }
 .pay-due small { font-size: .86rem; color: var(--muted); }
 .pay-due b { font-family: var(--font-serif); font-weight: 500; font-style: italic; font-size: clamp(1.7rem, 3vw, 2.1rem); line-height: 1; color: var(--wine); white-space: nowrap; }
+/* Email per Stripe: stesso aspetto dei campi della carta (ASPETTO_STRIPE in checkin.js) */
+.pay-email { margin: 0 0 14px; }
+.pay-email-label { display: block; margin-bottom: 6px; font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #7A2E39; }
+.pay-email-input { display: block; width: 100%; box-sizing: border-box; padding: 11px 14px; border: 1px solid #DCCFB6; border-radius: 12px; background: #FAF5EC; color: #1E1917; font: inherit; font-size: 16px; font-weight: 500; }
+.pay-email-input::placeholder { color: #8A7D72; }
+.pay-email-input:focus { outline: none; border-color: #7A2E39; box-shadow: 0 0 0 3px rgba(122, 46, 57, .12); }
+.pay-email-input[aria-invalid="true"] { border-color: #AA3333; }
+.pay-email-nota { display: block; margin-top: 6px; font-size: .82rem; line-height: 1.45; color: var(--muted); }
 .pay-box { position: relative; min-height: 150px; }
 .pay-element { position: relative; z-index: 1; }
 .pay-load { position: absolute; inset: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-content: start; }
