@@ -3,6 +3,7 @@
 import './setup-env.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import vm from 'node:vm';
 import { makeHandler as makeWebhook } from '../api/stripeWebhook.js';
 import { makeHandler as makeSessione } from '../api/get-session.js';
 import { makeHandler as makePagamento, urlAmmesso, numeroPrenotazioneValido, chiavePubblicabile } from '../api/crea-pagamento-stripe.js';
@@ -231,4 +232,88 @@ test('Browserless: di serie Amsterdam (UE); Londra o San Francisco solo se indic
   assert.equal(urlBrowserless({ BROWSERLESS_URL: ' https://production-lon.browserless.io/ ' }), 'https://production-lon.browserless.io');
   for (const v of ['https://evil.example', 'http://production-ams.browserless.io', 'https://production-ams.browserless.io.evil.example', 'https://production-ams.browserless.io/x', 'ams'])
     assert.equal(urlBrowserless({ BROWSERLESS_URL: v }), 'https://production-ams.browserless.io', v);
+});
+
+// ---- Pagamento nella pagina, lato browser (checkin.js) ----
+// La parte «PAGAMENTO NELLA PAGINA» di checkin.js si esegue in un contesto isolato con una pagina e uno Stripe.js finti: nessuna rete, nessun
+// browser. Lo Stripe finto si comporta come le Checkout Sessions «elements»: senza email nella sessione la conferma non riesce.
+const CHECKIN_JS = (await import('node:fs')).readFileSync(new URL('../checkin.js', import.meta.url), 'utf8');
+function paginaPagamento({ emailSessione = null, caricamento = 'ok', esitoConferma = 'ok' } = {}) {
+  const els = new Map(), log = { conferme: [], email: [], redirect: null, paginaStripe: 0, fetch: 0 };
+  const el = id => {
+    if (!els.has(id)) {
+      const cls = new Set(), attr = {};
+      els.set(id, { id, hidden: id === 'pay-panel', textContent: '', innerHTML: '', disabled: false, value: '', required: false, onclick: null, _ascolti: {},
+        classList: { add: c => cls.add(c), remove: c => cls.delete(c), contains: c => cls.has(c), toggle: (c, on) => (on ?? !cls.has(c)) ? cls.add(c) : cls.delete(c) },
+        setAttribute: (k, v) => { attr[k] = String(v); }, getAttribute: k => (k in attr ? attr[k] : null), removeAttribute: k => { delete attr[k]; },
+        addEventListener(ev, fn) { (this._ascolti[ev] = this._ascolti[ev] || []).push(fn); }, scrollIntoView() {}, focus() { log.focus = id; } });
+    }
+    return els.get(id);
+  };
+  const sessione = { email: emailSessione };
+  const azioni = {
+    getSession: () => ({ email: sessione.email, canConfirm: !!sessione.email }),
+    updateEmail: async e => {
+      log.email.push(e);
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(e || ''))) return { type: 'error', error: { code: e ? 'invalidEmail' : 'incompleteEmail', message: 'Email non valida (Stripe)' } };
+      sessione.email = e; return { type: 'success', session: azioni.getSession() };
+    },
+    confirm: async args => {
+      log.conferme.push(args);
+      if (esitoConferma === 'eccezione') throw new Error('rete');
+      if (!sessione.email && !(args && args.email)) return { type: 'error', error: { code: 'missing_email' } };      // come Stripe: senza email non si paga
+      if (esitoConferma === 'rifiutata') return { type: 'error', error: { message: 'La carta è stata rifiutata.' } };
+      return { type: 'success', session: azioni.getSession() };
+    }
+  };
+  const StripeFinto = (pk, opz) => {
+    log.pk = pk; log.locale = opz && opz.locale;
+    return { initCheckoutElementsSdk: o => { log.clientSecret = o.clientSecret; return {
+      createPaymentElement: () => ({ on(ev, fn) { if (ev === 'ready') fn(); }, mount(sel) { log.mount = sel; }, destroy() {} }),
+      loadActions: async () => caricamento === 'ok' ? { type: 'success', actions: azioni } : { type: 'error', error: { message: 'chiave di un altro account' } } }; } };
+  };
+  const ctx = {
+    console: { log() {}, warn() {}, error() {} }, URL, JSON, Promise, Error, Object, String, Math, encodeURIComponent,
+    setTimeout: () => 0, clearTimeout: () => {},
+    window: { Stripe: StripeFinto, location: { href: 'https://spaceestate.github.io/Checkin/index.html' } },
+    document: { getElementById: el, querySelector: () => null, addEventListener() {}, createElement: () => ({}), head: { appendChild() {} } },
+    t: (k, p) => k + (p ? ' ' + JSON.stringify(p) : ''), getLingua: () => 'it', calcolaTotale: () => 13.5, numeroNotti: 3, showNotification: m => { log.notifica = m; },
+    fetch: () => { log.fetch++; throw new Error('nessuna chiamata al server da qui'); }
+  };
+  ctx.window.location = { set href(u) { log.redirect = u; }, get href() { return 'https://spaceestate.github.io/Checkin/index.html'; } };
+  vm.createContext(ctx);
+  const i = CHECKIN_JS.indexOf('// === PAGAMENTO NELLA PAGINA'), j = CHECKIN_JS.indexOf('\nfunction gestisciRitornoStripe');
+  assert.ok(i > 0 && j > i, 'sezione del pagamento nella pagina trovata in checkin.js');
+  vm.runInContext(CHECKIN_JS.slice(i, j), ctx);
+  const avvia = () => ctx.mostraPagamentoNellaPagina({ clientSecret: 'cs_test_el_secret_x', publishableKey: 'pk_test_prova', sessionId: 'cs_test_el', totale: 13.5 }, 'temp_1', async () => { log.paginaStripe++; });
+  return { el, log, avvia, sessione };
+}
+
+test('pagamento nella pagina (browser), com\'era: campi di Stripe con la chiave e la lingua giuste, «Paga» conferma subito, a pagamento riuscito la pagina di successo; carta rifiutata o errore: messaggio e si può riprovare; se i campi non si caricano, la pagina di Stripe', async () => {
+  // sessione con l'email già nota a Stripe: il flusso che c'era prima continua a funzionare uguale
+  let p = paginaPagamento({ emailSessione: 'ospite@esempio.invalid' });
+  await p.avvia();
+  assert.equal(p.el('pay-panel').hidden, false); assert.equal(p.el('pay-amount').textContent, '€13.50');
+  assert.deepEqual([p.log.pk, p.log.locale, p.log.clientSecret, p.log.mount], ['pk_test_prova', 'it', 'cs_test_el_secret_x', '#pay-element']);
+  const btn = p.el('btn-paga-ora');
+  assert.equal(btn.disabled, false, 'pulsante attivo quando i campi sono pronti');
+  const clic = btn.onclick();
+  assert.equal(p.log.conferme.length, 1, 'la conferma parte subito, dentro il tocco dell\'ospite (Apple Pay e Google Pay lo richiedono)');
+  assert.equal(p.log.conferme[0].redirect, 'if_required');
+  await clic;
+  assert.equal(p.log.redirect, 'successo-pagamento.html?session_id=cs_test_el&temp_session=temp_1&lang=it');
+  assert.equal(p.log.fetch, 0);
+
+  p = paginaPagamento({ emailSessione: 'ospite@esempio.invalid', esitoConferma: 'rifiutata' });
+  await p.avvia(); await p.el('btn-paga-ora').onclick();
+  assert.equal(p.el('pay-err').textContent, 'La carta è stata rifiutata.', 'il messaggio di Stripe arriva all\'ospite');
+  assert.equal(p.el('btn-paga-ora').disabled, false, 'si può riprovare'); assert.equal(p.log.redirect, null);
+
+  p = paginaPagamento({ emailSessione: 'ospite@esempio.invalid', esitoConferma: 'eccezione' });
+  await p.avvia(); await p.el('btn-paga-ora').onclick();
+  assert.equal(p.el('pay-err').textContent, 'pay.errore'); assert.equal(p.el('btn-paga-ora').disabled, false);
+
+  p = paginaPagamento({ caricamento: 'ko' });
+  await p.avvia();
+  assert.equal(p.log.paginaStripe, 1, 'campi non caricati: si passa alla pagina di Stripe'); assert.equal(p.log.conferme.length, 0);
 });
