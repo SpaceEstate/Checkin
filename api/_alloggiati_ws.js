@@ -1,6 +1,7 @@
 // api/_alloggiati_ws.js — lettura delle TABELLE UFFICIALI di Alloggiati Web (Luoghi, Tipi_Documento, Tipi_Alloggiato).
 //
-// PORTING PARZIALE E FEDELE (solo sintassi ESM) di SpaceEstate/LaColumbera api/_alloggiati_ws.js, commit 8923092.
+// PORTING PARZIALE E FEDELE (solo sintassi ESM) di SpaceEstate/LaColumbera api/_alloggiati_ws.js, commit 8923092
+// (buildTable allineata al commit 6eb5047: è uno Stato ogni codice Luoghi che inizia per 1, es. Serbia 100001000).
 // Sono copiate SENZA MODIFICHE solo le parti necessarie per leggere le tabelle (GenerateToken + Tabella) e per
 // interpretarle (parseCsv, buildTable, search). Sono state ESCLUSE di proposito le operazioni Test, Send e
 // Authentication_Test: da questo progetto NON si invia nulla ad Alloggiati Web (il TXT si carica a mano sul portale).
@@ -107,6 +108,8 @@ function parseCsv(text) {
 const norm = s => String(s == null ? '' : s).normalize('NFD').replace(/\p{M}/gu, '').toUpperCase().replace(/[^A-Z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
 // Le colonne si riconoscono dall'intestazione (Codice / Descrizione / Provincia …); senza intestazione: 1ª colonna codice, 2ª descrizione.
 // La struttura REALE delle tabelle non è documentata nel manuale: `diag` dice cosa è stato riconosciuto, così il primo giro di prova mostra eventuali sorprese.
+// Luoghi: è uno STATO ogni codice che inizia per 1 — non solo 100000xxx: SERBIA 100001000, MONTENEGRO 100001001, KOSOVO 100001002, PALESTINA 110000001,
+// HONG KONG 110000005… (tabella ufficiale, 03/11/2026) — ed è un COMUNE ogni codice che inizia per 4 (4 + regione + provincia + comune).
 function buildTable(nome, csv) {
   const rows = parseCsv(csv), diag = { righe: rows.length, intestazione: null, colonne: null, scartate: 0, avvisi: [] };
   if (!rows.length) { diag.avvisi.push('tabella vuota'); return { ok: false, nome, diag, get: () => undefined, size: 0 }; }
@@ -120,7 +123,7 @@ function buildTable(nome, csv) {
     const codice = (r[iC] || '').trim(), n = (r[iD] || '').trim();
     if (!codice || !n) { diag.scartate++; continue; }
     const e = { codice, nome: n, prov: iP >= 0 ? (r[iP] || '').trim().toUpperCase() : '', fine: iF >= 0 ? (r[iF] || '').trim() : '' };
-    if (nome === 'Luoghi') { if (!/^\d{9}$/.test(codice)) { diag.scartate++; continue; } e.kind = /^100000\d{3}$/.test(codice) ? 'stato' : 'comune'; if (e.kind === 'stato' && norm(n) === 'ITALIA') italia = italia === null ? codice : 'ambiguo'; }
+    if (nome === 'Luoghi') { if (!/^\d{9}$/.test(codice)) { diag.scartate++; continue; } e.kind = codice[0] === '1' ? 'stato' : 'comune'; if (e.kind === 'stato' && norm(n) === 'ITALIA') italia = italia === null ? codice : 'ambiguo'; }
     if (!byCode.has(codice)) byCode.set(codice, e);
   }
   if (nome === 'Luoghi') {

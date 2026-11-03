@@ -7,6 +7,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
 import * as AL from '../api/_alloggiati.js';
+import * as WS from '../api/_alloggiati_ws.js';
 import { generaTxt, costruisciSchedine, problemiCorreggibiliDallOspite, problemiSenzaDati, nomeFileTxt } from '../api/_checkin-alloggiati.js';
 import { tabelle, checkinFamiglia, NOW, VALORI_SENSIBILI, TABELLE_CSV } from './helpers.mjs';
 
@@ -76,6 +77,20 @@ test('TXT ospite singolo → 16; gruppo → 18 + 20', () => {
   assert.equal(g1.ok, true); assert.equal(g1.lines[0].slice(0, 2), '16');
   const g2 = generaTxt(checkinFamiglia({ tipoGruppo: 'generico' }), tabelle(), NOW);
   assert.equal(g2.ok, true); assert.deepEqual(g2.lines.map(l => l.slice(0, 2)), ['18', '20', '20']);
+});
+
+test('stati con codice ufficiale fuori dalla forma 100000xxx (Serbia 100001000, Montenegro 100001001): l\'ospite nato in Serbia ha il suo TXT', () => {
+  // codici veri della tabella ufficiale (verificati il 03/11/2026): prima erano letti come comuni e lo Stato risultava «non in tabella»
+  const tabs = Object.assign(tabelle(), { luoghi: WS.buildTable('Luoghi', TABELLE_CSV.Luoghi + '100001000;SERBIA;ES;\n100001001;MONTENEGRO;ES;\n') });
+  assert.deepEqual([tabs.luoghi.get('100001000').kind, tabs.luoghi.get('100001001').kind, tabs.luoghi.get('400000010').kind], ['stato', 'stato', 'comune']);
+  const ospite = stato => ({ numero: 1, isResponsabile: true, cognome: 'Provaccia', nome: 'Ermenegilda', genere: 'F', nascita: '1980-04-19', cittadinanza: stato, luogoNascita: stato,
+    tipoDocumento: 'PASSAPORTO ORDINARIO', numeroDocumento: 'ZZ9900011', luogoRilascio: stato });
+  for (const [stato, codice] of [['Serbia', '100001000'], ['Montenegro', '100001001']]) {
+    const g = generaTxt(checkinFamiglia({ numeroOspiti: 1, tipoGruppo: null, ospiti: [ospite(stato)] }), tabs, NOW);
+    assert.equal(g.ok, true, stato + ' ' + JSON.stringify(g.problemi));
+    const r = AL.parseText(g.lines[0]).records[0];
+    assert.deepEqual([r.tipo, r.stato, r.cittad, r.luogo, r.comune, r.prov, r.tipodoc], ['16', codice, codice, codice, '', '', 'PASOR'], stato);
+  }
 });
 
 test('record non validi o incompleti: nessun TXT, nessuna correzione silenziosa', () => {
