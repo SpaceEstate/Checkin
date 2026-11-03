@@ -18,11 +18,24 @@ const RE_ISO = /^\d{4}-\d{2}-\d{2}$/;
 const CAMPO_MODULO = { cognome: 'cognome', nome: 'nome', sesso: 'genere', nascita: 'nascita', comune: 'comune', prov: 'provincia',
   stato: 'luogo_nascita', cittad: 'cittadinanza', tipodoc: 'tipo_documento', numdoc: 'numero_documento', luogo: 'luogo_rilascio', arrivo: 'data-checkin', giorni: 'numero-notti', tipo: 'tipo-gruppo' };
 
+// Paesi dell'elenco del modulo (checkin.js) che nella tabella ufficiale Luoghi hanno un altro nome (verificato il 03/11/2026).
+// Si usa SOLO se il nome del modulo non si trova così com'è; la corrispondenza resta esatta e univoca.
+// «Timor Est»: nella tabella c'è un solo Timor (TIMOR, 100000805).
+const NOME_UFFICIALE_STATO = {
+  'Bahrain': 'BAHREIN', 'Birmania': 'MYANMAR-BIRMANIA', 'Brunei': 'BRUNEI DARUSSALAM', 'Isole Marshall': 'MARSHALL', 'Mauritius': 'MAURIZIO',
+  'Micronesia': 'MICRONESIA STATI FEDERALI', 'Palau': 'PALAU REPUBBLICA', 'Papua Nuova Guinea': 'PAPUASIA-N.GUINEA', 'Repubblica del Congo': 'CONGO',
+  'Russia': 'FEDERAZIONE RUSSA', 'Saint Kitts e Nevis': 'S. CHRISTOPHER E NEVIS', 'Slovacchia': 'REPUBBLICA SLOVACCA', 'Sri Lanka': 'SRI LANKA (CEYLON)',
+  'Stati Uniti': "STATI UNITI D'AMERICA", 'Sudan del Sud': 'SUD SUDAN', 'Timor Est': 'TIMOR', 'Vaticano': "STATO DELLA CITTA' DEL VATICANO"
+};
+const ALIAS_STATO = new Map(Object.entries(NOME_UFFICIALE_STATO).map(([a, b]) => [norm(a), norm(b)]));
+
 function trovaLuogo(luoghi, valore, kind, prov) {
   const k = norm(valore);
   if (!k) return { esito: 'vuoto' };
   if (kind === 'stato' && k === 'ITALIA' && luoghi.italia) return { esito: 'ok', codice: luoghi.italia };
-  let c = luoghi.list().filter(e => e.kind === kind && norm(e.nome) === k && (!prov || e.prov === prov));
+  const cerca = n => luoghi.list().filter(e => e.kind === kind && norm(e.nome) === n && (!prov || e.prov === prov));
+  let c = cerca(k);
+  if (!c.length && kind === 'stato' && ALIAS_STATO.has(k)) c = cerca(ALIAS_STATO.get(k));
   if (c.length > 1) { const attivi = c.filter(e => !e.fine); if (attivi.length) c = attivi; }
   if (c.length === 1) return { esito: 'ok', codice: c[0].codice };
   return { esito: c.length ? 'ambiguo' : 'non_trovato' };

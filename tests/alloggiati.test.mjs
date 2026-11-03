@@ -93,6 +93,24 @@ test('stati con codice ufficiale fuori dalla forma 100000xxx (Serbia 100001000, 
   }
 });
 
+test('ogni paese dell\'elenco del modulo corrisponde a uno Stato della tabella ufficiale (anche Stati Uniti, Russia… che lì hanno un altro nome)', () => {
+  // estratto della tabella ufficiale degli Stati (codici e nomi veri, 03/11/2026) al posto della tabella sintetica
+  const tabs = Object.assign(tabelle(), { luoghi: WS.buildTable('Luoghi', fx('stati-ufficiali.csv') + TABELLE_CSV.Luoghi.split('\n').filter(l => /^4/.test(l)).join('\n') + '\n') });
+  const src = fs.readFileSync(path.join(dir, '..', 'checkin.js'), 'utf8'), stati = JSON.parse(/const stati = (\[[^\]]*\]);/.exec(src)[1]);
+  assert.ok(stati.length > 150, 'elenco dei paesi letto da checkin.js');
+  const ospite = stato => ({ numero: 1, isResponsabile: true, cognome: 'Provaccia', nome: 'Ermenegilda', genere: 'F', nascita: '1980-04-19', cittadinanza: stato, luogoNascita: stato,
+    comune: 'Roma', provincia: 'RM', tipoDocumento: 'PASSAPORTO ORDINARIO', numeroDocumento: 'ZZ9900011', luogoRilascio: stato });
+  const codice = {}, nonTrovati = [];
+  for (const s of stati) {
+    const { records, problemi } = costruisciSchedine(checkinFamiglia({ numeroOspiti: 1, tipoGruppo: null, ospiti: [ospite(s)] }), tabs);
+    if (problemi.some(p => /^STATO_/.test(p.code))) nonTrovati.push(s); else codice[s] = records[0].stato;
+  }
+  assert.deepEqual(nonTrovati, [], 'paesi senza corrispondenza');
+  assert.deepEqual([codice['Stati Uniti'], codice['Russia'], codice['Slovacchia'], codice['Vaticano'], codice['Repubblica del Congo'], codice['Repubblica Democratica del Congo'], codice['Serbia'], codice['Italia']],
+    ['100000536', '100000245', '100000255', '100000246', '100000418', '100000998', '100001000', '100000100']);
+  assert.equal(new Set(Object.values(codice)).size, stati.length, 'paesi diversi, codici diversi');
+});
+
 test('record non validi o incompleti: nessun TXT, nessuna correzione silenziosa', () => {
   const casi = [
     [checkinFamiglia({ tipoGruppo: null }), 'TIPO_GRUPPO'],
