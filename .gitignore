@@ -1,0 +1,26 @@
+# Copia della scansione dei documenti creata da build.sh durante il build di Vercel (la sorgente è scansione/)
+/public/scansione/
+
+# Immagini di documenti d'identità: nel repository MAI immagini con dati reali di ospiti o di altre persone.
+# Le prove usano solo documenti SINTETICI con dati di fantasia, generati dalle prove stesse (vedi docs/scansione-documenti.md).
+# Per provare a mano con documenti veri o con gli specimen PRADO si usa la cartella tests/browser/locali/, esclusa qui.
+/tests/**/locali/
+/tests/**/*.jpg
+/tests/**/*.jpeg
+/tests/**/*.png
+/tests/**/*.webp
+/tests/**/*.pdf
+/tests/**/*.heic
+/tests/**/*.heif
+# risultati delle prove nel browser (schermate, registro delle richieste di rete)
+/tests/browser/risultati/
+# nomi tipici delle foto scattate con il telefono, ovunque nel repository
+IMG_*
+PXL_*
+*.heic
+*.HEIC
+*.heif
+*.HEIF
+
+# librerie installate per le prove (vanno installate fuori dal repository, vedi CLAUDE.md)
+node_modules/

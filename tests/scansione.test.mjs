@@ -37,3 +37,31 @@ test('le funzioni del percorso di oggi (documento del responsabile, validazioni,
     assert.equal(sha(c), ATTUALI.funzioni[f].sha256, f + ': funzione modificata');
   }
 });
+
+// ---- Librerie ospitate nel sito ----
+
+test('librerie della scansione: file identici a quelli registrati (impronte SHA-256), nessun file in più, licenze presenti', () => {
+  const dir = path.join(ROOT, 'scansione', 'vendor');
+  const righe = read('scansione/vendor/impronte.sha256').trim().split('\n');
+  const attesi = new Map(righe.map(r => { const [h, f] = r.split(/\s+/); return [f.replace(/^\.\//, ''), h]; }));
+  const presenti = [];
+  (function giro(d) { for (const x of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, x.name); if (x.isDirectory()) giro(p); else presenti.push(path.relative(dir, p)); } })(dir);
+  for (const f of presenti.filter(f => !['LEGGIMI.md', 'impronte.sha256'].includes(f))) {
+    assert.ok(attesi.has(f), 'file non registrato in impronte.sha256: ' + f);
+    assert.equal(crypto.createHash('sha256').update(fs.readFileSync(path.join(dir, f))).digest('hex'), attesi.get(f), 'file modificato: ' + f);
+  }
+  for (const f of attesi.keys()) assert.ok(presenti.includes(f), 'file mancante: ' + f);
+  for (const f of ['tesseract/LICENSE.md', 'tesseract-core/LICENSE', 'tessdata/LICENSE-Apache-2.0.txt', 'mrz/LICENSE', 'heic-to/LICENSE', 'heic-to/COPYING-GPL-3.0.txt']) assert.ok(attesi.has(f), 'licenza mancante: ' + f);
+  assert.match(read('scansione/vendor/heic-to/LICENSE'), /GNU LESSER GENERAL PUBLIC LICENSE\s+Version 3/);
+  assert.match(read('scansione/vendor/heic-to/COPYING-GPL-3.0.txt'), /GNU GENERAL PUBLIC LICENSE\s+Version 3/);
+  assert.match(read('scansione/vendor/tesseract/LICENSE.md'), /Apache License/);
+  // il modello è compresso (gzip): Tesseract.js lo scarica come eng.traineddata.gz
+  const gz = fs.readFileSync(path.join(dir, 'tessdata', 'eng.traineddata.gz'));
+  assert.ok(gz[0] === 0x1f && gz[1] === 0x8b, 'eng.traineddata.gz non è un file gzip');
+});
+
+test('build.sh copia la scansione in public/ (Vercel) e .gitignore esclude le immagini di documenti dalle prove', () => {
+  assert.match(read('build.sh'), /\ncp -r scansione\/\. public\/scansione\/\n/);
+  const gi = read('.gitignore');
+  for (const r of ['/public/scansione/', '/tests/**/locali/', '/tests/**/*.jpg', '/tests/**/*.png', '/tests/**/*.pdf', '*.heic']) assert.ok(gi.split('\n').includes(r), '.gitignore: ' + r);
+});

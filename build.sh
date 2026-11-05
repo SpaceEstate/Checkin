@@ -12,6 +12,11 @@ cp successo-pagamento.html public/
 cp fonts.css public/
 cp -r fonts/. public/fonts/
 
+# Scansione facoltativa dei documenti: moduli e librerie ospitate nel sito (vedi docs/scansione-documenti.md).
+# Non è nel repository dentro public/ (sarebbero 14 MB doppi): la copia si crea qui, a ogni build.
+mkdir -p public/scansione
+cp -r scansione/. public/scansione/
+
 # Le immagini della cassetta sono già committate in public/images/cassetta/
 # (non serve copiarle da nessun'altra parte: non esiste una cartella
 # images/cassetta/ alla radice del repo).
