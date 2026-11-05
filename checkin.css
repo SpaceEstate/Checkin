@@ -2626,3 +2626,9 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+/* Responsabile con la scansione: il riquadro «Documento di identità» (lo stesso di sempre) sale nel pannello, sotto la nota */
+.scan-pannello .document-section.scan-documento-in-alto {
+  margin: 12px 0 14px;
+  padding: 18px;
+}

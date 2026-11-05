@@ -90,6 +90,16 @@ async function attendiEsito(page, n, timeout = 120000) {
   await page.waitForSelector('#scan-pannello-' + n + ' .scan-esito:not([hidden])', { timeout, state: 'attached' });
   return page.$eval('#scan-pannello-' + n + ' .scan-esito', e => e.textContent);
 }
+// Fine della lettura: esito a schermo, avanzamento nascosto e, per i lati indicati, uno stato finale (non «In attesa…»/«Lettura in corso…»).
+async function attendiFine(page, n, lati, timeout = 120000) {
+  await page.waitForFunction(({ n, lati }) => {
+    const p = document.getElementById('scan-pannello-' + n);
+    const esito = p && p.querySelector('.scan-esito'), av = p && p.querySelector('.scan-avanzamento');
+    if (!esito || esito.hidden || (av && !av.hidden)) return false;
+    return lati.every(k => { const t = ((p.querySelector('[data-stato-lato="' + k + '"]') || {}).textContent || '').trim(); return t && t !== '\u00a0' && !t.endsWith('…'); });
+  }, { n, lati }, { timeout });
+  return page.$eval('#scan-pannello-' + n + ' .scan-esito', e => e.textContent);
+}
 async function caricaPerOspite(page, n, percorso, lato = 1, buffer = null) {
   await page.evaluate(n => { const e = document.querySelector('#scan-pannello-' + n + ' .scan-esito'); if (e) e.hidden = true; }, n);
   const sel = '#scan-pannello-' + n + ' .scan-input[data-lato="' + lato + '"]:not([capture])';
@@ -179,13 +189,13 @@ test('flusso completo con la scansione: CIE del responsabile, passaporto e carta
   const x = await apri({ scansione: 'attiva' });
   try {
     await iniziaFlusso(x.page);
-    // responsabile: le foto si caricano nei riquadri di sempre, la scansione le legge senza toccarle
+    // responsabile: con la scansione il riquadro del documento di sempre sale in cima; caricate le foto, i campi si compilano da soli
+    await scegliScansione(x.page, 1);
+    assert.equal(await x.page.locator('#scan-pannello-1 .document-section').count(), 1, 'riquadro del documento nel pannello, in cima');
+    let t0 = Date.now();
     await x.page.setInputFiles('#ospite1_documento_fronte', CIE.fronte);
     await x.page.setInputFiles('#ospite1_documento_retro', CIE.retro);
-    await scegliScansione(x.page, 1);
-    let t0 = Date.now();
-    await x.page.click('#scan-pannello-1 .scan-leggi');
-    const esito1 = await attendiEsito(x.page, 1);
+    const esito1 = await attendiFine(x.page, 1, [1, 2]);
     misure.responsabileCie = Date.now() - t0;
     assert.match(esito1, /Dati letti dal documento/);
     assert.deepEqual(await valori(x.page, 1), RESPONSABILE_A_MANO);
@@ -386,10 +396,9 @@ test('responsabile: tipo di documento suggerito (patente) confermato con un tocc
   const x = await apri({ scansione: 'attiva' });
   try {
     await iniziaFlusso(x.page);
-    await x.page.setInputFiles('#ospite1_documento_fronte', file('patente-it.jpg'));
     await scegliScansione(x.page, 1);
-    await x.page.click('#scan-pannello-1 .scan-leggi');
-    const esito = await attendiEsito(x.page, 1);
+    await x.page.setInputFiles('#ospite1_documento_fronte', file('patente-it.jpg'));
+    const esito = await attendiFine(x.page, 1, [1]);
     assert.match(esito, /PATENTE DI GUIDA/);
     assert.equal((await valori(x.page, 1)).tipo_documento, '', 'solo suggerito: il campo resta vuoto finché l\'ospite non conferma');
     await x.page.click('#scan-pannello-1 [data-azione="tipo-si"]');
@@ -400,10 +409,41 @@ test('responsabile: tipo di documento suggerito (patente) confermato con un tocc
     assert.ok(await x.page.$eval('[name="ospite1_numero_documento"]', e => e.classList.contains('scan-verifica')), 'numero segnato da controllare');
     // un PDF nel riquadro del gestore: la scansione lo dice e non lo tocca
     await x.page.setInputFiles('#ospite1_documento_retro', file('non-immagine.pdf'));
-    await x.page.click('#scan-pannello-1 .scan-leggi');
-    await attendiEsito(x.page, 1);
+    await attendiFine(x.page, 1, [2]);
     assert.match(await x.page.locator('#scan-pannello-1 [data-stato-lato="2"]').innerText(), /PDF/);
     assert.equal(await x.page.$eval('#ospite1_documento_retro', e => e.files[0] && e.files[0].name), 'non-immagine.pdf');
+  } finally { await x.chiudi(); }
+});
+
+test('responsabile: il riquadro del documento sale in cima e torna al suo posto; una foto della fotocamera del check-in si legge da sola', async () => {
+  const x = await apri({ scansione: 'attiva' });
+  try {
+    await iniziaFlusso(x.page);
+    const posto = () => x.page.evaluate(() => {
+      const sez = document.getElementById('upload-side-1-fronte').closest('.document-section'), prima = sez.previousElementSibling;
+      return { nelPannello: !!sez.closest('#scan-pannello-1'), dopoLuogoRilascio: !!(prima && prima.querySelector('#ospite1_luogo_rilascio')) };
+    });
+    assert.deepEqual(await posto(), { nelPannello: false, dopoLuogoRilascio: true }, 'posto di sempre, sotto «Luogo rilascio»');
+    await scegliScansione(x.page, 1);
+    assert.deepEqual(await posto(), { nelPannello: true, dopoLuogoRilascio: false });
+    // foto «scattata» con la fotocamera del check-in: stesso percorso di capturePhoto (file nel campo, riquadro aggiornato), senza fotocamera
+    const b64 = fs.readFileSync(CIE.retro).toString('base64');
+    await x.page.evaluate(async b64 => {
+      const blob = await (await fetch('data:image/jpeg;base64,' + b64)).blob();
+      const dt = new DataTransfer();
+      dt.items.add(new File([blob], 'documento_ospite_1_prova.jpg', { type: 'image/jpeg' }));
+      inputDocumento(1, 'fronte').files = dt.files;
+      aggiornaLabelUpload(1, 'fronte');
+      aggiornaStatoDocumenti(1);
+    }, b64);
+    await attendiFine(x.page, 1, [1]);
+    const v = await valori(x.page, 1);
+    assert.deepEqual([v.cognome, v.nome, v.nascita, v.numero_documento], ['PROVACCIA', 'ERMENEGILDA', '1980-04-19', 'CA12345XY']);
+    // «Compila manualmente»: il riquadro torna esattamente dov'era, con la foto ancora allegata per il gestore
+    await x.page.click('#scan-manuale-1');
+    assert.deepEqual(await posto(), { nelPannello: false, dopoLuogoRilascio: true });
+    assert.equal(await x.page.$eval('#ospite1_documento_fronte', e => e.files[0].name), 'documento_ospite_1_prova.jpg');
+    assert.deepEqual(x.errori, []);
   } finally { await x.chiudi(); }
 });
 
@@ -414,8 +454,7 @@ test('tempo scaduto e lettore non scaricabile: messaggio chiaro, si continua a m
     await scegliScansione(lento.page, 1);
     await lento.page.setInputFiles('#ospite1_documento_fronte', CIE.fronte);
     await lento.page.setInputFiles('#ospite1_documento_retro', CIE.retro);
-    await lento.page.click('#scan-pannello-1 .scan-leggi');
-    assert.match(await attendiEsito(lento.page, 1), /troppo tempo/);
+    assert.match(await attendiFine(lento.page, 1, [1]), /troppo tempo/);
     await imposta(lento.page, 1, RESPONSABILE_A_MANO);
     await avanti(lento.page, '#step-3');        // il check-in prosegue a mano
   } finally { await lento.chiudi(); }

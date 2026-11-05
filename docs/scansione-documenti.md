@@ -12,7 +12,9 @@ nessuna API, nessun servizio esterno, nessun costo.
 
 - **Ospiti diversi dal responsabile**: la foto serve solo a leggere i dati. Non viene inviata, salvata, copiata né mostrata in anteprima.
 - **Responsabile**: la foto continua a essere caricata nei riquadri «Documento di identità» e inviata al gestore **esattamente come prima**.
-  La scansione legge quei file (una copia decodificata in memoria) senza toccarli: il pulsante è «Leggi i dati dalle foto caricate».
+  Con «Scansiona documento» quel riquadro (lo stesso, non una copia) sale in cima al passo, sotto la scelta: si caricano le foto (file o
+  fotocamera del check-in) e i campi si compilano da soli, lato per lato. La scansione legge quei file (una copia decodificata in memoria)
+  senza toccarli. «Leggi di nuovo i dati dalle foto» rilegge; con «Compila manualmente» il riquadro torna esattamente al suo posto.
 
 ## Accendere, provare, spegnere
 

@@ -10,7 +10,7 @@
 //    loro campi e partono per il gestore come prima (raccogliDatiPrenotazioneConCompressione in checkin.js, invariata).
 //  - si compilano solo i campi vuoti dell'ospite giusto; ogni ospite ha il suo stato; «Annulla la compilazione» ripristina
 //    esattamente i valori di prima. La conferma finale resta dell'ospite. Se qualcosa non va, si continua a mano.
-import * as L from './lettura-documento.js?v=20261105a';
+import * as L from './lettura-documento.js?v=20261105b';
 
 const VENDOR = new URL('./vendor/', import.meta.url);
 const TEMPI = Object.assign({ preparazione: 60000, lettura: 45000 }, (typeof window !== 'undefined' && window.__scansioneTempi) || {});
@@ -44,12 +44,69 @@ export function apri(n, contesto) {
   if (!s.pannello) return;
   if (!s.disegnato) disegnaPannello(s);
   s.pannello.hidden = false;
+  if (n === 1) portaSuDocumento(s);
 }
 
 export function chiudi(n) {
   const s = ospiti.get(n);
   if (lavoro && lavoro.n === n) interrompi(false);
+  if (s && n === 1) rimettiDocumento(s);
   if (s && s.pannello) s.pannello.hidden = true;
+}
+
+// ---- Responsabile: riquadro del documento in cima e lettura automatica ----
+// Con «Scansiona documento» il riquadro «Documento di identità» del responsabile (proprio quello, non una copia: stessi campi
+// file, stessi pulsanti della fotocamera, stesse funzioni di checkin.js per caricamento e invio) sale nel pannello, sotto la nota:
+// prima si caricano le foto, poi i campi si compilano. Con «Compila manualmente» torna esattamente al suo posto.
+function sezioneDocumento() {
+  const fronte = document.getElementById('upload-side-1-fronte');
+  return fronte && fronte.closest ? fronte.closest('.document-section') : null;
+}
+
+function portaSuDocumento(s) {
+  const sezione = sezioneDocumento(), nota = s.pannello && s.pannello.querySelector('.scan-nota');
+  if (!sezione || !nota) return;
+  if (!s.postoDocumento) s.postoDocumento = { padre: sezione.parentNode, dopo: sezione.nextSibling };
+  if (nota.nextSibling !== sezione) nota.parentNode.insertBefore(sezione, nota.nextSibling);
+  sezione.classList.add('scan-documento-in-alto');
+  osservaCaricamenti(s);
+}
+
+function rimettiDocumento(s) {
+  smettiDiOsservare(s);
+  const sezione = sezioneDocumento(), posto = s.postoDocumento;
+  if (!sezione || !posto) return;
+  if (posto.dopo && posto.dopo.parentNode === posto.padre) posto.padre.insertBefore(sezione, posto.dopo);
+  else posto.padre.appendChild(sezione);
+  sezione.classList.remove('scan-documento-in-alto');
+}
+
+// Appena un lato risulta caricato (checkin.js segna il riquadro come «completo», sia per un file sia per una foto della sua
+// fotocamera) si legge quel lato. Per riconoscere un file nuovo basta nome, dimensione e data: nessun altro riferimento al file.
+const chiaveFile = f => f ? [f.name, f.size, f.lastModified].join('|') : '';
+function osservaCaricamenti(s) {
+  if (s.osservatore || typeof MutationObserver !== 'function') return;
+  s.lettiResponsabile = s.lettiResponsabile || {};
+  const controlla = () => {
+    const nuovi = [];
+    for (const [k, lato] of [[1, 'fronte'], [2, 'retro']]) {
+      const input = ctx.inputDocumento(1, lato), f = input && input.files && input.files[0];
+      const chiave = chiaveFile(f);
+      if (f && s.lettiResponsabile[k] !== chiave) { s.lettiResponsabile[k] = chiave; nuovi.push({ k, file: f }); }
+      if (!f) s.lettiResponsabile[k] = '';
+    }
+    if (nuovi.length) esegui(s, nuovi);
+  };
+  s.osservatore = new MutationObserver(controlla);
+  for (const lato of ['fronte', 'retro']) {
+    const riquadro = document.getElementById('upload-side-1-' + lato);
+    if (riquadro) s.osservatore.observe(riquadro, { attributes: true, attributeFilter: ['class'] });
+  }
+  controlla();     // foto già caricate prima di scegliere la scansione
+}
+
+function smettiDiOsservare(s) {
+  if (s.osservatore) { s.osservatore.disconnect(); s.osservatore = null; }
 }
 
 function statoOspite(n) {
@@ -144,12 +201,12 @@ function leggiFotoResponsabile(s) {
   for (const [k, lato] of [[1, 'fronte'], [2, 'retro']]) {
     const input = ctx.inputDocumento(1, lato);
     const f = input && input.files && input.files[0];
-    if (f) file.push({ k, file: f });
+    if (f) { file.push({ k, file: f }); if (s.lettiResponsabile) s.lettiResponsabile[k] = chiaveFile(f); }
   }
   if (!file.length) {
     avvisoPannello(s, 'scan.primaCarica', 'info');
     const riquadro = document.getElementById('upload-side-1-fronte');
-    if (riquadro && riquadro.scrollIntoView) riquadro.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (riquadro && riquadro.scrollIntoView) riquadro.scrollIntoView({ behavior: 'smooth', block: 'center' });   // è già in cima, nel pannello
     return;
   }
   esegui(s, file);
