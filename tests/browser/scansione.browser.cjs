@@ -195,8 +195,9 @@ test('flusso completo con la scansione: CIE del responsabile, passaporto e carta
     await scegliScansione(x.page, 2);
     t0 = Date.now();
     await caricaPerOspite(x.page, 2, file('passaporto-de.jpg'));
-    await attendiEsito(x.page, 2);
+    const esito2 = await attendiEsito(x.page, 2);
     misure.passaporto = Date.now() - t0;
+    assert.doesNotMatch(esito2, /codice fiscale/, 'un passaporto tedesco non ha codice fiscale: nessun avviso');
     const v2 = await valori(x.page, 2);
     assert.deepEqual([v2.cognome, v2.nome, v2.genere, v2.nascita, v2.cittadinanza, v2.luogo_nascita], ['PROVACCIA', 'TEODORICO', 'M', '2010-11-10', 'Germania', '']);
     assert.equal(await x.page.$eval('#scan-pannello-2 .scan-input[data-lato="1"]:not([capture])', e => e.value), '', 'campo file svuotato subito');

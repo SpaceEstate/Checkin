@@ -161,6 +161,9 @@ test('codice fiscale: carattere di controllo, omocodia, lettura con spazi e O/0;
   assert.equal(L.codiceNomeCF('Ugo'), 'GUO');
   assert.equal(L.trovaCodiceFiscale('CODICE FISCALE / FISCAL CODE\n' + cf.slice(0, 8) + ' ' + cf.slice(8)), cf);
   assert.equal(L.trovaCodiceFiscale(cf.replace('80', '8O')), cf, 'O al posto di 0 nella posizione di una cifra');
+  // parole e righe MRZ non diventano mai un codice fiscale per caso (prima «PASSPORT PASSEPORT» dava «ASSPORTPASSEP0RT»)
+  for (const testo of ['REISEPASS / PASSPORT / PASSEPORT', 'C01X00T478D<<1011108M3001019<<<<<<<<<<<<<<<8', 'P<D<<PROVACCIA<<TEODORICO<<<<<<<<<<<<<<<<<<<<',
+    'BUNDESREPUBLIKDEU', 'DEUTSCHLANDREISE PASS']) assert.equal(L.trovaCodiceFiscale(testo), null, testo);
   const d = L.decodificaCF(cf);
   assert.deepEqual([d.annoBreve, d.mese, d.giorno, d.genere, d.natoAllEstero], ['80', 4, 19, 'F', false]);
   const omo = 'PRVRNG8LD59H501'; const cfOmo = omo + L.carattereControlloCF(omo);

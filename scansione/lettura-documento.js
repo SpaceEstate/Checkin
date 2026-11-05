@@ -168,20 +168,27 @@ export function carattereControlloCF(primi15) {
 }
 export const codiceFiscaleValido = cf => typeof cf === 'string' && cf.length === 16 && RE_CF.test(cf) && carattereControlloCF(cf) === cf[15];
 
-// Cerca nel testo un codice fiscale con il carattere di controllo giusto (tollera spazi e le confusioni O/0, I/1… nelle
-// posizioni che devono essere cifre o lettere). Restituisce il codice o null.
+// Cerca nel testo un codice fiscale con il carattere di controllo giusto. Solo parole intere di 16 caratteri (o due o tre parole
+// vicine che insieme fanno 16, se l'OCR ha messo uno spazio), mai le righe della MRZ, e con almeno 4 cifre vere nelle posizioni
+// delle cifre: così una parola qualsiasi («PASSPORTPASSEPORT»…) non diventa un codice fiscale per caso. Nelle posizioni delle cifre
+// si correggono le lettere simili (O al posto di 0…), non quelle dell'omocodia. Restituisce il codice o null.
 export function trovaCodiceFiscale(testo) {
   const righe = String(testo || '').toUpperCase().split(/\n/);
   for (const r of righe) {
-    const compatta = r.replace(/[^A-Z0-9]/g, '');
-    for (let i = 0; i + 16 <= compatta.length; i++) {
-      const c = Array.from(compatta.slice(i, i + 16)).map((ch, k) => {
-        const cifra = POS_CIFRE_CF.includes(k);
-        if (cifra) return ch;                                         // nelle posizioni «cifra» anche le lettere dell'omocodia sono valide
-        return /[0-9]/.test(ch) ? (VERSO_LETTERA[ch] || ch) : ch;     // nelle posizioni «lettera» una cifra è un errore di lettura
-      }).join('');
+    if (r.includes('<')) continue;
+    const parole = r.split(/[^A-Z0-9]+/).filter(Boolean);
+    const candidati = [];
+    for (let i = 0; i < parole.length; i++) {
+      let unite = '';
+      for (let j = i; j < Math.min(parole.length, i + 3); j++) {
+        unite += parole[j];
+        if (unite.length === 16) candidati.push(unite);
+        if (unite.length >= 16) break;
+      }
+    }
+    for (const c of candidati) {
+      if (POS_CIFRE_CF.filter(k => /[0-9]/.test(c[k])).length < 4) continue;
       if (codiceFiscaleValido(c)) return c;
-      // posizioni «cifra» lette come lettere simili (O al posto di 0…) che non sono lettere dell'omocodia
       const corretto = Array.from(c).map((ch, k) => (POS_CIFRE_CF.includes(k) && /[A-Z]/.test(ch) && !CF_OMOCODIA.includes(ch)) ? ({ O: '0', D: '0', Q: '0', I: '1', Z: '2', S: '5', G: '6', B: '8' }[ch] || ch) : ch).join('');
       if (corretto !== c && codiceFiscaleValido(corretto)) return corretto;
     }
