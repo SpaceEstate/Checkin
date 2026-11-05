@@ -1,0 +1,241 @@
+{
+ "nota": "Impronte del markup dei passi degli ospiti creato da generaStepOspiti() con il codice di main (aca8d57), PRIMA della scansione dei documenti. Generate con tests/scansione-dom.mjs (data fissa 2026-11-05). Con la scansione spenta il markup deve restare identico. «funzioni»: impronte delle funzioni del percorso di oggi (documento del responsabile, validazioni, pagamento), che la scansione non modifica.",
+ "casi": {
+  "1-it": [
+   {
+    "id": "step-2",
+    "className": "step",
+    "caratteri": 55522,
+    "sha256": "bd79b294f7848d532fa09b15ecbf3feccba42b58d9772df3c507a07263488230"
+   }
+  ],
+  "2-it": [
+   {
+    "id": "step-2",
+    "className": "step",
+    "caratteri": 55518,
+    "sha256": "45962dc0aca60616c6b7589aee61186633281d199cc11354d000e2420afea142"
+   },
+   {
+    "id": "step-3",
+    "className": "step",
+    "caratteri": 35056,
+    "sha256": "1f82230d41c828790fdf812d7014b03ddbe93da66462c1de0c4f7e3763c7f294"
+   }
+  ],
+  "3-it": [
+   {
+    "id": "step-2",
+    "className": "step",
+    "caratteri": 55518,
+    "sha256": "45962dc0aca60616c6b7589aee61186633281d199cc11354d000e2420afea142"
+   },
+   {
+    "id": "step-3",
+    "className": "step",
+    "caratteri": 35052,
+    "sha256": "18a784f23c0008d50b491cc6ed7af7c0d8d991b52b80357e945bd62dbb2dde7b"
+   },
+   {
+    "id": "step-4",
+    "className": "step",
+    "caratteri": 35056,
+    "sha256": "db110d98859abc3d2e023598f9bb6d115a7daf92cc5f51cbea6e68732e3adbba"
+   }
+  ],
+  "9-it": [
+   {
+    "id": "step-2",
+    "className": "step",
+    "caratteri": 55518,
+    "sha256": "45962dc0aca60616c6b7589aee61186633281d199cc11354d000e2420afea142"
+   },
+   {
+    "id": "step-3",
+    "className": "step",
+    "caratteri": 35052,
+    "sha256": "18a784f23c0008d50b491cc6ed7af7c0d8d991b52b80357e945bd62dbb2dde7b"
+   },
+   {
+    "id": "step-4",
+    "className": "step",
+    "caratteri": 35052,
+    "sha256": "53378dbe20ef36b80738d020289e06b7d1a88a0804a2a70efe246278725fc269"
+   },
+   {
+    "id": "step-5",
+    "className": "step",
+    "caratteri": 35052,
+    "sha256": "e7ae6791496ed31c1e07b41b7dbb19b7d61aa5b2eb384408a943fce75a13870f"
+   },
+   {
+    "id": "step-6",
+    "className": "step",
+    "caratteri": 35052,
+    "sha256": "c52a550c788f511ee7ffd98cb82b84863b12d8fb5ae2444ecffe149650a7a843"
+   },
+   {
+    "id": "step-7",
+    "className": "step",
+    "caratteri": 35052,
+    "sha256": "b0848832633b7fd8348c8dec498a8e485b65cf4ddd6d966d43e0ad8de78e0778"
+   },
+   {
+    "id": "step-8",
+    "className": "step",
+    "caratteri": 35052,
+    "sha256": "0a2984ba1700564edddfe3352dcf82d377f863e25226f4ef64ad31eb4fcf9211"
+   },
+   {
+    "id": "step-9",
+    "className": "step",
+    "caratteri": 35052,
+    "sha256": "43218909cef82cd9531e3d689afb41e98d638ca100708c5b90b6670d77703746"
+   },
+   {
+    "id": "step-10",
+    "className": "step",
+    "caratteri": 35056,
+    "sha256": "1222265d1e98649ff15c9638ee9100ce275c2bfb85cd019686b14afe210f019c"
+   }
+  ],
+  "3-en": [
+   {
+    "id": "step-2",
+    "className": "step",
+    "caratteri": 55417,
+    "sha256": "cff9a75a66d006966a4486c969df8d5542ff671d5a85bcf74e5c23542ad8a33c"
+   },
+   {
+    "id": "step-3",
+    "className": "step",
+    "caratteri": 35016,
+    "sha256": "03d8f927fd6b6c589982941ee02ad51bd640f93d3e6c00f5fcb06007b94effcf"
+   },
+   {
+    "id": "step-4",
+    "className": "step",
+    "caratteri": 35022,
+    "sha256": "2b700300485148ba8eb7e47e60fda24ec363f31ab596dfccec0050291a6d76fd"
+   }
+  ],
+  "3-de": [
+   {
+    "id": "step-2",
+    "className": "step",
+    "caratteri": 55720,
+    "sha256": "bab6ee1a923752510e0a1b02f9391c39aed87991b3f0e18ff3e654aa26ba0b9c"
+   },
+   {
+    "id": "step-3",
+    "className": "step",
+    "caratteri": 35158,
+    "sha256": "d2f5e6ecbe834773d2dd17687cac6fddf2ccc7bcf3fd5ea178b57352e1e94420"
+   },
+   {
+    "id": "step-4",
+    "className": "step",
+    "caratteri": 35161,
+    "sha256": "3472982eddedf2258d3b64e3667664fb6e1896c395c09ce42e396c998cc28d26"
+   }
+  ]
+ },
+ "funzioni": {
+  "fileToBase64": {
+   "righe": 8,
+   "sha256": "15cf33de8e64800fb9bc7a9f619fe487e174d7a890f87342d9bf206c7da14ffe"
+  },
+  "validaStepOspite": {
+   "righe": 62,
+   "sha256": "b69dea707e0fd45069150c28e6cf4d7f9a8b84ef6901eb8f2c4947d2dc81d729"
+  },
+  "validaPrenotazioneCompleta": {
+   "righe": 87,
+   "sha256": "7ac0ed13e479bcd008fecf520e6d6f91138809282695660f715077e78a82742a"
+  },
+  "inputDocumento": {
+   "righe": 3,
+   "sha256": "b9e7d19870012d6a9ba94d05c1acc48b952b30a0140ad0b0e8d5928ac7492ae1"
+  },
+  "latiRichiesti": {
+   "righe": 3,
+   "sha256": "6edf422fd7c6f28798d5126cb071d16470539ef3b73a7d3da130ccff9f8306fc"
+  },
+  "latiMancanti": {
+   "righe": 3,
+   "sha256": "9bfa272c74612e351cc960e041f6c8bb99ba7239a955f3beffa6bd3b9ce325fe"
+  },
+  "aggiornaLabelUpload": {
+   "righe": 26,
+   "sha256": "6cfc32e818c9058fb2282bd1d5dca75ae21902ac23f64b44c24caccca6e41ffa"
+  },
+  "aggiornaStatoDocumenti": {
+   "righe": 15,
+   "sha256": "d6f6a8c62a2d5627aa64d8a2c19d51c61c4f02b974a8c86eb2f8568323d8dbc6"
+  },
+  "aggiornaObbligoRetro": {
+   "righe": 24,
+   "sha256": "3ad3780c2f0db8f4944df3dfb49206fe626fcaab9e7fc1a5091ebdf36fb38c0a"
+  },
+  "bloccoUploadLato": {
+   "righe": 36,
+   "sha256": "aea1a3486c261274fd9e12d7c5bc1dfa3bd6e1c288be4b5f2483dea014fcd4bd"
+  },
+  "handleFileUpload": {
+   "righe": 39,
+   "sha256": "b2557585530dd658d0c0939b6c7a40a7a0831ef042d83cb545a8ef1aa9808073"
+  },
+  "openCamera": {
+   "righe": 34,
+   "sha256": "a485ee5e39bf077daadd0262bcc87863ea8aed70cd99d3840aef1650349f2203"
+  },
+  "capturePhoto": {
+   "righe": 69,
+   "sha256": "53d695b65be175640d04e84398e76c23fc2952ee85b32d0ad9849ad35730c89e"
+  },
+  "closeCamera": {
+   "righe": 11,
+   "sha256": "16b53ca6cb4669a9ca909729d53273445f6f3c40621e55b40e313a01ea449427"
+  },
+  "procediAlPagamento": {
+   "righe": 156,
+   "sha256": "f5316f5bb42530cb6c16c06b8e27057797928c81eafd1a3eb87e073af0356de9"
+  },
+  "verificaDatiAlloggiati": {
+   "righe": 27,
+   "sha256": "dcc1e340ea676fe26174c4d7310be25eb14e847ad1680c229c398b52238f8dce"
+  },
+  "comprimiImmagineBase64": {
+   "righe": 73,
+   "sha256": "f83bf83a9eabcc8047d881406bf86e8bc09758fe836c8c3fcc5ab324e6552a2b"
+  },
+  "raccogliDatiPrenotazioneConCompressione": {
+   "righe": 141,
+   "sha256": "5a40e7571a8a53c9d9ce73b541021b1f7f428efb739ea90eaa61675e67a82ae0"
+  },
+  "creaLinkPagamentoConSessionId": {
+   "righe": 81,
+   "sha256": "6f7b1562e0f39f7e24c44a92dff4b0dc1c09192462ff354b34d2784e61074f63"
+  },
+  "mostraPagamentoNellaPagina": {
+   "righe": 109,
+   "sha256": "96eaa05c9fcb6d5e7f37127e9b54492621ce12ab69065aafd6f2192b346e7916"
+  },
+  "toggleComuneProvincia": {
+   "righe": 17,
+   "sha256": "3771734759943188631f2b90b2ae6b9ba99a1b84f8b381a208c316dc08745c5d"
+  },
+  "precompilaDatiPrenotazione": {
+   "righe": 119,
+   "sha256": "e0b88fd1e960ea1eb693416f5da6af2120d70d6a8c99ed0cf2b459d3da46c93b"
+  },
+  "prossimoStep": {
+   "righe": 47,
+   "sha256": "87939aa6004398319063f1632cab254a5b692a099c2bbb3a4c0e8308b16c62cf"
+  },
+  "indietroStep": {
+   "righe": 8,
+   "sha256": "19190f2048c225374d010bf2b8ebc7ba03d70c3c63e60bd00b073f9f2604326c"
+  }
+ }
+}
