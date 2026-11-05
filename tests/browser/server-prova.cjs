@@ -90,8 +90,8 @@ async function avvia(opzioni) {
       stato.file.push(rel);
       let corpo = fs.readFileSync(file);
       const ext = path.extname(file).toLowerCase();
-      if (rel === '/checkin.js' && o.scansione !== 'spenta') {
-        corpo = Buffer.from(corpo.toString('utf8').replace("const SCANSIONE_DOCUMENTI = 'spenta';", "const SCANSIONE_DOCUMENTI = '" + o.scansione + "';"));
+      if (rel === '/checkin.js') {
+        corpo = Buffer.from(corpo.toString('utf8').replace(/const SCANSIONE_DOCUMENTI = '[a-z]+';/, "const SCANSIONE_DOCUMENTI = '" + o.scansione + "';"));
       }
       if (o.inietta && ext === '.html') corpo = Buffer.from(corpo.toString('utf8').replace('<head>', '<head>' + DEVIATORE));
       res.writeHead(200, { 'Content-Type': TIPI[ext] || 'application/octet-stream', 'Cache-Control': 'no-store' });

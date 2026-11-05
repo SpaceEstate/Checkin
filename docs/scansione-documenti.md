@@ -19,13 +19,13 @@ nessuna API, nessun servizio esterno, nessun costo.
 In `checkin.js`, sezione «SCANSIONE DEL DOCUMENTO»:
 
 ```js
-const SCANSIONE_DOCUMENTI = 'spenta';   // 'spenta' | 'prova' | 'attiva'
+const SCANSIONE_DOCUMENTI = 'prova';   // 'spenta' | 'prova' | 'attiva'
 ```
 
 | Valore | Effetto |
 |---|---|
-| `'spenta'` | Il modulo è quello di prima. È il valore attuale. |
-| `'prova'` | La scelta compare solo aprendo il check-in con `#scansione=prova` in fondo all'indirizzo, per esempio `https://spaceestate.github.io/Checkin/#scansione=prova`. Gli ospiti non la vedono. Serve a provare sui telefoni veri, in produzione. |
+| `'spenta'` | Il modulo è quello di prima. |
+| `'prova'` | La scelta compare solo aprendo il check-in con `#scansione=prova` in fondo all'indirizzo, per esempio `https://spaceestate.github.io/Checkin/#scansione=prova`. Gli ospiti non la vedono. Serve a provare sui telefoni veri. **È il valore attuale sul branch `claude/scansione-documenti`** (05/11/2026, per le prove del titolare nell'anteprima di Vercel). |
 | `'attiva'` | La scelta compare a tutti. |
 
 **Spegnimento d'emergenza (kill switch):** rimettere `'spenta'` (una riga) e aumentare `?v=` di `checkin.js` in `index.html`, copiando i due

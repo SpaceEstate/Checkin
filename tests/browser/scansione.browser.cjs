@@ -157,7 +157,7 @@ async function flussoAMano() {
   } finally { await x.chiudi(); }
 }
 
-test('scansione spenta (valore predefinito): nessun pulsante, nessun file della scansione scaricato, flusso a mano fino al salvataggio come prima', async () => {
+test('scansione spenta: nessun pulsante, nessun file della scansione scaricato, flusso a mano fino al salvataggio come prima', async () => {
   const r = await flussoAMano();
   assert.equal(r.elementiScansione, 0, 'nessun elemento della scansione');
   assert.equal(r.dati.ospiti.length, 3);

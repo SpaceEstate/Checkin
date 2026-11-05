@@ -336,13 +336,16 @@ test('nomi: MRZ e testo stampato quasi uguali (lettura imperfetta, Ü/UE) → va
 // ---- Aggancio in checkin.js e regole di privacy del codice della scansione ----
 
 test('flag della scansione: «spenta» nel codice pubblicato; «prova» solo con #scansione=prova; «attiva» per tutti', () => {
-  assert.match(SRC_CHECKIN, /\nconst SCANSIONE_DOCUMENTI = 'spenta';\n/, 'il valore pubblicato deve restare «spenta» finché il titolare non decide');
-  const con = (valore, hash) => passiOspiti(ROOT, 2, { hash, sorgente: SRC_CHECKIN.replace("const SCANSIONE_DOCUMENTI = 'spenta';", "const SCANSIONE_DOCUMENTI = '" + valore + "';") });
+  // valore deciso dal titolare: 05/11/2026 'prova' sul branch delle prove (gli ospiti non vedono nulla senza #scansione=prova).
+  // 'attiva' solo con una sua decisione esplicita: cambiarlo qui va dichiarato nel messaggio di commit.
+  assert.match(SRC_CHECKIN, /\nconst SCANSIONE_DOCUMENTI = 'prova';/, 'valore del flag diverso da quello deciso dal titolare');
+  const FLAG = /const SCANSIONE_DOCUMENTI = '[a-z]+';/;
+  const con = (valore, hash) => passiOspiti(ROOT, 2, { hash, sorgente: SRC_CHECKIN.replace(FLAG, "const SCANSIONE_DOCUMENTI = '" + valore + "';") });
   const ha = passi => passi.every(p => p.html.includes('class="scan-doc"') && p.html.includes("sceltaCompilazione(") && p.html.includes('data-i18n="scan.scansiona"'));
   // nel contesto di prova WebAssembly e Worker non ci sono (come in un browser molto vecchio): la scelta non compare
   assert.ok(!con('attiva', '').some(p => p.html.includes('scan-doc')), 'senza WebAssembly e Worker si compila solo a mano');
   const conMotore = (valore, hash) => {
-    const src = SRC_CHECKIN.replace("const SCANSIONE_DOCUMENTI = 'spenta';", "const SCANSIONE_DOCUMENTI = '" + valore + "';")
+    const src = SRC_CHECKIN.replace(FLAG, "const SCANSIONE_DOCUMENTI = '" + valore + "';")
       .replace('function scansioneDisponibile() {', 'globalThis.WebAssembly = {}; globalThis.Worker = function () {}; globalThis.HTMLScriptElement = function () {}; HTMLScriptElement.prototype.noModule = false;\nfunction scansioneDisponibile() {');
     return passiOspiti(ROOT, 2, { hash, sorgente: src });
   };
