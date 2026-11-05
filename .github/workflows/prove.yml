@@ -55,3 +55,29 @@ jobs:
           npm test | tee /tmp/prove.txt
           # qui ogni prova deve girare: una prova saltata vuol dire che manca il database o il confronto
           grep -q "^# skipped 0$" /tmp/prove.txt || { echo "::error::alcune prove sono state saltate"; exit 1; }
+
+  # Scansione facoltativa dei documenti (docs/scansione-documenti.md): prove con un browser vero (Chromium), OCR vero con i file
+  # del sito, documenti SINTETICI (tests/browser/documenti-sintetici) e API del check-in finte. Nessuna rete verso servizi reali.
+  # Playwright si installa fuori dal repository: il progetto non ha nuove dipendenze.
+  scansione:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Playwright e Chromium (fuori dal repository)
+        run: |
+          npm install --prefix /tmp/pw --no-audit --no-fund playwright@1.63.0
+          /tmp/pw/node_modules/.bin/playwright install --with-deps chromium
+
+      - name: Prove della scansione nel browser
+        env:
+          NODE_PATH: /tmp/pw/node_modules
+        run: |
+          set -o pipefail
+          node --test tests/browser/scansione.browser.cjs | tee /tmp/prove-browser.txt
+          grep -q "^# skipped 0$" /tmp/prove-browser.txt || { echo "::error::alcune prove della scansione sono state saltate"; exit 1; }

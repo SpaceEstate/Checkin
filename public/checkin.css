@@ -2310,3 +2310,319 @@ body {
   .lang-codice { display: inline; }
 }
 @media (prefers-reduced-motion: reduce) { .pay-load i { animation: none; } .pay-panel { animation: none; } }
+
+/* ============================================================
+   SCANSIONE DEL DOCUMENTO (facoltativa: scansione/, docs/scansione-documenti.md)
+   Questi elementi esistono solo se la scansione è accesa (checkin.js → SCANSIONE_DOCUMENTI):
+   con la scansione spenta nessuna di queste regole si applica a qualcosa.
+   ============================================================ */
+.scan-doc {
+  margin: 0 0 22px;
+}
+
+.scan-scelta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.scan-scelta-btn {
+  min-height: 52px;
+  padding: 12px 14px;
+  border: 2px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-white);
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
+}
+
+.scan-scelta-btn:hover {
+  border-color: var(--color-accent-200);
+}
+
+.scan-scelta-btn.attivo {
+  border-color: var(--color-accent-300);
+  background: var(--color-bg-cream);
+  color: var(--color-accent-300-dark);
+}
+
+.scan-scelta-btn:focus-visible,
+.scan-file:focus-within .scan-btn,
+.scan-btn:focus-visible,
+.scan-mini:focus-visible,
+.scan-annulla:focus-visible,
+.scan-interrompi:focus-visible {
+  outline: 3px solid rgba(var(--color-accent-200-rgb), 0.55);
+  outline-offset: 2px;
+}
+
+.scan-pannello {
+  margin-top: 12px;
+  padding: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  background: var(--color-bg-cream-light);
+}
+
+.scan-nota {
+  margin-bottom: 12px;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+
+.scan-lati {
+  display: grid;
+  gap: 12px;
+}
+
+@media (min-width: 640px) {
+  .scan-lati {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.scan-lato {
+  padding: 12px;
+  border: 1px dashed var(--color-border);
+  border-radius: 12px;
+  background: var(--color-white);
+}
+
+.scan-lato-testa {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.scan-lato-numero {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--color-accent-300-dark);
+  color: var(--color-white);
+  font-size: 0.8rem;
+}
+
+.scan-lato-azioni {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+/* come i riquadri di caricamento del responsabile: il campo file, trasparente, copre il pulsante (affidabile anche su iPhone) */
+.scan-file {
+  position: relative;
+}
+
+.scan-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.scan-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 12px;
+  border: 2px solid var(--color-accent-200);
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--color-accent-200-dark) 0%, var(--color-accent-300-dark) 100%);
+  color: var(--color-white);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-align: center;
+  cursor: pointer;
+}
+
+.scan-btn-chiaro {
+  background: var(--color-white);
+  color: var(--color-accent-300-dark);
+}
+
+.scan-lato-stato {
+  min-height: 1.2em;
+  margin-top: 8px;
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+}
+
+.scan-avanzamento {
+  margin-top: 14px;
+}
+
+.scan-barra {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--color-border-light);
+  overflow: hidden;
+}
+
+.scan-barra i {
+  display: block;
+  width: 3%;
+  height: 100%;
+  background: var(--color-accent-300);
+  transition: width 0.3s ease;
+}
+
+.scan-avanzamento-testo {
+  margin: 8px 0;
+  font-size: 0.88rem;
+  color: var(--color-text);
+}
+
+.scan-esito {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border);
+  border-left-width: 4px;
+  border-radius: 12px;
+  background: var(--color-white);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.scan-esito.ok {
+  border-left-color: #2e7d4f;
+}
+
+.scan-esito.parziale {
+  border-left-color: #b26a00;
+}
+
+.scan-esito.errore {
+  border-left-color: var(--color-error-text);
+}
+
+.scan-esito-titolo {
+  margin-bottom: 4px;
+  font-weight: 700;
+}
+
+.scan-legenda {
+  margin-top: 4px;
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+}
+
+.scan-legenda-letto,
+.scan-legenda-verifica {
+  white-space: nowrap;
+}
+
+.scan-legenda-letto::before,
+.scan-legenda-verifica::before {
+  content: '';
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 5px;
+  border-radius: 3px;
+  vertical-align: -1px;
+  border: 2px solid #2e7d4f;
+}
+
+.scan-legenda-verifica::before {
+  border-color: #b26a00;
+  background: #fff6e8;
+}
+
+.scan-avviso {
+  margin-top: 6px;
+  padding-left: 10px;
+  border-left: 3px solid #b26a00;
+}
+
+.scan-conflitti-titolo {
+  margin-top: 10px;
+  font-weight: 600;
+}
+
+.scan-suggerimento,
+.scan-conflitto {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.scan-mini {
+  padding: 7px 12px;
+  border: 1.5px solid var(--color-accent-300);
+  border-radius: 10px;
+  background: var(--color-accent-300-dark);
+  color: var(--color-white);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.scan-mini-chiaro {
+  background: var(--color-white);
+  color: var(--color-accent-300-dark);
+}
+
+.scan-annulla,
+.scan-interrompi {
+  margin-top: 12px;
+  padding: 8px 14px;
+  border: 1.5px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-white);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.scan-interrompi {
+  margin-top: 0;
+}
+
+/* Campi compilati dalla scansione: verde = letto e verificato (cifre di controllo, due fonti concordi), arancione = da controllare.
+   Il segno sparisce appena l'ospite modifica il campo. */
+.form-input.scan-letto,
+.form-select.scan-letto,
+.date-text-input.scan-letto,
+.date-input-wrapper.mobile-date-input .date-text-input.scan-letto {
+  border-color: #2e7d4f;
+  box-shadow: 0 0 0 3px rgba(46, 125, 79, 0.14);
+}
+
+.form-input.scan-verifica,
+.form-select.scan-verifica,
+.date-text-input.scan-verifica,
+.date-input-wrapper.mobile-date-input .date-text-input.scan-verifica {
+  border-color: #b26a00;
+  background-color: #fff6e8;
+  box-shadow: 0 0 0 3px rgba(178, 106, 0, 0.16);
+}
+
+@media (max-width: 380px) {
+  .scan-scelta,
+  .scan-lato-azioni {
+    grid-template-columns: 1fr;
+  }
+}

@@ -928,6 +928,69 @@ function bloccoUploadLato(ospiteNum, lato) {
             </div>`;
 }
 
+// === SCANSIONE DEL DOCUMENTO (facoltativa) ===
+// Lettura automatica dei dati dal documento, tutta nel browser dell'ospite: docs/scansione-documenti.md.
+//  'spenta' → il modulo è identico a prima: nessun pulsante, nessun file in più, nessuna richiesta.
+//  'prova'  → compare solo aprendo il check-in con «#scansione=prova» in fondo all'indirizzo (per provarla in produzione
+//             senza che gli ospiti la vedano).
+//  'attiva' → compare a tutti.
+// Spegnimento d'emergenza: rimettere 'spenta'. Il codice della scansione (scansione/) si scarica solo se l'ospite la sceglie.
+const SCANSIONE_DOCUMENTI = 'spenta';
+const SCANSIONE_VERSIONE = '20261105a';
+// letto subito: dopo il caricamento daAreaClienti() toglie il frammento «#…» dall'indirizzo
+const scansioneInProva = /(?:^#|&)scansione=prova(?:&|$)/.test(window.location.hash || '');
+
+function scansioneDisponibile() {
+  if (!(SCANSIONE_DOCUMENTI === 'attiva' || (SCANSIONE_DOCUMENTI === 'prova' && scansioneInProva))) return false;
+  try {
+    // WebAssembly e Worker servono al motore di lettura; senza (browser molto vecchi) si compila solo a mano, come prima
+    return typeof WebAssembly === 'object' && typeof Worker === 'function' && 'noModule' in HTMLScriptElement.prototype;
+  } catch (e) { return false; }
+}
+
+// Scelta «Compila manualmente» / «Scansiona documento» in cima al passo di ogni ospite. Con la scansione spenta: stringa vuota.
+function bloccoScansione(i) {
+  if (!scansioneDisponibile()) return '';
+  return `<div class="scan-doc" id="scan-doc-${i}">
+        <div class="scan-scelta">
+          <button type="button" class="scan-scelta-btn attivo" id="scan-manuale-${i}" aria-pressed="true" onclick="sceltaCompilazione(${i}, 'manuale')" data-i18n="scan.manuale">${t('scan.manuale')}</button>
+          <button type="button" class="scan-scelta-btn" id="scan-scansiona-${i}" aria-pressed="false" onclick="sceltaCompilazione(${i}, 'scansione')" data-i18n="scan.scansiona">${t('scan.scansiona')}</button>
+        </div>
+        <div class="scan-pannello" id="scan-pannello-${i}" hidden></div>
+      </div>
+      `;
+}
+
+let moduloScansione = null;
+window.sceltaCompilazione = async function(n, modo) {
+  const manuale = document.getElementById(`scan-manuale-${n}`), scansiona = document.getElementById(`scan-scansiona-${n}`);
+  const pannello = document.getElementById(`scan-pannello-${n}`);
+  if (!manuale || !scansiona || !pannello) return;
+  const premi = attiva => {
+    manuale.classList.toggle('attivo', !attiva); manuale.setAttribute('aria-pressed', String(!attiva));
+    scansiona.classList.toggle('attivo', attiva); scansiona.setAttribute('aria-pressed', String(attiva));
+  };
+  if (modo !== 'scansione') {
+    premi(false);
+    pannello.hidden = true;
+    if (moduloScansione) moduloScansione.chiudi(n);
+    return;
+  }
+  premi(true);
+  try {
+    if (!moduloScansione) moduloScansione = await import(`./scansione/scansione-documento.js?v=${SCANSIONE_VERSIONE}`);
+    moduloScansione.apri(n, {
+      t, applicaTraduzioni, onCambioLingua, traduciPaese, traduciDocumento, stati, province, inputDocumento,
+      numeroOspiti: () => numeroOspiti
+    });
+  } catch (e) {
+    // il modulo non si scarica (rete, browser): si resta sulla compilazione manuale, il check-in non si blocca
+    premi(false);
+    pannello.hidden = true;
+    showNotification(t('scan.nonDisponibile'), 'error');
+  }
+}
+
 // === GENERAZIONE STEP OSPITI ===
 function generaStepOspiti() {
   const form = document.getElementById('checkin-form');
@@ -997,7 +1060,7 @@ ${bloccoUploadLato(1, 'retro')}
         <h2 class="step-title" data-i18n-key="guest.title" data-i18n-params='${JSON.stringify({ n: i })}'${i === 1 ? ' data-i18n-suffix="guest.responsabileTag"' : ''}>${titoloOspite}</h2>
         <p class="step-subtitle" data-i18n="guest.subtitle">Inserisci i dati dell'ospite</p>
       </div>
-      <div class="form-grid">
+      ${bloccoScansione(i)}<div class="form-grid">
         <div class="form-group">
           <label class="form-label" for="ospite${i}_cognome" data-i18n="guest.cognome">Cognome *</label>
           <input type="text" id="ospite${i}_cognome" name="ospite${i}_cognome" class="form-input" required maxlength="50">

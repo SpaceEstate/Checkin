@@ -227,6 +227,9 @@ export function confrontaCF(cf, dati) {
 export function pulisciRigaMrz(riga) {
   let s = String(riga || '').toUpperCase().replace(/[«‹＜≪]/g, '<').replace(/\s+/g, '').replace(/[^A-Z0-9<]/g, '');
   for (let k = 0; k < 2; k++) s = s.replace(/(<{3,})[A-Z0-9](<{3,})/g, '$1<$2');
+  // file di «<» lette come C o K (succede con le foto un po' sfocate): 4 o più caratteri di fila tra «<», C e K con almeno due «<»,
+  // oppure 5 o più C/K di fila (nessun nome ha quattro C o K consecutive)
+  s = s.replace(/[<CK]{4,}/g, m => ((m.match(/</g) || []).length >= 2 || m.length >= 5) ? '<'.repeat(m.length) : m);
   return s;
 }
 const pareMrz = s => s.length >= 20 && /^[A-Z0-9<]+$/.test(s) && (s.includes('<') || /^[A-Z0-9]{28,}$/.test(s));
@@ -291,7 +294,9 @@ export function trovaMrz(righeLette) {
       const allineate = blocco.slice();
       for (let k = 0; k < allineate.length; k++) allineate[k] = allineaRiga(allineate[k], f.lunghezza, allineate, k);
       const p = punteggio(allineate);
-      if (p.punti >= 0 && (!migliore || p.punti > migliore.punti)) migliore = { formato: f.nome, righe: allineate, punti: p.punti };
+      const cifre = p.risultato ? p.risultato.details.filter(d => d.field && /CheckDigit$/.test(d.field) && d.valid).length : 0;
+      if (cifre < 2 || (allineate.join('').match(/</g) || []).length < 4) continue;
+      if (!migliore || p.punti > migliore.punti) migliore = { formato: f.nome, righe: allineate, punti: p.punti };
     }
   }
   return migliore;
@@ -314,6 +319,16 @@ function correggiNumeroDocumento(numero, cifra, verificaComplessiva) {
 }
 
 const pulisciNomeMrz = s => String(s || '').replace(/[0-9]/g, c => VERSO_LETTERA[c] || '').replace(/\s+/g, ' ').trim();
+// Campo dei nomi della MRZ (COGNOME<<NOMI<<<…): dopo tre «<» di fila c'è solo riempimento; quello che l'OCR ci legge è rumore.
+function nomiDaCampoMrz(campo) {
+  const c = String(campo || '');
+  const sep = c.indexOf('<<');
+  if (sep < 0) return { cognome: pulisciNomeMrz(c.replace(/</g, ' ')), nome: '' };
+  const cognome = c.slice(0, sep), resto = c.slice(sep + 2);
+  const fine = resto.search(/<{3,}/);
+  const nomi = fine >= 0 ? resto.slice(0, fine) : resto;
+  return { cognome: pulisciNomeMrz(cognome.replace(/</g, ' ')), nome: pulisciNomeMrz(nomi.replace(/</g, ' ')) };
+}
 
 // Interpreta un blocco MRZ (già alla lunghezza esatta). `oggi` (ms) serve per il secolo delle date.
 export function leggiMrz(righe, oggi) {
@@ -362,7 +377,9 @@ export function leggiMrz(righe, oggi) {
   if (f.sex === 'male' || f.sex === 'female') out.campi.genere = { valore: f.sex === 'male' ? 'M' : 'F', affidabilita: DA_VERIFICARE, fonte: 'mrz' };
 
   // nomi: struttura COGNOME<<NOMI; nessuna cifra di controllo
-  const cognome = pulisciNomeMrz(f.lastName), nome = pulisciNomeMrz(f.firstName);
+  const campoNomi = { TD3: (righe[0] || '').slice(5), TD2: (righe[0] || '').slice(5), TD1: righe[2] || '' }[r.format];
+  const nm = campoNomi != null ? nomiDaCampoMrz(campoNomi) : { cognome: pulisciNomeMrz(f.lastName), nome: pulisciNomeMrz(f.firstName) };
+  const cognome = nm.cognome, nome = nm.nome;
   if (cognome) out.campi.cognome = { valore: cognome, affidabilita: DA_VERIFICARE, fonte: 'mrz' };
   if (nome) out.campi.nome = { valore: nome, affidabilita: DA_VERIFICARE, fonte: 'mrz' };
   const rigaNomi = { TD3: righe[0], TD2: righe[0], TD1: righe[2] }[r.format];
@@ -413,20 +430,26 @@ const RE_CARTA = /CARTA D\W?\s?IDENTIT|CARTA DI IDENTIT|IDENTITY CARD|PERSONALAU
 const RE_PASSAPORTO = /PASSAPORTO|PASSPORT|REISEPASS|PASSEPORT|PASAPORTE|PASPOORT/;
 const RE_ITALIA = /REPUBBLICA ITALIANA|ITALIAN REPUBLIC|MINISTERO DELL\W?INTERNO|MINISTERO DELLE INFRASTRUTTURE|COMUNE DI /;
 
+// Gli spazi delle etichette diventano facoltativi (l'OCR a volte li perde: «NATAIL»).
+const etichetta = src => new RegExp(src.replace(/ /g, '\\s?'));
 const ETICHETTE = {
-  cognome: /\b(COGNOME|SURNAME|NACHNAME|NOM\b|APELLIDOS?)/,
-  nome: /\b(NOME|NOMI|GIVEN NAMES?|VORNAMEN?|PRENOMS?|NOMBRES?|FORENAMES?)\b/,
-  luogoData: /LUOGO E DATA DI NASCITA|PLACE AND DATE OF BIRTH/,
-  luogo: /LUOGO DI NASCITA|PLACE OF BIRTH|GEBURTSORT|LIEU DE NAISSANCE|LUGAR DE NACIMIENTO|\bNATO A\b|\bNATA A\b/,
-  data: /DATA DI NASCITA|DATE OF BIRTH|GEBURTSDATUM|GEBURTSTAG|DATE DE NAISSANCE|FECHA DE NACIMIENTO|\bNATO IL\b|\bNATA IL\b/,
-  sesso: /\b(SESSO|SEX|GESCHLECHT|SEXE|SEXO)\b/,
-  scadenza: /SCADENZA|DATE OF EXPIRY|EXPIRY|GULTIG BIS|DATE D.EXPIRATION|VALIDA FINO AL|FECHA DE CADUCIDAD/,
-  rilascio: /EMISSIONE|DATA DI RILASCIO|DATE OF ISSUE|AUSSTELLUNGSDATUM|DATE DE DELIVRANCE|FECHA DE EXPEDICION/
+  cognome: etichetta('\\b(COGNOME|SURNAME|NACHNAME|NOM\\b|APELLIDOS?)'),
+  nome: etichetta('\\b(NOME|NOMI|GIVEN NAMES?|VORNAMEN?|PR[EÉ]NOMS?|NOMBRES?|FORENAMES?)\\b'),
+  luogoData: etichetta('LUOGO E DATA DI NASCITA|PLACE AND DATE OF BIRTH'),
+  luogo: etichetta('LUOGO DI NASCITA|PLACE OF BIRTH|GEBURTSORT|LIEU DE NAISSANCE|LUGAR DE NACIMIENTO|\\bNAT[OA] A\\b'),
+  data: etichetta('DATA DI NASCITA|DATE OF BIRTH|GEBURTSDATUM|GEBURTSTAG|DATE DE NAISSANCE|FECHA DE NACIMIENTO|\\bNAT[OA] IL\\b'),
+  sesso: etichetta('\\b(SESSO|SEX|GESCHLECHT|SEXE|SEXO)\\b'),
+  cittadinanza: etichetta('CITTADINANZA|NATIONALITY|STAATSANGEH[OÖ]RIGKEIT|NATIONALIT[EÉ]|NACIONALIDAD'),
+  scadenza: etichetta('SCADENZA|DATE OF EXPIRY|EXPIRY|G[UÜ]LTIG BIS|DATE D.EXPIRATION|VALIDA FINO AL|FECHA DE CADUCIDAD'),
+  rilascio: etichetta('EMISSIONE|DATA DI RILASCIO|DATE OF ISSUE|AUSSTELLUNGSDATUM|DATE DE D[EÉ]LIVRANCE|FECHA DE EXPEDICI[OÓ]N')
 };
-const ETICHETTA_QUALSIASI = new RegExp(Object.values(ETICHETTE).map(r => r.source).join('|') + '|CITTADINANZA|NATIONALITY|STATURA|HEIGHT|CODICE FISCALE|FISCAL CODE|INDIRIZZO|RESIDENZA|FIRMA|SIGNATURE|\\bNAME\\b');
+const ETICHETTA_QUALSIASI = new RegExp(Object.values(ETICHETTE).map(r => r.source).join('|') + '|STATURA|HEIGHT|CODICE\\s?FISCALE|FISCAL\\s?CODE|INDIRIZZO|RESIDENZA|FIRMA|SIGNATURE|\\bNAME\\b');
 const ETICHETTE_TUTTE = new RegExp(ETICHETTA_QUALSIASI.source, 'g');
 
 const pulisciNomeStampato = s => String(s || '').toUpperCase().replace(/[’‘`´]/g, "'").replace(/[^A-ZÀ-ÖØ-Ý' \-]/g, ' ').replace(/\s+/g, ' ').trim();
+// Un nome credibile: da 2 a 50 caratteri, al massimo 5 parole, nessuna parola oltre 20 lettere (l'OCR su una foto qualsiasi
+// produce lunghe file di lettere a caso).
+const nomeCredibile = s => !!s && s.length >= 2 && s.length <= 50 && s.split(' ').length <= 5 && s.split(/[ '\-]/).every(p => p.length <= 20);
 // Valore che segue un'etichetta: il resto della riga (tolte le etichette in più lingue, le barre e i numeri dei campi tra
 // parentesi come «(1)») oppure, se lì non c'è nulla, la riga sotto (se non è a sua volta un'etichetta).
 function valoreDopoEtichetta(U, re) {
@@ -502,6 +525,12 @@ export function leggiTestoStampato(righe, opzioni) {
       if (d && !d.breve && isoValida(+d.anno, d.m, d.g)) v.nascita = iso(+d.anno, d.m, d.g);
       else if (d && d.breve) { const x = dataNascitaDaAnnoBreve(d.anno, d.m, d.g, o.oggi); if (x) { v.nascita = x.iso; v.nascitaIncerta = x.incerta; } }
     }
+    const ct = valoreDopoEtichetta(U, ETICHETTE.cittadinanza);
+    if (ct) {
+      const codice = (ct.valore.match(/\b[A-Z]{3}\b/g) || []).find(c => ISO_STATI[c]);
+      if (codice) v.cittadinanza = ISO_STATI[codice];
+      else if (/\bITALIAN[AO]\b/.test(ct.valore)) v.cittadinanza = 'Italia';
+    }
     const sx = valoreDopoEtichetta(U, ETICHETTE.sesso);
     if (sx) { const m = /^\s*([MF])\b/.exec(sx.valore) || /\b([MF])\b/.exec(sx.valore); if (m) v.sesso = m[1]; }
     const sc = valoreDopoEtichetta(U, ETICHETTE.scadenza);
@@ -515,8 +544,11 @@ export function leggiTestoStampato(righe, opzioni) {
     if (cie) { v.numero = cie[1] + cie[2] + cie[3]; indizi.numeroCie = true; }
     else if (indizi.carta && indizi.italia && !indizi.passaporto) { const cc = RE_NUMERO_CARTA_CARTACEA.exec(tutto); if (cc) v.numero = cc[1] + cc[2]; }
   }
-  if (v.cognome && v.cognome.length < 2) delete v.cognome;
-  if (v.nome && v.nome.length < 2) delete v.nome;
+  if (v.cognome && !nomeCredibile(v.cognome)) delete v.cognome;
+  if (v.nome && !nomeCredibile(v.nome)) delete v.nome;
+  // credibile anche da solo (senza MRZ) se c'è un segno di documento (intestazione, campi della patente, numero della CIE)
+  // oppure almeno cognome, nome e data di nascita: altrimenti è probabilmente testo letto a caso (combinaLetture lo ignora)
+  v.credibile = !!(indizi.patente || indizi.carta || indizi.passaporto || indizi.italia || indizi.numeroCie || (v.cognome && v.nome && v.nascita));
   if (v.numero && codiceFiscaleValido(v.numero)) delete v.numero;
   const cf = trovaCodiceFiscale(tutto);
   if (cf) v.codiceFiscale = cf;
@@ -551,6 +583,17 @@ export function classificaDocumento(mrz, stampato) {
   return null;
 }
 
+// Distanza di modifica (Levenshtein) tra due chiavi di nome: «simili» se differiscono al più di 2 caratteri (o del 20%).
+function distanza(a, b) {
+  const d = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    let prec = d[0]; d[0] = i;
+    for (let j = 1; j <= b.length; j++) { const t = d[j]; d[j] = Math.min(d[j] + 1, d[j - 1] + 1, prec + (a[i - 1] === b[j - 1] ? 0 : 1)); prec = t; }
+  }
+  return d[b.length];
+}
+const simili = (a, b) => !!a && !!b && distanza(a, b) <= Math.max(2, Math.round(Math.max(a.length, b.length) * 0.2));
+
 // ---- Unione delle letture (fronte e retro) e proposte per i campi del modulo ----
 
 const CAMPI_ANAGRAFICI = ['cognome', 'nome', 'genere', 'nascita', 'cittadinanza', 'luogoNascita', 'comune', 'provincia'];
@@ -567,8 +610,9 @@ export function combinaLetture(letture, opzioni) {
   const st = { indizi: {} };
   for (const l of elenco) {
     const s = l.stampato; if (!s) continue;
+    if (!mrz && s.credibile === false) continue;       // testo senza segni di documento e senza MRZ: non si usa
     for (const [k, val] of Object.entries(s.indizi || {})) st.indizi[k] = st.indizi[k] || val;
-    for (const k of ['cognome', 'nome', 'nascita', 'nascitaIncerta', 'luogo', 'sesso', 'numero', 'scadenza', 'rilascio', 'codiceFiscale']) if (st[k] == null && s[k] != null) st[k] = s[k];
+    for (const k of ['cognome', 'nome', 'nascita', 'nascitaIncerta', 'luogo', 'sesso', 'cittadinanza', 'numero', 'scadenza', 'rilascio', 'codiceFiscale']) if (st[k] == null && s[k] != null) st[k] = s[k];
   }
   const campi = {}, avvisi = [];
   const avviso = (codice, campo) => { if (!avvisi.some(a => a.codice === codice && a.campo === campo)) avvisi.push(campo ? { codice, campo } : { codice }); };
@@ -578,6 +622,7 @@ export function combinaLetture(letture, opzioni) {
   for (const k of ['cognome', 'nome']) {
     const m = mrz && mrz.campi[k], s = st[k];
     if (m && s && chiaveNome(m.valore) === chiaveNome(s)) campi[k] = { valore: s, affidabilita: SICURO, fonte: 'mrz+stampato' };
+    else if (m && s && simili(chiaveNome(m.valore), chiaveNome(s))) campi[k] = { valore: s, affidabilita: DA_VERIFICARE, fonte: 'stampato' };
     else if (m) campi[k] = Object.assign({}, m);
     else if (s) campi[k] = { valore: s, affidabilita: DA_VERIFICARE, fonte: 'stampato' };
   }
@@ -605,8 +650,11 @@ export function combinaLetture(letture, opzioni) {
   if (ms) campi.genere = Object.assign({}, ms, st.sesso === ms.valore ? { affidabilita: SICURO, fonte: 'mrz+stampato' } : {});
   else if (st.sesso) campi.genere = { valore: st.sesso, affidabilita: DA_VERIFICARE, fonte: 'stampato' };
 
-  // cittadinanza (solo dalla MRZ: il testo stampato la scrive in tante lingue e forme diverse)
-  if (mrz && mrz.campi.cittadinanza) campi.cittadinanza = Object.assign({}, mrz.campi.cittadinanza);
+  // cittadinanza: dalla MRZ; senza MRZ solo se il testo stampato riporta il codice a 3 lettere (CIE) o «italiana»
+  if (mrz && mrz.campi.cittadinanza) {
+    campi.cittadinanza = Object.assign({}, mrz.campi.cittadinanza);
+    if (st.cittadinanza && st.cittadinanza === campi.cittadinanza.valore) campi.cittadinanza.affidabilita = SICURO;
+  } else if (st.cittadinanza) campi.cittadinanza = { valore: st.cittadinanza, affidabilita: DA_VERIFICARE, fonte: 'stampato' };
 
   // luogo di nascita: solo dal testo stampato (la MRZ non lo contiene)
   if (st.luogo && st.luogo.stato) {

@@ -24,3 +24,8 @@ PXL_*
 
 # librerie installate per le prove (vanno installate fuori dal repository, vedi CLAUDE.md)
 node_modules/
+
+# eccezione: documenti SINTETICI delle prove (dati di fantasia, generati da tests/browser/genera-documenti.cjs)
+!/tests/browser/documenti-sintetici/*.jpg
+!/tests/browser/documenti-sintetici/*.heic
+!/tests/browser/documenti-sintetici/*.pdf

@@ -6,6 +6,7 @@ import fs from 'fs';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import path from 'path';
+import vm from 'vm';
 import { passiOspiti, corpoFunzione, FUNZIONI_INVARIATE } from './scansione-dom.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -298,4 +299,99 @@ test('Alloggiati Web: i dati letti da una CIE e da un passaporto tedesco produco
   for (const l of g.lines) assert.equal(l.length, 168);
   assert.ok(g.lines[0].includes('PROVACCIA') && g.lines[0].includes('CA00000AA'));
   assert.ok(!g.lines[1].includes('C01X00T47'), 'nessun dato del documento per il familiare');
+});
+
+test('OCR imperfetto: «<» letti come C/K, etichette senza spazi («NATAIL»), cittadinanza dal codice stampato, testo a caso ignorato', () => {
+  // riempimento letto come C: il nome finisce dove comincia il riempimento
+  assert.equal(L.pulisciRigaMrz('P<D<<PROVACCIA<<TEODORICO<CCCCCCCCCCCCCCCCCCC'), 'P<D<<PROVACCIA<<TEODORICO<<<<<<<<<<<<<<<<<<<<');
+  const r = L.leggiMrz(L.trovaMrz(td3({ stato: 'D', cittadinanza: 'D', cognome: 'PROVACCIA', nome: 'TEODORICO', numero: 'C01X00T47', nascita: '101110', sesso: 'M', scadenza: '300101' })
+    .map((x, i) => i === 0 ? x.replace(/<{12}$/, '<<<<KNAUNE<<') : x)).righe, OGGI);
+  assert.equal(r.campi.nome.valore, 'TEODORICO', 'rumore dopo il riempimento ignorato');
+  const s = L.leggiTestoStampato(['REPUBBLICA ITALIANA', "CARTA D'IDENTITA", 'COGNOME PROVACCIA', 'NOME CLOTILDE', 'NATAIL 15/01/2004', "A REGGIO NELL'EMILIA (RE)", 'CITTADINANZA ITALIANA'], OPZ);
+  assert.equal(s.nascita, '2004-01-15');
+  assert.equal(s.cittadinanza, 'Italia');
+  assert.equal(L.leggiTestoStampato(CIE_FRONTE, OPZ).cittadinanza, 'Italia', 'CIE: codice ITA sotto «CITTADINANZA»');
+  // testo senza segni di documento e senza MRZ (foto qualsiasi): non si usa
+  const caso = L.leggiTestoStampato(['NOM ANRAEIENSEELIWRENNARATERESHANSN', 'XQ WZ'], OPZ);
+  assert.equal(caso.cognome, undefined, 'parola di 31 lettere: non è un nome');
+  const solo = L.leggiTestoStampato(['COGNOME', 'ROSSI'], OPZ);
+  assert.equal(solo.credibile, false);
+  assert.equal(L.combinaLetture([{ mrz: null, stampato: solo }], OPZ).esito, 'nessun_dato');
+  // righe di lettere a caso lunghe come una MRZ: non diventano una MRZ (servono cifre di controllo esatte e il riempimento)
+  assert.equal(L.trovaMrz(['ANRAEIENSEELIWRENNARATERESHANSNQWERTYUIOPAS<', 'ZXCVBNMLKJHGFDSAQWERTYUIOPLKJHGFDSAZXCVBNMQ<']), null);
+});
+
+test('nomi: MRZ e testo stampato quasi uguali (lettura imperfetta, Ü/UE) → vale il testo stampato, da verificare', () => {
+  const m = L.leggiMrz(L.trovaMrz(td3({ stato: 'D', cittadinanza: 'D', cognome: 'MUELLER', nome: 'TEODORID', numero: 'C01X00T47', nascita: '101110', sesso: 'M', scadenza: '300101' })).righe, OGGI);
+  const st = L.leggiTestoStampato(['REISEPASS / PASSPORT', 'NAME / SURNAME / NOM', 'MÜLLER', 'VORNAMEN / GIVEN NAMES / PRÉNOMS', 'TEODORICO'], OPZ);
+  assert.equal(st.nome, 'TEODORICO', 'etichetta accentata («PRÉNOMS») riconosciuta');
+  const r = L.combinaLetture([{ mrz: m, stampato: st }], OPZ);
+  assert.deepEqual([r.campi.cognome.valore, r.campi.nome.valore], ['MÜLLER', 'TEODORICO']);
+  assert.equal(r.campi.nome.affidabilita, L.DA_VERIFICARE);
+});
+
+// ---- Aggancio in checkin.js e regole di privacy del codice della scansione ----
+
+test('flag della scansione: «spenta» nel codice pubblicato; «prova» solo con #scansione=prova; «attiva» per tutti', () => {
+  assert.match(SRC_CHECKIN, /\nconst SCANSIONE_DOCUMENTI = 'spenta';\n/, 'il valore pubblicato deve restare «spenta» finché il titolare non decide');
+  const con = (valore, hash) => passiOspiti(ROOT, 2, { hash, sorgente: SRC_CHECKIN.replace("const SCANSIONE_DOCUMENTI = 'spenta';", "const SCANSIONE_DOCUMENTI = '" + valore + "';") });
+  const ha = passi => passi.every(p => p.html.includes('class="scan-doc"') && p.html.includes("sceltaCompilazione(") && p.html.includes('data-i18n="scan.scansiona"'));
+  // nel contesto di prova WebAssembly e Worker non ci sono (come in un browser molto vecchio): la scelta non compare
+  assert.ok(!con('attiva', '').some(p => p.html.includes('scan-doc')), 'senza WebAssembly e Worker si compila solo a mano');
+  const conMotore = (valore, hash) => {
+    const src = SRC_CHECKIN.replace("const SCANSIONE_DOCUMENTI = 'spenta';", "const SCANSIONE_DOCUMENTI = '" + valore + "';")
+      .replace('function scansioneDisponibile() {', 'globalThis.WebAssembly = {}; globalThis.Worker = function () {}; globalThis.HTMLScriptElement = function () {}; HTMLScriptElement.prototype.noModule = false;\nfunction scansioneDisponibile() {');
+    return passiOspiti(ROOT, 2, { hash, sorgente: src });
+  };
+  assert.ok(ha(conMotore('attiva', '')));
+  assert.ok(!conMotore('prova', '').some(p => p.html.includes('scan-doc')), '«prova» senza il frammento: nulla');
+  assert.ok(ha(conMotore('prova', '#scansione=prova')));
+  assert.ok(ha(conMotore('prova', '#k=BK1&lang=it&scansione=prova')), 'anche insieme al link dell\'area clienti');
+  assert.ok(!conMotore('spenta', '#scansione=prova').some(p => p.html.includes('scan-doc')), '«spenta» vince sempre');
+  // con la scansione accesa, togliendo il blocco il markup è quello di prima
+  const passi = conMotore('attiva', '');
+  passi.forEach((p, i) => {
+    const senza = p.html.replace(/<div class="scan-doc" id="scan-doc-\d+">[\s\S]*?<div class="scan-pannello" id="scan-pannello-\d+" hidden><\/div>\n      <\/div>\n      /, '');
+    assert.equal(sha(senza), ATTUALI.casi['2-it'][i].sha256, 'passo ' + p.id + ': il resto del markup non cambia');
+  });
+});
+
+test('codice della scansione: nessuna rete, nessuna archiviazione, nessuna console; Tesseract solo con i file del sito', () => {
+  const moduli = ['scansione/scansione-documento.js', 'scansione/lettura-documento.js', 'scansione/decodifica-heic.js'].map(f => [f, read(f)]);
+  // via i commenti di riga; i brevi commenti /* … */ restano (non c'è nulla di vietato) e «image/*» nei campi file non è un commento
+  const senzaCommenti = s => s.replace(/^\s*\/\/.*$/gm, '').replace(/\s\/\/\s.*$/gm, '');
+  for (const [f, src] of moduli) {
+    const s = senzaCommenti(src);
+    for (const [nome, re] of [['fetch', /\bfetch\s*\(/], ['XMLHttpRequest', /XMLHttpRequest/], ['sendBeacon', /sendBeacon/], ['WebSocket', /WebSocket/], ['EventSource', /EventSource/],
+      ['localStorage', /localStorage/], ['sessionStorage', /sessionStorage/], ['indexedDB', /indexedDB/], ['caches', /\bcaches\./], ['serviceWorker', /serviceWorker/],
+      ['cookie', /document\.cookie/], ['console', /\bconsole\./], ['eval', /\beval\s*\(|new Function\s*\(/], ['URL esterni', /https?:\/\//]]) assert.ok(!re.test(s), f + ': ' + nome);
+    const creati = (s.match(/createObjectURL\(/g) || []).length, revocati = (s.match(/revokeObjectURL\(/g) || []).length;
+    assert.ok(creati <= revocati, f + ': ogni indirizzo blob va revocato');
+  }
+  const ui = senzaCommenti(read('scansione/scansione-documento.js'));
+  for (const opzione of [/workerPath: new URL\('tesseract\/worker\.min\.js', VENDOR\)/, /corePath: new URL\(supportaSimd\(\) \? 'tesseract-core\/tesseract-core-simd-lstm\.wasm\.js' : 'tesseract-core\/tesseract-core-lstm\.wasm\.js', VENDOR\)/,
+    /langPath: new URL\('tessdata', VENDOR\)/, /cacheMethod: 'none'/, /workerBlobURL: false/]) assert.match(ui, opzione);
+  assert.match(ui, /const VENDOR = new URL\('\.\/vendor\/', import\.meta\.url\);/, 'librerie dalla cartella del sito');
+  assert.match(ui, /input\.value = '';/, 'il campo file degli altri ospiti si svuota subito');
+  assert.match(ui, /w\.terminate\(\)/, 'i worker si chiudono');
+  // il percorso del responsabile non viene toccato: nessuna scrittura nei campi file del documento né chiamate alle sue funzioni
+  assert.ok(!/ospite1_documento_|handleFileUpload|raccogliDatiPrenotazione|comprimiImmagine/.test(ui), 'la scansione non tocca il caricamento del documento del responsabile');
+  assert.ok(!/\.files\s*=/.test(ui), 'nessun file assegnato a un campo');
+  // checkin.js carica la scansione solo su richiesta dell'ospite, dalla stessa cartella
+  assert.match(SRC_CHECKIN, /import\(`\.\/scansione\/scansione-documento\.js\?v=\$\{SCANSIONE_VERSIONE\}`\)/);
+  assert.ok(!/<script[^>]+scansione/.test(read('index.html')), 'index.html non carica la scansione');
+});
+
+test('testi della scansione presenti in italiano, inglese e tedesco', () => {
+  const ctx = { window: {}, document: { querySelectorAll: () => [], documentElement: {}, addEventListener() {} }, console };
+  vm.createContext(ctx);
+  vm.runInContext(read('i18n.js') + '\n;this.__UI = I18N_UI;', ctx);
+  const chiavi = new Set();
+  for (const f of ['scansione/scansione-documento.js', 'checkin.js']) for (const m of read(f).matchAll(/['"`](scan\.[A-Za-z0-9_.]+)['"`]/g)) chiavi.add(m[1]);
+  for (const m of read('scansione/lettura-documento.js').matchAll(/avviso\('([a-z_]+)'/g)) chiavi.add('scan.avviso.' + m[1]);
+  for (const c of ['numero_corretto', 'nome_troncato', 'cittadinanza_non_in_elenco', 'emittente_non_in_elenco', 'stesso_ospite', 'timeout_parziale']) chiavi.add('scan.avviso.' + c);
+  for (const c of ['pdf', 'formato', 'heic', 'timeout', 'offline', 'errore']) chiavi.add('scan.lato.' + c);
+  chiavi.delete('scan.lato'); chiavi.delete('scan.avviso.');
+  for (const l of ['it', 'en', 'de']) for (const k of chiavi) if (!k.endsWith('.')) assert.ok(typeof ctx.__UI[l][k] === 'string' && ctx.__UI[l][k].length > 1, l + ': ' + k);
+  assert.ok(chiavi.size > 50);
 });
