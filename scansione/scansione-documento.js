@@ -10,8 +10,8 @@
 //    loro campi e partono per il gestore come prima (raccogliDatiPrenotazioneConCompressione in checkin.js, invariata).
 //  - si compilano solo i campi vuoti dell'ospite giusto; ogni ospite ha il suo stato; «Annulla la compilazione» ripristina
 //    esattamente i valori di prima. La conferma finale resta dell'ospite. Se qualcosa non va, si continua a mano.
-import * as L from './lettura-documento.js?v=20261106g';
-import * as I from './immagine.js?v=20261106g';
+import * as L from './lettura-documento.js?v=20261106j';
+import * as I from './immagine.js?v=20261106j';
 
 const VENDOR = new URL('./vendor/', import.meta.url);
 const TEMPI = Object.assign({ preparazione: 60000, lettura: 45000 }, (typeof window !== 'undefined' && window.__scansioneTempi) || {});
@@ -395,7 +395,7 @@ async function leggiFile(l, file, quota, opzioni) {
       // patente: numero (campo 5) e ufficio di rilascio (4c) possono stare in un gruppo di righe più in basso, staccato dal resto da
       // righe che la ricerca scarta (date con le barre): si legge anche la zona allargata, solo per completare i campi che mancano
       // (06/11/2026, patente del titolare). La carta d'identità e gli altri documenti restano come prima.
-      if (stampato && stampato.indizi && stampato.indizi.patente && !stampato.numero && an.testoEsteso && resto() > MINIMO_PASSAGGIO) {
+      if (stampato && stampato.indizi && stampato.indizi.patente && !stampato.numero && !soloRetroPatente(stampato) && an.testoEsteso && resto() > MINIMO_PASSAGGIO) {
         const esteso = await leggiZonaTesto(l, pagina, an.testoEsteso, scala, resto);
         if (l.annullato) throw errore('annullato');
         if (esteso) completaStampato(stampato, esteso);
@@ -404,8 +404,9 @@ async function leggiFile(l, file, quota, opzioni) {
     }
     quota(0.85);
     // 3) nessuna riga riconoscibile (foto piccola, sfocata o molto storta): lettura dell'immagine intera, come prima. Non se
-    //    nella foto non c'è quasi nessuna lettera in riga (non è un documento): si risponde subito invece che dopo 10-15 s
-    if (!mrz && punteggioStampato(stampato) === 0 && an.lettere >= 12 && resto() > 6000) {
+    //    nella foto non c'è quasi nessuna lettera in riga (non è un documento): si risponde subito invece che dopo 10-15 s. Non sul
+    //    retro della patente riconosciuto dalla legenda: non ha dati per il modulo (06/11/2026: 8 s persi sul retro in un PDF)
+    if (!(opzioni && opzioni.senzaIntera) && !mrz && punteggioStampato(stampato) === 0 && !soloRetroPatente(stampato) && an.lettere >= 12 && resto() > 6000) {
       const intera = await leggiIntera(l, pagina, resto, q => quota(0.85 + 0.1 * q));
       if (intera.mrz) mrz = intera.mrz;
       if (punteggioStampato(intera.stampato) > punteggioStampato(stampato)) stampato = intera.stampato;
@@ -421,6 +422,11 @@ async function leggiFile(l, file, quota, opzioni) {
 }
 
 const punteggioStampato = st => st ? ['cognome', 'nome', 'nascita', 'numero', 'luogo'].filter(k => st[k]).length : 0;
+// solo il retro della patente (la legenda dei campi, senza i campi del fronte): niente da cercare (lettura-documento.js)
+const soloRetroPatente = st => !!(st && st.indizi && st.indizi.retroPatente && !st.indizi.campiPatente);
+// fronte della patente letto per intero: in un PDF il resto (il retro) non serve
+const fronteDiPatente = x => !!(x && !x.mrz && x.stampato && x.stampato.indizi && x.stampato.indizi.patente && x.stampato.indizi.campiPatente &&
+  ['cognome', 'nome', 'nascita', 'luogo', 'numero'].every(k => x.stampato[k]));
 // I campi che mancano in una lettura del testo stampato presi da un'altra (gli indizi si sommano)
 function completaStampato(st, altro) {
   for (const [k, val] of Object.entries(altro)) {
@@ -808,11 +814,16 @@ async function decodifica(file) {
 
 // ---- PDF ----
 // Un PDF (06/11/2026, richiesta del titolare): le prime PAGINE_PDF pagine si disegnano in memoria con PDF.js (vendor/pdfjs, nel sito) e si
-// leggono come le foto; le letture delle pagine si uniscono (fronte e retro su due pagine, o sulla stessa: la scansione di un A4). Il PDF
-// resta in memoria: nessun indirizzo blob:, nessuna archiviazione; il documento e il worker di PDF.js si chiudono subito dopo.
+// leggono come le foto; le letture si uniscono (fronte e retro su due pagine, o sulla stessa: la scansione di un A4). Il PDF resta in
+// memoria: nessun indirizzo blob:, nessuna archiviazione; il documento e il worker di PDF.js si chiudono dopo l'ultima lettura.
 const PAGINE_PDF = 2;
-const LATO_PDF = 3000;           // lato lungo della pagina disegnata e dell'immagine di lavoro (px): su un A4 la carta resta larga ~1200 px
-const PIXEL_PDF = 12e6;          // al più 12 milioni di pixel per pagina (memoria dei telefoni)
+const LATO_PDF = 3000;           // lato lungo, al più, di una zona o di una pagina disegnata (px)
+const PIXEL_PDF = 12e6;          // al più 12 milioni di pixel per zona o pagina (memoria dei telefoni)
+// La scansione di un foglio (06/11/2026, il PDF della patente del titolare): la carta è piccola sul foglio e, con la pagina intera,
+// le scritte arrivano all'OCR troppo piccole (nome e numero della patente persi; a 150 dpi niente). Sulla pagina disegnata in
+// piccolo si cercano i documenti (I.zoneDocumento) e si disegna solo la loro zona, grande come una foto (LATO_MAX), al più a 600 dpi.
+const LATO_MAPPA = 1000;
+const SCALA_ZONA_MAX = 600 / 72;
 let pdfjs = null;
 async function caricaPdfjs() {
   if (pdfjs) return pdfjs;
@@ -823,57 +834,198 @@ async function caricaPdfjs() {
   return m;
 }
 
-async function paginePdf(l, file) {
+// Immagini della pagina (una foto o una scansione messa in un PDF): per ognuna i pixel per punto (la sua risoluzione) e il riquadro
+// sulla pagina disegnata a scala 1. Dalla lista delle operazioni di disegno di PDF.js (save, restore, transform, moduli).
+async function immaginiPagina(lib, pagina, base) {
+  const OPS = lib.OPS;
+  if (!OPS) return [];
+  const lista = await pagina.getOperatorList();
+  const per = (m, n) => [m[0] * n[0] + m[1] * n[2], m[0] * n[1] + m[1] * n[3], m[2] * n[0] + m[3] * n[2], m[2] * n[1] + m[3] * n[3],
+    m[4] * n[0] + m[5] * n[2] + n[4], m[4] * n[1] + m[5] * n[3] + n[5]];
+  const vt = base.transform, punto = (m, x, y) => { const u = m[0] * x + m[2] * y + m[4], v = m[1] * x + m[3] * y + m[5]; return [vt[0] * u + vt[2] * v + vt[4], vt[1] * u + vt[3] * v + vt[5]]; };
+  let ctm = [1, 0, 0, 1, 0, 0];
+  const pila = [], immagini = [];
+  for (let i = 0; i < lista.fnArray.length; i++) {
+    const fn = lista.fnArray[i], a = lista.argsArray[i];
+    if (fn === OPS.save) pila.push(ctm);
+    else if (fn === OPS.restore) ctm = pila.pop() || ctm;
+    else if (fn === OPS.transform && a && a.length === 6) ctm = per(a, ctm);
+    else if (fn === OPS.paintFormXObjectBegin) { pila.push(ctm); if (a && a[0] && a[0].length === 6) ctm = per(a[0], ctm); }
+    else if (fn === OPS.paintFormXObjectEnd) ctm = pila.pop() || ctm;
+    else if (fn === OPS.paintImageXObject || fn === OPS.paintInlineImageXObject) {
+      const w = fn === OPS.paintImageXObject ? a[1] : a[0] && a[0].width, h = fn === OPS.paintImageXObject ? a[2] : a[0] && a[0].height;
+      const lx = Math.hypot(ctm[0], ctm[1]), ly = Math.hypot(ctm[2], ctm[3]);
+      if (!(w > 0 && h > 0 && lx > 0 && ly > 0)) continue;
+      const pp = [punto(ctm, 0, 0), punto(ctm, 1, 0), punto(ctm, 0, 1), punto(ctm, 1, 1)], xs = pp.map(q => q[0]), ys = pp.map(q => q[1]);
+      immagini.push({ scala: Math.max(w / lx, h / ly), x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) });
+    }
+  }
+  return immagini;
+}
+// Zone con due o più immagini grandi dentro (ognuna almeno il 15% della zona, quasi tutta dentro): un riquadro per immagine, con un
+// piccolo margine; al più due per pagina, le più grandi, dall'alto in basso
+function dividiPerImmagini(riquadri, immagini, base) {
+  const fuori = [];
+  for (const r of riquadri) {
+    const ar = (r.x1 - r.x0) * (r.y1 - r.y0);
+    const dentro = immagini.filter(im => {
+      const ai = (im.x1 - im.x0) * (im.y1 - im.y0);
+      const ix = Math.max(0, Math.min(r.x1, im.x1) - Math.max(r.x0, im.x0)), iy = Math.max(0, Math.min(r.y1, im.y1) - Math.max(r.y0, im.y0));
+      return ai >= 0.15 * ar && ix * iy >= 0.8 * ai;
+    });
+    if (dentro.length < 2) { fuori.push(r); continue; }
+    const m = 0.01 * Math.max(base.width, base.height);
+    for (const im of dentro) fuori.push({ x0: Math.max(0, im.x0 - m), y0: Math.max(0, im.y0 - m), x1: Math.min(base.width, im.x1 + m), y1: Math.min(base.height, im.y1 + m) });
+  }
+  return fuori.sort((p, q) => (q.x1 - q.x0) * (q.y1 - q.y0) - (p.x1 - p.x0) * (p.y1 - p.y0)).slice(0, 2)
+    .sort((p, q) => (Math.abs(p.y0 - q.y0) > Math.min(p.y1 - p.y0, q.y1 - q.y0) / 2 ? p.y0 - q.y0 : p.x0 - q.x0));
+}
+// L'immagine che copre almeno metà del riquadro r (x0, y0, x1, y1, a scala 1), la più grande: la sua risoluzione; se no null
+function scalaNativa(immagini, r) {
+  const area = (r.x1 - r.x0) * (r.y1 - r.y0);
+  let migliore = null;
+  for (const im of immagini) {
+    const ix = Math.max(0, Math.min(r.x1, im.x1) - Math.max(r.x0, im.x0)), iy = Math.max(0, Math.min(r.y1, im.y1) - Math.max(r.y0, im.y0));
+    if (ix * iy >= 0.5 * area && (!migliore || ix * iy > migliore.copre)) migliore = { copre: ix * iy, scala: im.scala };
+  }
+  return migliore ? migliore.scala : null;
+}
+
+// Un PDF: per ogni pagina (al più PAGINE_PDF) le zone dei documenti (o la pagina intera), ognuna disegnata e letta come una foto.
+// Poi, se nell'insieme delle letture manca un dato che quel documento ha (il numero della patente, il luogo di nascita della CIE),
+// le zone che potrebbero darlo si ridisegnano a un'altra misura e si leggono di nuovo: sulle scansioni la stessa patente si leggeva
+// per intero a una misura e senza il numero a un'altra (06/11/2026). Il documento resta aperto fino all'ultima lettura, poi si
+// chiude con il worker di PDF.js.
+async function leggiPdf(l, file, quota) {
   const lib = await caricaPdfjs();
   if (l.annullato) throw errore('annullato');
   // il PDF già in memoria (nessuno scaricamento); i decoder delle immagini (JPEG 2000, JBIG2) dal sito; caratteri non inclusi nel
   // PDF sostituiti con quelli del sistema (nessun file di caratteri da altri domini)
   const compito = lib.getDocument({ data: new Uint8Array(await file.arrayBuffer()), wasmUrl: new URL('pdfjs/wasm/', VENDOR).href, useSystemFonts: true, enableXfa: false });
-  const tele = [];
-  try {
-    const doc = await conTempo(compito.promise, TEMPI.lettura, 'timeout');
-    for (let i = 1; i <= Math.min(doc.numPages, PAGINE_PDF) && !l.annullato; i++) {
-      const pagina = await doc.getPage(i);
-      const base = pagina.getViewport({ scale: 1 });
-      let scala = LATO_PDF / Math.max(base.width, base.height);
-      if (base.width * base.height * scala * scala > PIXEL_PDF) scala = Math.sqrt(PIXEL_PDF / (base.width * base.height));
-      const vista = pagina.getViewport({ scale: scala });
-      const tela = nuovaTela(vista.width, vista.height);
-      tele.push(tela);
-      await conTempo(pagina.render({ canvas: tela, viewport: vista, background: '#ffffff' }).promise, TEMPI.lettura, 'timeout');
-      pagina.cleanup();
+  const pdf = async promessa => { try { return await promessa; } catch (e) { throw e && e.codice ? e : errore('pdf'); } };   // danneggiato o protetto
+  const pezzi = [], pagineAperte = [], inizio = Date.now();
+  let fatto = 0;
+  const avanza = q => { fatto = Math.max(fatto, q); quota(fatto); };
+  const leggi = async (pz, k, da, a) => {
+    const m = pz.misure[k];
+    const tela = await pdf(disegnaRiquadro(pz.pagina, pz.r, m.scala));
+    try {
+      const x = await leggiFile(l, tela, q => avanza(da + (a - da) * q), m.opzioni);
+      pz.lettura = pz.lettura ? unisciLetture([pz.lettura, x]) : x;
+    } finally {
+      azzera(tela);
     }
-  } catch (e) {
-    for (const t of tele) azzera(t);
-    throw e && e.codice ? e : errore('pdf');          // danneggiato o protetto da password
+  };
+  try {
+    const doc = await pdf(conTempo(compito.promise, TEMPI.lettura, 'timeout'));
+    const pagine = Math.min(doc.numPages, PAGINE_PDF);
+    tutte: for (let i = 1; i <= pagine && !l.annullato; i++) {
+      const pagina = await pdf(doc.getPage(i));
+      pagineAperte.push(pagina);
+      const { riquadri, misure } = await pdf(riquadriPagina(lib, pagina));
+      for (let j = 0; j < riquadri.length && !l.annullato; j++) {
+        if (Date.now() - inizio > TEMPI.lettura) break tutte;          // un PDF non dura più di una foto lenta
+        const pz = { pagina, r: riquadri[j], misure: misure[j], lettura: null };
+        pezzi.push(pz);
+        await leggi(pz, 0, 0.8 * (i - 1 + j / riquadri.length) / pagine, 0.8 * (i - 1 + (j + 1) / riquadri.length) / pagine);
+        // patente: letto il fronte per intero, il retro (nel resto del PDF) non ha dati per il modulo e non si legge
+        if (fronteDiPatente(pz.lettura)) break tutte;
+      }
+    }
+    // seconda lettura, a un'altra misura, delle zone che potrebbero dare i dati che mancano
+    const tot = pezzi.length ? unisciLetture(pezzi.map(pz => pz.lettura).filter(Boolean)) : null;
+    const di = pezzi.filter(pz => pz.misure.length > 1 && daRileggere(pz.lettura, tot));
+    for (const [n, pz] of di.entries()) {
+      if (l.annullato || Date.now() - inizio > TEMPI.lettura / 2) break;
+      await leggi(pz, 1, 0.8 + 0.2 * n / di.length, 0.8 + 0.2 * (n + 1) / di.length);
+    }
   } finally {
+    for (const p of pagineAperte) { try { p.cleanup(); } catch (e) { /* già chiusa */ } }
     try { await compito.destroy(); } catch (e) { /* già chiuso */ }      // chiude il documento e il worker di PDF.js
   }
-  if (l.annullato) { for (const t of tele) azzera(t); throw errore('annullato'); }
-  if (!tele.length) throw errore('pdf');
-  return tele;
-}
-
-async function leggiPdf(l, file, quota) {
-  const tele = await paginePdf(l, file);
-  const letture = [];
-  try {
-    for (let i = 0; i < tele.length; i++) {
-      letture.push(await leggiFile(l, tele[i], q => quota((i + q) / tele.length), { latoMax: LATO_PDF, pdf: true }));
-      azzera(tele[i]);
-    }
-  } finally {
-    for (const t of tele) azzera(t);
-  }
+  if (l.annullato) throw errore('annullato');
+  const letture = pezzi.map(pz => pz.lettura).filter(Boolean);
+  if (!letture.length) throw errore('pdf');
   return unisciLetture(letture);
 }
 
-// Letture delle pagine di un PDF: la MRZ migliore, il testo stampato unito (ogni campo dalla prima pagina che lo ha)
+// Che cosa manca, nell'insieme delle letture del PDF (tot), tra i dati che il documento ha: true se la lettura x di una zona va
+// rifatta a un'altra misura perché potrebbe darlo. I documenti stranieri con la MRZ hanno già tutto (il luogo di nascita, per loro,
+// non si legge); il retro della patente non ha dati.
+function daRileggere(x, tot) {
+  if (!x || !tot || soloRetroPatente(x.stampato)) return false;
+  const st = tot.stampato || {}, ind = st.indizi || {}, mrz = tot.mrz && tot.mrz.verificate >= 2 ? tot.mrz : null;
+  if (mrz) return !(x.mrz && x.mrz.verificate >= 2) && !!(mrz.codici && mrz.codici.emittente === 'ITA') && !st.luogo;
+  if (x.mrz) return true;                                    // una MRZ letta a metà: a un'altra misura può tornare
+  if (ind.patente) return ['cognome', 'nome', 'nascita', 'numero', 'luogo'].some(k => !st[k]);
+  if (ind.numeroCie || (ind.carta && ind.italia)) return ['cognome', 'nome', 'nascita', 'luogo', 'numero'].some(k => !st[k]);
+  return punteggioStampato(st) < 3;
+}
+
+// Le zone della pagina da leggere e, per ognuna, le misure a cui disegnarla (la prima, poi quella per una seconda lettura)
+async function riquadriPagina(lib, pagina) {
+  const base = pagina.getViewport({ scale: 1 });
+  // la pagina in piccolo: dove stanno i documenti
+  const sm = LATO_MAPPA / Math.max(base.width, base.height), vm = pagina.getViewport({ scale: sm });
+  const mappa = nuovaTela(vm.width, vm.height);
+  let zone = null;
+  try {
+    await conTempo(pagina.render({ canvas: mappa, viewport: vm, background: '#ffffff' }).promise, TEMPI.lettura, 'timeout');
+    const dati = mappa.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, mappa.width, mappa.height);
+    zone = I.zoneDocumento(dati.data, mappa.width, mappa.height);
+    dati.data.fill(0);
+  } finally {
+    azzera(mappa);
+  }
+  const immagini = await immaginiPagina(lib, pagina, base).catch(() => []);
+  let riquadri = zone ? zone.map(z => ({ x0: z.x / sm, y0: z.y / sm, x1: (z.x + z.w) / sm, y1: (z.y + z.h) / sm }))
+    : [{ x0: 0, y0: 0, x1: base.width, y1: base.height }];
+  // una zona con dentro due immagini grandi (due foto, fronte e retro messi vicini sul foglio): una zona per immagine
+  if (zone) riquadri = dividiPerImmagini(riquadri, immagini, base);
+  const misure = riquadri.map(r => {
+    const rw = r.x1 - r.x0, rh = r.y1 - r.y0, nativa = scalaNativa(immagini, r);
+    const limita = s => (rw * rh * s * s > PIXEL_PDF ? Math.sqrt(PIXEL_PDF / (rw * rh)) : s);
+    // una zona sola sul foglio, o la pagina intera che non è una foto, possono avere fronte e retro insieme: lì il testo stampato
+    // si legge anche con la MRZ. Una pagina che è una foto si legge come le foto.
+    const insieme = riquadri.length === 1 && !!(zone || !nativa);
+    // grande come una foto (LATO_MAX), al più a 600 dpi; la pagina intera che non è un'immagine a LATO_PDF
+    const grande = { scala: limita(zone || nativa ? Math.min(LATO_MAX / Math.max(rw, rh), SCALA_ZONA_MAX) : LATO_PDF / Math.max(rw, rh)), opzioni: { latoMax: LATO_PDF, pdf: insieme } };
+    if (!nativa) return [grande];
+    // un'immagine (una foto, una scansione): prima alla sua risoluzione, letta come una foto (preparaPagina la porta alla misura
+    // giusta); se la lettura resta incompleta, grande come una foto
+    const prima = { scala: limita(Math.min(nativa, LATO_PDF / Math.max(rw, rh))), opzioni: { pdf: insieme } };
+    if (Math.abs(grande.scala / prima.scala - 1) <= 0.15) return [prima];
+    // la zona di un documento su un foglio: nella prima lettura niente lettura dell'immagine intera (lenta, sul retro della patente
+    // 4-5 s), basta la seconda misura. Sulla pagina intera resta: per una carta ritagliata e ruotata è quella che la legge
+    if (zone) prima.opzioni.senzaIntera = true;
+    return [prima, grande];
+  });
+  return { riquadri, misure };
+}
+
+async function disegnaRiquadro(pagina, r, scala) {
+  const vista = pagina.getViewport({ scale: scala, offsetX: -r.x0 * scala, offsetY: -r.y0 * scala });
+  const tela = nuovaTela((r.x1 - r.x0) * scala, (r.y1 - r.y0) * scala);
+  try {
+    await conTempo(pagina.render({ canvas: tela, viewport: vista, background: '#ffffff' }).promise, TEMPI.lettura, 'timeout');
+  } catch (e) {
+    azzera(tela);
+    throw e;
+  }
+  return tela;
+}
+
+// Letture di un PDF (zone, pagine, misure): la MRZ migliore, il testo stampato unito (ogni campo dalla prima lettura che lo ha). Le
+// letture non si toccano: il testo stampato unito è una copia.
 function unisciLetture(letture) {
   const mrz = letture.map(x => x.mrz).filter(Boolean).sort((a, b) => b.verificate - a.verificate)[0] || null;
   let stampato = null;
-  for (const x of letture) if (x.stampato) { if (!stampato) stampato = x.stampato; else completaStampato(stampato, x.stampato); }
-  const diagnosi = letture[0] && letture[0].diagnosi ? Object.assign({}, letture[0].diagnosi, { pdf: letture.map(x => x.diagnosi) }) : null;
+  for (const x of letture) if (x.stampato) {
+    if (!stampato) stampato = Object.assign({}, x.stampato, { indizi: Object.assign({}, x.stampato.indizi) });
+    else completaStampato(stampato, x.stampato);
+  }
+  const parti = [].concat(...letture.map(x => (x.diagnosi && x.diagnosi.pdf) || [x.diagnosi]));
+  const diagnosi = letture[0] && letture[0].diagnosi ? Object.assign({}, letture[0].diagnosi, { pdf: parti }) : null;
   return { mrz, stampato, sfocata: letture.every(x => x.sfocata), vuota: letture.every(x => x.vuota), diagnosi };
 }
 

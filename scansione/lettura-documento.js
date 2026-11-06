@@ -708,6 +708,10 @@ const RE_CARTA = /CARTA D\W?\s?IDENTIT|CARTA DI IDENTIT|IDENTITY CARD|PERSONALAU
 const RE_PASSAPORTO = /PASSAPORTO|PASSPORT|REISEPASS|PASSEPORT|PASAPORTE|PASPOORT/;
 // «REPUBBLICA ITALIANA» anche letta con una B o una I in meno, o senza lo spazio (06/11/2026: «REPUBLICA ITALIANA» sulla patente)
 const RE_ITALIA = /REPUB+LI?CA\s*ITALIAN[AO]|ITALIAN REPUBLIC|MINISTERO DELL\W?INTERNO|MINISTERO DELLE INFRASTRUTTURE|COMUNE DI /;
+// Retro della patente UE (06/11/2026, il PDF della patente del titolare): la legenda dei campi («4c. Rilasciata da», «10. Valida dal»,
+// «11. Valida fino al», «12. Codici», «5. Numero della patente»), che il fronte non ha; tre su cinque, anche letti male. Il retro non
+// ha nessun dato per il modulo: dalla legenda («2. Nome 3. Data e luogo di nascita») non si prende nulla.
+const LEGENDA_PATENTE = [/VALID[A-Z]?\s*DAL\b/, /VALID[A-Z]?\s*FINO/, /RI[LT1I]ASC[I1]AT[AO]\s*DA\b/, /\b[CG]OD[I1]C[I1]\b/, /NUMERO\s*DELLA\s*PATENTE/];
 
 // Gli spazi delle etichette diventano facoltativi (l'OCR a volte li perde: «NATAIL»).
 const etichetta = src => new RegExp(src.replace(/ /g, '\\s?'));
@@ -901,6 +905,7 @@ export function leggiTestoStampato(righe, opzioni) {
   const nomePulito = t => /^[A-ZÀ-ÖØ-Ý][A-ZÀ-ÖØ-Ý' \-]*$/.test(t.trim()) && t.trim().split(/[ '\-]+/).every(p => p.length >= 2);
   const tutto = U.join('\n');
   const indizi = { patente: RE_PATENTE.test(tutto), carta: RE_CARTA.test(tutto), passaporto: RE_PASSAPORTO.test(tutto), italia: RE_ITALIA.test(tutto) };
+  indizi.retroPatente = LEGENDA_PATENTE.filter(re => re.test(tutto)).length >= 3;
   const v = { indizi };
 
   // patente UE: campi numerati 1. 2. 3. 4a. 4b. 4c. 5. Si cercano anche nelle righe ricomposte dai riquadri dell'OCR, perché il
@@ -1013,6 +1018,8 @@ export function leggiTestoStampato(righe, opzioni) {
   if (indizi.patente && !v.numero) { const m = U.map(r => /\b([A-Z]{2}\d{7}[A-Z])\b/.exec(r)).find(Boolean); if (m && !codiceFiscaleValido(m[1])) v.numero = m[1]; }
   if (v.cognome && !nomeCredibile(v.cognome)) delete v.cognome;
   if (v.nome && !nomeCredibile(v.nome)) delete v.nome;
+  // solo il retro della patente (la legenda, senza i campi numerati del fronte): nessun dato
+  if (indizi.retroPatente && !indizi.campiPatente) for (const k of ['cognome', 'nome', 'nascita', 'nascitaIncerta', 'luogo', 'numero', 'sesso', 'cittadinanza']) delete v[k];
   // credibile anche da solo (senza MRZ) se c'è un segno di documento (intestazione, campi della patente, numero della CIE)
   // oppure almeno cognome, nome e data di nascita: altrimenti è probabilmente testo letto a caso (combinaLetture lo ignora)
   v.credibile = !!(indizi.patente || indizi.carta || indizi.passaporto || indizi.italia || indizi.numeroCie || (v.cognome && v.nome && v.nascita));

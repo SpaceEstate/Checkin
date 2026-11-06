@@ -9,7 +9,7 @@ const fs = require('fs');
 const path = require('path');
 const { chromium } = require('playwright');
 const { avvia, API } = require('./server-prova.cjs');
-const { pdfUnaFotoPerPagina, pdfA4FronteRetro } = require('./pdf-di-prova.cjs');
+const { pdfDaJpeg, pdfUnaFotoPerPagina, pdfA4FronteRetro, dimensioniJpeg } = require('./pdf-di-prova.cjs');
 
 const DOC = path.join(__dirname, 'documenti-sintetici');
 const RISULTATI = path.join(__dirname, 'risultati');
@@ -484,6 +484,66 @@ test('PDF: la scansione A4 del responsabile con fronte e retro si legge e resta 
     await caricaPerOspite(x.page, 2, null, 2, Buffer.from(webp), 'foto.jpg');
     await attendiFine(x.page, 2, [2]);
     assert.match(await x.page.locator('#scan-pannello-2 [data-stato-lato="2"]').innerText(), /non consentito/);
+    assert.deepEqual(x.errori, []);
+  } finally { await x.chiudi(); }
+});
+
+// 06/11/2026: il PDF della patente del titolare non si leggeva (sulla scansione di un foglio A4 la carta è piccola). Le scansioni si
+// costruiscono nella prova dalle foto sintetiche: la carta ritagliata e messa su un foglio bianco a 200 dpi, in un'immagine sola come
+// negli scanner; il retro della patente disegnato (categorie e legenda dei campi, che non hanno dati per il modulo)
+test('PDF di scansioni: foglio A4 dello scanner con la CIE (fronte e retro, carte chiare) e con la patente (il retro sopra); patente ritagliata e ruotata', async () => {
+  const x = await apri({ scansione: 'attiva' });
+  try {
+    await iniziaFlusso(x.page);
+    await scegliScansione(x.page, 1);
+    const b64 = f => fs.readFileSync(file(f)).toString('base64');
+    const imm = await x.page.evaluate(async ([cf, cr, pf]) => {
+      const carica = async s => createImageBitmap(await (await fetch('data:image/jpeg;base64,' + s)).blob());
+      const [CF, CR, PF] = [await carica(cf), await carica(cr), await carica(pf)];
+      const dpi = 200, mm = v => Math.round(v / 25.4 * dpi), carta = { x: 160, y: 175, w: 1280, h: 805 };      // la carta nelle foto sintetiche
+      const ritaglia = (bmp, w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(bmp, carta.x, carta.y, carta.w, carta.h, 0, 0, w, h); return c; };
+      const foglio = (sopra, sotto) => { const a = document.createElement('canvas'); a.width = mm(210); a.height = mm(297); const g = a.getContext('2d');
+        g.fillStyle = '#fdfdfc'; g.fillRect(0, 0, a.width, a.height); g.drawImage(sopra, mm(20), mm(20)); g.drawImage(sotto, mm(20), mm(20 + 54 + 15)); return a; };
+      const retroPatente = document.createElement('canvas'); retroPatente.width = mm(85.6); retroPatente.height = mm(54);
+      const g = retroPatente.getContext('2d'); g.fillStyle = '#f3d9e2'; g.fillRect(0, 0, retroPatente.width, retroPatente.height);
+      g.fillStyle = '#23306e'; g.font = 'bold ' + mm(2.6) + 'px sans-serif';
+      ['9.   10.   11.   12.', 'AM  12/06/18  05/03/28', 'B   12/06/18  05/03/28', 'C1', 'D1', 'BE', 'C1E', 'CE'].forEach((t, i) => g.fillText(t, mm(6), mm(8 + i * 4.2)));
+      g.font = mm(1.8) + 'px sans-serif';
+      ['1. Cognome 2. Nome 3. Data e luogo di nascita 4a. Data del rilascio', '4b. Data di scadenza 4c. Rilasciata da 5. Numero della patente',
+        '10. Valida dal 11. Valida fino al 12. Codici'].forEach((t, i) => g.fillText(t, mm(6), mm(44 + i * 3)));
+      const ruotata = document.createElement('canvas'); ruotata.width = mm(54) * 2; ruotata.height = mm(85.6) * 2;          // 400 dpi, in verticale
+      const k = ruotata.getContext('2d'); k.imageSmoothingQuality = 'high'; k.translate(ruotata.width / 2, ruotata.height / 2); k.rotate(Math.PI / 2);
+      k.drawImage(PF, carta.x, carta.y, carta.w, carta.h, -ruotata.height / 2, -ruotata.width / 2, ruotata.height, ruotata.width);
+      const jpeg = c => c.toDataURL('image/jpeg', 0.9).split(',')[1];
+      return { cie: jpeg(foglio(ritaglia(CF, mm(85.6), mm(54)), ritaglia(CR, mm(85.6), mm(54)))), patente: jpeg(foglio(retroPatente, ritaglia(PF, mm(85.6), mm(54)))), ruotata: jpeg(ruotata) };
+    }, [b64('cie-fronte.jpg'), b64('cie-retro.jpg'), b64('patente-it.jpg')]);
+    const A4 = j => pdfDaJpeg([{ larghezza: 595.28, altezza: 841.89, immagini: [{ jpeg: Buffer.from(j, 'base64'), x: 0, y: 0, w: 595.28, h: 841.89 }] }]);
+    const ruotata = Buffer.from(imm.ruotata, 'base64'), { w, h } = dimensioniJpeg(ruotata), pt = 72 / 400;
+    const casi = [
+      ['CIE, foglio A4 dello scanner', A4(imm.cie), v => assert.deepEqual(v, RESPONSABILE_A_MANO)],
+      ['patente, foglio A4 con il retro sopra', A4(imm.patente)],
+      ['patente ritagliata e ruotata', pdfDaJpeg([{ larghezza: w * pt, altezza: h * pt, immagini: [{ jpeg: ruotata, x: 0, y: 0, w: w * pt, h: h * pt }] }])]
+    ];
+    for (const [nome, pdf, controlla] of casi) {
+      const t0 = Date.now();
+      await x.page.setInputFiles('#ospite1_documento_fronte', { name: 'documento.pdf', mimeType: 'application/pdf', buffer: pdf });
+      await attendiFine(x.page, 1, [1]);
+      misure['PDF: ' + nome] = Date.now() - t0;
+      const v = await valori(x.page, 1);
+      if (controlla) controlla(v);
+      else {
+        // patente: tutti i dati del fronte; nessun dato dal retro (la legenda «2. Nome 3. Data e luogo di nascita» non è un nome)
+        assert.deepEqual([v.cognome, v.nome, v.nascita, v.luogo_nascita, v.comune, v.provincia, v.tipo_documento, v.luogo_rilascio],
+          ['PROVACCIA', 'BERTOLDO', '1975-03-05', 'Italia', 'MILANO', 'MI', 'PATENTE DI GUIDA', 'Italia'], nome);
+        assert.match(v.numero_documento, /^U[1IL]A23B456C$/, nome);
+      }
+      assert.ok(Date.now() - t0 < 30000, nome + ': ' + (Date.now() - t0) + ' ms');
+      // la ✕ toglie il PDF e i dati letti: il prossimo si legge da capo
+      await x.page.click('#upload-side-1-fronte .upload-side-togli');
+      await x.page.waitForFunction(() => !document.querySelector('[name="ospite1_cognome"]').value);
+    }
+    await new Promise(r => setTimeout(r, 300));
+    assert.deepEqual(x.page.workers().map(w => w.url()), [], 'nessun worker attivo (OCR e PDF.js chiusi)');
     assert.deepEqual(x.errori, []);
   } finally { await x.chiudi(); }
 });

@@ -66,10 +66,24 @@ salvataggio). Le foto sintetiche per provare sono in `tests/browser/documenti-si
 2. Si caricano solo **foto JPG e PNG e PDF** (06/11/2026, richiesta del titolare; prima anche HEIC e WebP), anche nei riquadri del
    responsabile: il tipo si riconosce dai primi byte del file, non dal nome, e gli altri formati danno «Formato non consentito».
    Sull'iPhone la galleria consegna le foto in JPG. Un **PDF** si apre con PDF.js (`scansione/vendor/pdfjs/`, dal sito, nel suo worker,
-   chiuso subito dopo): le prime due pagine si disegnano in memoria, 3000 px sul lato lungo (al più 12 milioni di pixel), e ognuna si
-   legge come una foto, sempre anche nella zona del testo stampato (su un foglio A4 la carta è piccola); le letture delle pagine si
-   uniscono (fronte e retro su due pagine o sulla stessa, come la scansione di un A4). Il testo del PDF, se c'è, non si usa: si legge
-   l'immagine della pagina. Un PDF protetto da password o danneggiato non si apre: messaggio, si continua a mano.
+   chiuso dopo l'ultima lettura) e se ne leggono le prime due pagine; il testo del PDF, se c'è, non si usa: si legge l'immagine. Un PDF
+   protetto da password o danneggiato non si apre: messaggio, si continua a mano. Dal 06/11/2026 (il PDF della patente del titolare
+   non si leggeva: sulla scansione di un foglio A4 la carta è piccola e le scritte arrivavano all'OCR troppo piccole):
+   - **documenti sul foglio** (`immagine.js`, `zoneDocumento`): sulla pagina disegnata in piccolo si cercano le zone diverse dal fondo
+     del foglio (chiaro e uniforme, come quello di uno scanner): al più due per pagina, fronte e retro, ognuna letta da sola. Una carta
+     chiara come la CIE resta una zona sola, MRZ compresa. Niente zone su una foto che riempie la pagina (fondo scuro o colorato) né su
+     una carta ritagliata (la pagina è la carta: sfumature e disegni, il fondo non è uniforme): lì si legge la pagina intera. Due
+     immagini vicine sul foglio (due foto) sono due zone;
+   - **misura**: una zona o una pagina fatta di un'immagine (una foto, una scansione) si disegna alla risoluzione dell'immagine e si
+     legge come una foto. Se nell'insieme mancano dati che quel documento ha (cognome, nome, nascita, luogo o numero della patente o
+     della CIE; il luogo di nascita di un documento italiano con la MRZ) le zone che possono darli si rileggono grandi come una foto
+     (2000 px, al più 600 dpi) e le letture si uniscono: la stessa patente, a seconda della misura, si leggeva per intero o senza il
+     numero. Ai documenti stranieri con la MRZ non manca niente (il luogo di nascita per loro non si legge): nessuna seconda lettura;
+   - **retro della patente**: si riconosce dalla legenda dei campi («4c. Rilasciata da», «10. Valida dal», «11. Valida fino al», «12.
+     Codici», «5. Numero della patente»: tre su cinque, anche letti male) e non dà dati (prima «2. Nome» poteva diventare un nome), non
+     si rilegge l'immagine intera (fino a 8 secondi in più); letto per intero il fronte della patente, il resto del PDF non si legge;
+   - una zona sola sul foglio, o una pagina che non è un'immagine, può avere fronte e retro insieme: lì il testo stampato si legge anche
+     con la MRZ. Un PDF non dura più di 45 secondi (le seconde letture solo nei primi 22).
    La foto (lato con i dati o con la MRZ; un secondo lato facoltativo) viene decodificata in memoria: orientamento EXIF, riduzione a
    2000 px (le foto grandi a metà per volta: in un passo solo Safari seghetta le scritte sottili come le parentesi), scala di grigi (il canale più chiaro
    di ogni pixel: le scritte nere restano nere, i fondi colorati del documento schiariscono). Le foto più piccole di 1600 px si
@@ -202,11 +216,14 @@ Nessuna API a pagamento, nessun abbonamento, nessun servizio a consumo.
   funzioni del percorso di oggi invariate), librerie identiche alle impronte, MRZ (specimen ICAO, letture imperfette), secolo, codice fiscale,
   codici ISO, tipi di documento, testo stampato, controlli, compilazione senza sovrascritture, TXT Alloggiati. Dal 06/11/2026 anche
   `scansione/immagine.js` su disegni fatti nella prova (forma del «<», griglia della MRZ con una casella sbiadita, MRZ tra il disordine,
-  storta, in verticale e capovolta, ritagli, nitidezza) e l'unione delle letture con le cifre di controllo, con dati di fantasia.
+  storta, in verticale e capovolta, ritagli, nitidezza) e l'unione delle letture con le cifre di controllo, con dati di fantasia; le zone
+  dei documenti su un foglio (carte chiare con la MRZ, in un angolo; nessuna zona su una foto, su una carta ritagliata, su un foglio pieno
+  o con la polvere) e il retro della patente riconosciuto dalla legenda.
 - `tests/browser/scansione.browser.cjs` (Chromium + Playwright; su GitHub nel job «scansione»): flusso completo da ospite con API finte,
   verifica di rete, archiviazione, annullamento, isolamento tra ospiti, documenti difficili (rotazioni, sfocatura, MRZ coperta, EXIF, PDF letto
   e PDF danneggiato, HEIC e WebP non consentite, foto qualsiasi), PDF (scansione A4 del responsabile con fronte e retro, che resta allegata;
-  passaporto in PDF di un altro ospite), due lati scelti uno dopo l'altro, tempo scaduto, lettore non scaricabile, motore senza SIMD, schermo stretto, inglese, e
+  passaporto in PDF di un altro ospite; dal 06/11/2026 il foglio A4 di uno scanner, un'immagine sola, con la CIE e con la patente con il
+  retro sopra, e la patente ritagliata e ruotata), due lati scelti uno dopo l'altro, tempo scaduto, lettore non scaricabile, motore senza SIMD, schermo stretto, inglese, e
   «foto come quelle vere»: documento sintetico piccolo e storto su una tovaglia a disegni accanto a un portafoglio (CIE fronte girato in
   verticale e retro, passaporto storto, carta capovolta), con un limite di tempo.
 - Messa a punto sulle foto vere (06/11/2026): sette foto di documenti veri mandate dal titolare (permesso di soggiorno tedesco, due CIE,
@@ -238,8 +255,12 @@ Le prove automatiche usano Chromium. Prima di passare ad `'attiva'` vanno fatte 
   quasi sempre va scelto a mano (non è nella MRZ).
 - Testo stampato in alfabeti non latini: non letto (la MRZ sì).
 - PDF: si leggono le prime due pagine, come immagini; un PDF protetto da password o danneggiato non si apre. Il PDF del responsabile si
-  invia al gestore come prima. Una scansione A4 con fronte e retro della CIE sintetica: tutti gli 11 campi in circa 2 secondi su un
-  computer.
+  invia al gestore come prima. Prove in locale (06/11/2026, su un computer) con la patente del titolare in 16 PDF diversi (foto in una
+  pagina, foto su un A4, ritagliata a 300 dpi, in bianco e nero, ruotata di 90° e 270°, scansione A4 a 300, 200 e 150 dpi con fronte
+  e retro, retro sopra il fronte): dei 14 con il fronte, 13 con tutti i valori giusti, in 1,5–4,7 secondi; sulla scansione a 150 dpi
+  molto compressa manca il numero; i 2 con il solo retro non danno dati (2,5 secondi). CIE, passaporto e permesso di soggiorno veri in PDF (una foto per pagina, due foto su un A4): gli stessi valori delle foto
+  JPG. CIE sintetica su un A4 dello scanner: tutti gli 11 campi in 2,3 secondi. Una scansione a bassa risoluzione e molto compressa può
+  perdere qualche campo, come una foto sfocata.
 - Tempi: su un computer recente 1–4 secondi per foto (meno di un secondo per una foto che non è un documento). **Su un telefono datato non sono stati
   misurati**: il rallentamento della CPU simulato nelle prove vale per la pagina, non per il worker dell'OCR, quindi non dice quanto ci vorrà.
   Vanno misurati con le prove sui telefoni veri. Tempo massimo per foto 45 s, per la preparazione 60 s: oltre, messaggio e si continua a mano.

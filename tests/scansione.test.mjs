@@ -723,6 +723,68 @@ test('patente: numeri dei campi letti a pezzi, male o per niente; numero dalla f
   assert.equal(L.leggiTestoStampato([pz('ROSSI', 145, 115, 274, 140), pz('ADA', 145, 163, 230, 187), pz('10/11/90 ROMA (RM)', 145, 205, 486, 235)], OPZ).cognome, undefined);
 });
 
+// 06/11/2026: il PDF della patente del titolare non si leggeva. Sulla scansione di un foglio A4 la carta è piccola: si leggono solo
+// le zone dei documenti (immagine.js, zoneDocumento); il retro della patente si riconosce dalla legenda dei campi e non dà dati.
+test('PDF: zone dei documenti su un foglio (carte chiare, MRZ compresa, in un angolo); nessuna zona su una foto o su una carta ritagliata', () => {
+  const pagina = (w, h, fondo) => { const px = new Uint8ClampedArray(w * h * 4); for (let i = 0; i < px.length; i += 4) { px[i] = fondo[0]; px[i + 1] = fondo[1]; px[i + 2] = fondo[2]; px[i + 3] = 255; } return { w, h, px }; };
+  const rett = (p, x, y, w, h, col) => { for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) { const k = (j * p.w + i) * 4; p.px[k] = col[0]; p.px[k + 1] = col[1]; p.px[k + 2] = col[2]; } };
+  // una carta chiara (come la CIE: quasi bianca) con righe di testo e, sul retro, la MRZ in basso, staccata dal resto
+  const carta = (p, x, y, mrz) => {
+    rett(p, x, y, 290, 183, [238, 236, 241]);
+    for (let r = 0; r < 5; r++) rett(p, x + 110, y + 30 + r * 18, 140, 6, [40, 40, 60]);
+    rett(p, x + 15, y + 30, 80, 100, [170, 175, 185]);
+    if (mrz) for (let r = 0; r < 3; r++) rett(p, x + 12, y + 140 + r * 12, 266, 5, [20, 20, 20]);
+  };
+  const dentro = (z, x, y, w, h) => z.x <= x && z.y <= y && z.x + z.w >= x + w && z.y + z.h >= y + h;
+  // foglio bianco con fronte e retro: due zone, dall'alto in basso, ognuna con la sua carta intera (MRZ compresa)
+  const a4 = pagina(707, 1000, [252, 252, 250]);
+  carta(a4, 70, 70, false); carta(a4, 70, 320, true);
+  const z = I.zoneDocumento(a4.px, a4.w, a4.h);
+  assert.equal(z.length, 2);
+  assert.ok(dentro(z[0], 70, 70, 290, 183) && dentro(z[1], 70, 320, 290, 183), JSON.stringify(z));
+  assert.ok(z.every(q => q.w * q.h < 0.15 * a4.w * a4.h), 'solo le carte, non il foglio');
+  // una carta sola, in un angolo del vetro dello scanner
+  const angolo = pagina(707, 1000, [250, 250, 250]);
+  carta(angolo, 4, 4, true);
+  const za = I.zoneDocumento(angolo.px, angolo.w, angolo.h);
+  assert.equal(za.length, 1);
+  assert.ok(dentro(za[0], 4, 4, 290, 183));
+  // foto che riempie la pagina (tavolo scuro): la pagina intera, come una foto
+  const foto = pagina(1000, 700, [80, 70, 62]);
+  carta(foto, 300, 200, true);
+  assert.equal(I.zoneDocumento(foto.px, foto.w, foto.h), null);
+  // carta chiara ritagliata (la pagina è la carta, con le sfumature della carta): nessuna zona, altrimenti taglierebbe le righe
+  const ritaglio = pagina(1000, 631, [240, 238, 240]);
+  for (let y = 0; y < 631; y++) for (let x = 0; x < 1000; x++) { const k = (y * 1000 + x) * 4, s = Math.round(12 * Math.sin(x / 90) * Math.cos(y / 70)); ritaglio.px[k] = 240 + s; ritaglio.px[k + 1] = 236 - s; ritaglio.px[k + 2] = 240; }
+  rett(ritaglio, 60, 120, 260, 330, [170, 175, 185]);
+  for (let r = 0; r < 6; r++) rett(ritaglio, 380, 130 + r * 55, 420, 22, [30, 30, 45]);
+  assert.equal(I.zoneDocumento(ritaglio.px, ritaglio.w, ritaglio.h), null);
+  // contenuto che copre quasi tutta la pagina; solo granelli di polvere: la pagina intera
+  const piena = pagina(707, 1000, [252, 252, 252]);
+  rett(piena, 20, 20, 660, 950, [200, 180, 190]);
+  assert.equal(I.zoneDocumento(piena.px, piena.w, piena.h), null);
+  const polvere = pagina(707, 1000, [252, 252, 252]);
+  for (let i = 0; i < 40; i++) rett(polvere, (i * 97) % 690, (i * 211) % 980, 3, 3, [60, 60, 60]);
+  assert.equal(I.zoneDocumento(polvere.px, polvere.w, polvere.h), null);
+});
+
+test('retro della patente: riconosciuto dalla legenda dei campi, anche letta male; nessun dato dalla legenda; il fronte sulla stessa lettura resta', () => {
+  const legenda = ['+ 1. Cognoma 2. Nome 3, Data e luogo di nascita 4a. Data del rilascio', '4b. Data di scadonza 4c. Ritasciata da 5, Numero della patente',
+    '10. Valida dal 11. Valida fino al 12. Godici', 'AM A1 A2 A B1 B C1 C D1 D BE C1E CE D1E DE'];
+  const retro = L.leggiTestoStampato(legenda, OPZ);
+  assert.equal(retro.indizi.retroPatente, true);
+  assert.deepEqual(['cognome', 'nome', 'nascita', 'luogo', 'numero'].filter(k => retro[k]), [], 'dalla legenda nessun dato');
+  assert.equal(retro.credibile, false);
+  // fronte e retro nella stessa lettura (una zona con le due facce): i campi del fronte restano
+  const fronte = ['PATENTE DI GUIDA', 'REPUBBLICA ITALIANA', '1. PROVACCIA', '2. BERTOLDO', '3. 05/03/75 MILANO (MI)', '4a. 12/06/2018 4c. MIT-UCO', '4b. 05/03/2028', '5. U1A23B456C'];
+  const insieme = L.leggiTestoStampato(fronte.concat(legenda), OPZ);
+  assert.deepEqual([insieme.cognome, insieme.nome, insieme.nascita, insieme.numero], ['PROVACCIA', 'BERTOLDO', '1975-03-05', 'U1A23B456C']);
+  // altri documenti: non sono il retro della patente
+  assert.equal(L.leggiTestoStampato(CIE_FRONTE, OPZ).indizi.retroPatente, false, 'CIE: «LUOGO E DATA DI NASCITA», «SCADENZA»');
+  assert.equal(L.leggiTestoStampato(['AUFENTHALTSTITEL', 'VALIDO FINO AL 01.01.2030', 'RILASCIATO DA QUESTURA'], OPZ).indizi.retroPatente, false, 'due voci su cinque');
+  assert.equal(L.leggiTestoStampato(fronte, OPZ).indizi.retroPatente, false, 'il fronte della patente');
+});
+
 test('elenco dei comuni: comuni di oggi, vecchi nomi e soppressi; province del modulo (con SU); licenza e generatore', () => {
   const voci = RIGHE_COMUNI.map(r => r.split(';'));
   const oggi = voci.filter(v => v.length === 2), vecchi = voci.filter(v => v[2] && v[2][0] === '='), soppressi = voci.filter(v => v[2] === '-');

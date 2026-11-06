@@ -528,3 +528,101 @@ export function nitidezza(g, w, h) {
   p.fill(0);
   return n ? Math.sqrt(s2 / n - (s / n) * (s / n)) : 0;
 }
+
+// Zone dei documenti su una pagina di un PDF (06/11/2026, il PDF della patente del titolare). La scansione di un foglio A4 ha la carta
+// piccola su un fondo chiaro: letta la pagina intera, le scritte arrivano all'OCR troppo piccole. Sulla pagina disegnata in piccolo
+// (rgba, w×h) si cercano le zone diverse dal fondo (il colore del bordo della pagina, che deve essere chiaro), unite se vicine:
+// al più due, le più grandi (fronte e retro sullo stesso foglio), dall'alto in basso, con un margine. null quando conviene leggere
+// la pagina intera, come prima: fondo scuro o colorato, nessuna zona abbastanza grande, contenuto che copre quasi tutta la pagina,
+// fondo non uniforme fuori dalle zone. Il foglio di uno scanner fuori dai documenti è uniforme; una carta chiara ritagliata (la
+// pagina è la carta) no: sfumature e disegni di sicurezza. Lì le «zone» sarebbero pezzi della carta e taglierebbero le righe.
+export function zoneDocumento(rgba, w, h) {
+  if (!rgba || w < 40 || h < 40) return null;
+  // 1) il fondo: mediana del colore sul bordo della pagina (2% del lato corto)
+  const b = Math.max(2, Math.round(0.02 * Math.min(w, h)));
+  const ist = [new Uint32Array(256), new Uint32Array(256), new Uint32Array(256)];
+  let nb = 0;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    if (y >= b && y < h - b && x === b) x = w - b;            // nelle righe di mezzo solo i due margini
+    const i = (y * w + x) * 4;
+    ist[0][rgba[i]]++; ist[1][rgba[i + 1]]++; ist[2][rgba[i + 2]]++; nb++;
+  }
+  const med = is => { for (let v = 0, s = 0; v < 256; v++) { s += is[v]; if (2 * s >= nb) return v; } return 255; };
+  const f0 = med(ist[0]), f1 = med(ist[1]), f2 = med(ist[2]);
+  if (Math.min(f0, f1, f2) < 190) return null;                // fondo scuro o colorato: una foto che riempie la pagina
+  // diverso dal fondo anche di poco (10): sul foglio uniforme di uno scanner anche una carta chiara (la CIE) è tutta «diversa», MRZ
+  // compresa, e resta una zona sola. Se il fondo non è uniforme (una carta chiara ritagliata, sfumata) lo dice il controllo 4)
+  const D = 10;
+  // 2) celle di c×c pixel con abbastanza pixel diversi dal fondo (circa 250 celle sul lato lungo)
+  const c = Math.max(2, Math.round(Math.max(w, h) / 250)), cw = Math.ceil(w / c), ch = Math.ceil(h / c);
+  const conta = new Uint16Array(cw * ch), somme = new Float64Array(cw * ch * 3), pixel = new Uint16Array(cw * ch);
+  for (let y = 0; y < h; y++) {
+    const r = ((y / c) | 0) * cw;
+    for (let x = 0, i = y * w * 4; x < w; x++, i += 4) {
+      const k = r + ((x / c) | 0);
+      if (Math.abs(rgba[i] - f0) > D || Math.abs(rgba[i + 1] - f1) > D || Math.abs(rgba[i + 2] - f2) > D) conta[k]++;
+      somme[3 * k] += rgba[i]; somme[3 * k + 1] += rgba[i + 1]; somme[3 * k + 2] += rgba[i + 2]; pixel[k]++;
+    }
+  }
+  const piena = new Uint8Array(cw * ch), soglia = Math.max(1, Math.round(0.15 * c * c));
+  for (let i = 0; i < piena.length; i++) piena[i] = conta[i] >= soglia ? 1 : 0;
+  // 3) celle vicine unite: dilatazione di g celle (1,5% del lato lungo), poi gruppi; il riquadro di un gruppo è quello delle sue celle piene
+  const g = Math.max(1, Math.round(0.015 * Math.max(cw, ch)));
+  const oriz = new Uint8Array(cw * ch), dil = new Uint8Array(cw * ch);
+  for (let y = 0; y < ch; y++) {
+    const r = y * cw;
+    for (let x = -g, s = 0; x < cw; x++) {
+      if (x + g < cw) s += piena[r + x + g];
+      if (x - g - 1 >= 0) s -= piena[r + x - g - 1];
+      if (x >= 0) oriz[r + x] = s > 0 ? 1 : 0;
+    }
+  }
+  for (let x = 0; x < cw; x++) {
+    for (let y = -g, s = 0; y < ch; y++) {
+      if (y + g < ch) s += oriz[(y + g) * cw + x];
+      if (y - g - 1 >= 0) s -= oriz[(y - g - 1) * cw + x];
+      if (y >= 0) dil[y * cw + x] = s > 0 ? 1 : 0;
+    }
+  }
+  const visto = new Uint8Array(cw * ch), pila = [], zone = [];
+  for (let s = 0; s < dil.length; s++) {
+    if (!dil[s] || visto[s]) continue;
+    let x0 = cw, y0 = ch, x1 = -1, y1 = -1;
+    visto[s] = 1; pila.push(s);
+    while (pila.length) {
+      const k = pila.pop(), kx = k % cw, ky = (k / cw) | 0;
+      if (piena[k]) { if (kx < x0) x0 = kx; if (kx > x1) x1 = kx; if (ky < y0) y0 = ky; if (ky > y1) y1 = ky; }
+      if (kx > 0 && dil[k - 1] && !visto[k - 1]) { visto[k - 1] = 1; pila.push(k - 1); }
+      if (kx < cw - 1 && dil[k + 1] && !visto[k + 1]) { visto[k + 1] = 1; pila.push(k + 1); }
+      if (ky > 0 && dil[k - cw] && !visto[k - cw]) { visto[k - cw] = 1; pila.push(k - cw); }
+      if (ky < ch - 1 && dil[k + cw] && !visto[k + cw]) { visto[k + cw] = 1; pila.push(k + cw); }
+    }
+    if (x1 < 0) continue;
+    const zx = x0 * c, zy = y0 * c, zw = Math.min(w, (x1 + 1) * c) - zx, zh = Math.min(h, (y1 + 1) * c) - zy;
+    // abbastanza grande per un documento (una carta su un A4 è il 7% della pagina); non una striscia (bordo scuro, ombra, riga di testo)
+    if (zw * zh < 0.015 * w * h || zw < 0.06 * w || zh < 0.04 * h || Math.max(zw / zh, zh / zw) > 5) continue;
+    zone.push({ x: zx, y: zy, w: zw, h: zh });
+  }
+  if (!zone.length) return null;
+  zone.sort((p, q) => q.w * q.h - p.w * p.h);
+  const scelte = zone.slice(0, 2);
+  const ux0 = Math.min(...scelte.map(z => z.x)), uy0 = Math.min(...scelte.map(z => z.y));
+  const ux1 = Math.max(...scelte.map(z => z.x + z.w)), uy1 = Math.max(...scelte.map(z => z.y + z.h));
+  if ((ux1 - ux0) * (uy1 - uy0) >= 0.7 * w * h) return null;     // il contenuto copre quasi tutta la pagina: la si legge intera
+  const m = Math.round(0.015 * Math.max(w, h));
+  const fuori = scelte.sort((p, q) => (Math.abs(p.y - q.y) > Math.min(p.h, q.h) / 2 ? p.y - q.y : p.x - q.x)).map(z => {
+    const x = Math.max(0, z.x - m), y = Math.max(0, z.y - m);
+    return { x, y, w: Math.min(w, z.x + z.w + m) - x, h: Math.min(h, z.y + z.h + m) - y };
+  });
+  // 4) il fondo fuori dalle zone: le celle senza contenuto devono avere quasi tutte il colore del fondo (scarto medio fino a 4)
+  let vuote = 0, pure = 0;
+  for (let k = 0; k < conta.length; k++) {
+    if (conta[k] || !pixel[k]) continue;
+    const x = (k % cw) * c, y = ((k / cw) | 0) * c;
+    if (fuori.some(z => x + c > z.x && x < z.x + z.w && y + c > z.y && y < z.y + z.h)) continue;
+    vuote++;
+    if (Math.max(Math.abs(somme[3 * k] / pixel[k] - f0), Math.abs(somme[3 * k + 1] / pixel[k] - f1), Math.abs(somme[3 * k + 2] / pixel[k] - f2)) <= 4) pure++;
+  }
+  if (!vuote || pure < 0.9 * vuote) return null;
+  return fuori;
+}
