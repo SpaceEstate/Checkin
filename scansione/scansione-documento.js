@@ -10,8 +10,8 @@
 //    loro campi e partono per il gestore come prima (raccogliDatiPrenotazioneConCompressione in checkin.js, invariata).
 //  - si compilano solo i campi vuoti dell'ospite giusto; ogni ospite ha il suo stato; «Annulla la compilazione» ripristina
 //    esattamente i valori di prima. La conferma finale resta dell'ospite. Se qualcosa non va, si continua a mano.
-import * as L from './lettura-documento.js?v=20261106f';
-import * as I from './immagine.js?v=20261106a';
+import * as L from './lettura-documento.js?v=20261106g';
+import * as I from './immagine.js?v=20261106g';
 
 const VENDOR = new URL('./vendor/', import.meta.url);
 const TEMPI = Object.assign({ preparazione: 60000, lettura: 45000 }, (typeof window !== 'undefined' && window.__scansioneTempi) || {});
@@ -335,6 +335,15 @@ async function leggiFile(l, file, quota) {
     if (an.testo && (!mrz || mrz.formato === 'TD3' || mrz.verificate < 2) && resto() > MINIMO_PASSAGGIO) {
       stampato = await leggiZonaTesto(l, pagina, an.testo, scala, resto);
       if (l.annullato) throw errore('annullato');
+      // patente: numero (campo 5) e ufficio di rilascio (4c) possono stare in un gruppo di righe più in basso, staccato dal resto da
+      // righe che la ricerca scarta (date con le barre): si legge anche la zona allargata, solo per completare i campi che mancano
+      // (06/11/2026, patente del titolare). La carta d'identità e gli altri documenti restano come prima.
+      if (stampato && stampato.indizi && stampato.indizi.patente && !stampato.numero && an.testoEsteso && resto() > MINIMO_PASSAGGIO) {
+        const esteso = await leggiZonaTesto(l, pagina, an.testoEsteso, scala, resto);
+        if (l.annullato) throw errore('annullato');
+        if (esteso) completaStampato(stampato, esteso);
+        if (l.diagnosi) l.diagnosi.zonaAllargata = true;
+      }
     }
     quota(0.85);
     // 3) nessuna riga riconoscibile (foto piccola, sfocata o molto storta): lettura dell'immagine intera, come prima. Non se
@@ -355,6 +364,16 @@ async function leggiFile(l, file, quota) {
 }
 
 const punteggioStampato = st => st ? ['cognome', 'nome', 'nascita', 'numero', 'luogo'].filter(k => st[k]).length : 0;
+// I campi che mancano in una lettura del testo stampato presi da un'altra (gli indizi si sommano)
+function completaStampato(st, altro) {
+  for (const [k, val] of Object.entries(altro)) {
+    if (k === 'indizi') { for (const [i, x] of Object.entries(val || {})) st.indizi[i] = st.indizi[i] || x; }
+    else if (k === 'credibile') st.credibile = st.credibile || val;
+    else if (k !== 'dubbi' && val != null && st[k] == null) st[k] = val;
+  }
+}
+// intestazione del documento letta (patente, carta d'identità, passaporto): il verso della lettura è giusto
+const intestazione = st => !!(st && st.indizi && (st.indizi.patente || st.indizi.carta || st.indizi.passaporto));
 // solo i nomi dei campi trovati nel testo stampato (diagnosi): nessun valore
 const campiDiagnosi = st => st ? ['cognome', 'nome', 'nascita', 'luogo', 'sesso', 'cittadinanza', 'numero', 'numeriCie'].filter(k => st[k] && (!Array.isArray(st[k]) || st[k].length))
   .map(k => k === 'luogo' && st.luogo.incerto ? 'luogo(incerto)' : k) : [];
@@ -429,14 +448,15 @@ async function leggiZonaTesto(l, pagina, zt, scala, resto) {
     const r = await leggi(giro, '11', ALTEZZA_TESTO);
     if (r && (!migliore || r.punti > migliore.punti)) migliore = r;
     if (r && r.fiducia >= 45 && punteggioStampato(r.st) >= 1) break;         // verso giusto: il capovolto non serve
-    // anche con poca fiducia, se ci sono già tre dati (cognome, nome, data…) il verso è giusto: il tempo serve alla seconda lettura
-    // (06/11/2026: CIE del titolare, fiducia 43; sul telefono il luogo di nascita restava vuoto)
-    if (r && punteggioStampato(r.st) >= 3) break;
+    // anche con poca fiducia, se ci sono già tre dati (cognome, nome, data…) o l'intestazione del documento («PATENTE DI GUIDA»,
+    // «CARTA DI IDENTITÀ»…) il verso è giusto: il tempo serve alla seconda lettura (06/11/2026: CIE del titolare con fiducia 43, patente
+    // con i campi numerati letti a pezzi; sul telefono il luogo, poi quasi tutto, restavano vuoti)
+    if (r && (punteggioStampato(r.st) >= 3 || intestazione(r.st))) break;
   }
   if (!migliore) return null;
   const dubbi = new Set(migliore.st.dubbi || []);
   const mancano = ['cognome', 'nome', 'nascita', 'luogo'].filter(k => !migliore.st[k] || dubbi.has(k)).length;
-  if (mancano && (migliore.fiducia >= 45 || punteggioStampato(migliore.st) >= 3) && resto() > 2 * MINIMO_PASSAGGIO) {
+  if (mancano && (migliore.fiducia >= 45 || punteggioStampato(migliore.st) >= 3 || intestazione(migliore.st)) && resto() > 2 * MINIMO_PASSAGGIO) {
     const r2 = await leggi(migliore.giro, '3', ALTEZZA_TESTO - 2);
     if (r2) {
       const st = migliore.st, dubbi2 = new Set(r2.st.dubbi || []);
@@ -1032,7 +1052,7 @@ function testoDiagnosi(diag) {
     if (d.errore) parti.push('errore: ' + d.errore);
     if (d.ms != null) parti.push(sec(d.ms) + (d.ocrPronto != null ? ' (OCR pronto ' + sec(d.ocrPronto) + ')' : ''));
     if (d.nitidezza != null) parti.push('nitidezza ' + d.nitidezza + (d.sfocata ? ' (sfocata)' : ''));
-    if (d.zone) parti.push('zone: ' + (d.zone.join(', ') || 'nessuna'));
+    if (d.zone) parti.push('zone: ' + (d.zone.join(', ') || 'nessuna') + (d.zonaAllargata ? ' (+ allargata)' : ''));
     for (const p of d.passi || []) parti.push('testo ' + p.giro + '°/' + p.psm + ' fiducia ' + p.fiducia + ', ' + p.righe + ' righe: ' + (p.campi.join(' ') || '-'));
     if (d.mrz !== undefined) parti.push('MRZ: ' + (d.mrz ? d.mrz.formato + ' cifre ' + d.mrz.cifre + '/3, complessiva ' + (d.mrz.complessiva === true ? 'sì' : d.mrz.complessiva === false ? 'no' : '-') : 'no'));
     if (d.campi) parti.push('stampato: ' + (d.campi.join(' ') || '-'));

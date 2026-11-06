@@ -538,7 +538,7 @@ test('diagnosi: solo con «diagnosi» nell\'indirizzo, sotto le foto misure, tem
   } finally { await senza.chiudi(); }
 });
 
-test('responsabile: tipo di documento riconosciuto (patente) compilato da controllare; PDF caricato per il gestore non si legge ma resta allegato', async () => {
+test('responsabile: tipo di documento riconosciuto (patente) compilato, verde; PDF caricato per il gestore non si legge ma resta allegato', async () => {
   const x = await apri({ scansione: 'attiva' });
   try {
     await iniziaFlusso(x.page);
@@ -548,7 +548,8 @@ test('responsabile: tipo di documento riconosciuto (patente) compilato da contro
     assert.equal(await esitoTipo(x.page, 1), 'ok');
     assert.doesNotMatch(esito, /Dati letti/);
     // 06/11/2026, richiesta del titolare: niente domanda «È giusto? Sì / Scelgo io»; il tipo si compila, segnato da controllare
-    assert.ok(await x.page.$eval('#ospite1_tipo_documento__testo', e => e.classList.contains('scan-verifica') && e.value === 'PATENTE DI GUIDA'), 'tipo compilato, bordo «da controllare»');
+    // 06/11/2026: intestazione «PATENTE DI GUIDA» e campi numerati letti, il tipo è certo (verde); prima era arancione, da controllare
+    assert.ok(await x.page.$eval('#ospite1_tipo_documento__testo', e => e.classList.contains('scan-letto') && e.value === 'PATENTE DI GUIDA'), 'tipo compilato, verde');
     assert.equal(await x.page.locator('#scan-pannello-1 [data-azione="tipo-si"]').count(), 0);
     const v = await valori(x.page, 1);
     assert.deepEqual([v.tipo_documento, v.luogo_rilascio, v.cognome, v.nome], ['PATENTE DI GUIDA', 'Italia', 'PROVACCIA', 'BERTOLDO']);

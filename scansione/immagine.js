@@ -257,7 +257,7 @@ export function analizzaPagina(g, w, h) {
   // testo stampato: le righe del verso prevalente vicine tra loro (il gruppo con più lettere). Le righe prese per una MRZ
   // restano dentro: può essere un falso allarme (tre righe regolari sul fronte di una CIE) e toglierle spezzerebbe il gruppo
   const righe = prevalente.righe;
-  let testo = null;
+  let testo = null, testoEsteso = null;
   if (righe.length >= 2) {
     const gruppi = [];
     for (const c of righe.slice().sort((x, y) => x.b0 - y.b0)) {
@@ -271,9 +271,25 @@ export function analizzaPagina(g, w, h) {
       const pendenza = top.cc.reduce((x, c) => x + c.pendenza * c.n, 0) / top.n;
       testo = zonaDaCatene(top.cc, prevalente.verticale, Math.abs(pendenza) < 0.2 ? pendenza : 0, 3 * s, 2 * s);
       testo.s = s;
+      // zona allargata, con i gruppi vicini sopra o sotto e allineati in larghezza: righe scartate da rigaBuona (date con le barre,
+      // caratteri di misure diverse: le righe 3 e 4a della patente) spezzano il blocco del testo. Si legge solo se serve
+      // (scansione-documento.js: patente senza numero; 06/11/2026). Mai la MRZ, che ha la sua zona.
+      const dellaMrz = new Set(conMrz ? conMrz.mrz.righe : []), cc = top.cc.slice();
+      let a0 = top.a0, a1 = top.a1, b0 = top.b0, b1 = top.b1;
+      for (const q of gruppi) {
+        if (q === top || q.n < 8 || q.cc.some(c => dellaMrz.has(c))) continue;
+        const distanza = Math.max(q.b0 - b1, b0 - q.b1), comune = Math.min(q.a1, a1) - Math.max(q.a0, a0);
+        if (distanza > 7 * s || comune < 0.5 * Math.min(q.a1 - q.a0, a1 - a0)) continue;
+        cc.push(...q.cc);
+        a0 = Math.min(a0, q.a0); a1 = Math.max(a1, q.a1); b0 = Math.min(b0, q.b0); b1 = Math.max(b1, q.b1);
+      }
+      if (cc.length > top.cc.length) {
+        testoEsteso = zonaDaCatene(cc, prevalente.verticale, Math.abs(pendenza) < 0.2 ? pendenza : 0, 3 * s, 2 * s);
+        testoEsteso.s = s;
+      }
     }
   }
-  return { verticale: prevalente.verticale, mrz, testo, lettere: prevalente.lettere };
+  return { verticale: prevalente.verticale, mrz, testo, testoEsteso, lettere: prevalente.lettere };
 }
 
 // Zona (centro, misure, angolo) che contiene le catene, con un margine lungo la riga e di traverso.

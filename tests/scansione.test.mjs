@@ -253,11 +253,14 @@ test('patente (senza MRZ, campi numerati), carta cartacea, luogo di nascita all\
   assert.deepEqual([s.cognome, s.nome, s.nascita, s.numero, s.scadenza, s.rilascio], ['PROVACCIA', 'TEODORICO', '1990-11-10', 'U1A23B456C', '2030-02-01', '2020-02-01']);
   assert.deepEqual(s.luogo, { stato: 'Italia', comune: 'ROMA', provincia: 'RM' });
   const r = L.combinaLetture([{ mrz: null, stampato: s }], Object.assign({ responsabile: true }, OPZ));
-  assert.equal(r.campi.tipoDocumento.suggerimento, 'PATENTE DI GUIDA');
+  // 06/11/2026: intestazione e campi numerati letti, il tipo è certo (prima solo suggerito); così il luogo di rilascio, con REPUBBLICA ITALIANA
+  assert.deepEqual([r.campi.tipoDocumento.valore, r.campi.tipoDocumento.affidabilita], ['PATENTE DI GUIDA', L.SICURO]);
+  assert.deepEqual([r.campi.luogoRilascio.valore, r.campi.luogoRilascio.affidabilita], ['Italia', L.SICURO]);
   assert.equal(r.campi.genere, undefined, 'la patente non riporta il sesso');
   assert.equal(r.campi.cittadinanza, undefined, 'la patente non riporta la cittadinanza');
   assert.equal(r.campi.luogoRilascio.valore, 'Italia');
-  assert.ok(Object.values(r.campi).every(c => c.affidabilita === L.DA_VERIFICARE), 'senza MRZ tutto da verificare');
+  // senza MRZ i dati della persona restano tutti da verificare; certi solo tipo e luogo di rilascio, che dice l'intestazione (06/11/2026)
+  assert.ok(Object.entries(r.campi).every(([k, c]) => c.affidabilita === (['tipoDocumento', 'luogoRilascio'].includes(k) ? L.SICURO : L.DA_VERIFICARE)), 'senza MRZ i dati della persona da verificare');
   const cartacea = ['REPUBBLICA ITALIANA', 'CARTA D\'IDENTITA\'', 'N. AX 1234567', 'COGNOME PROVACCIA', 'NOME CLOTILDE', 'NATO IL 15/01/2004', 'A REGGIO NELL\'EMILIA (RE)', 'CITTADINANZA ITALIANA'];
   const c = L.leggiTestoStampato(cartacea, OPZ);
   assert.deepEqual([c.cognome, c.nome, c.nascita, c.numero], ['PROVACCIA', 'CLOTILDE', '2004-01-15', 'AX1234567']);
@@ -665,6 +668,34 @@ test('luogo di nascita: parentesi lette male o etichetta illeggibile; il risulta
   assert.deepEqual([c.campi.luogoNascita.valore, c.campi.comune.valore, c.campi.provincia.valore], ['Italia', 'ROMA', 'RM']);
   assert.ok(c.campi.comune.incerto && c.campi.provincia.incerto && c.campi.luogoNascita.incerto, 'incerto: lo conferma l\'elenco dei comuni nella pagina');
   assert.equal(L.combinaLetture([{ mrz: null, stampato: L.leggiTestoStampato(CIE_FRONTE, o) }], o).campi.comune.incerto, undefined, 'la forma esatta non è incerta');
+});
+
+// 06/11/2026, patente del titolare: sul computer cognome, nome, numero; data e luogo di nascita no; sul telefono quasi niente. L'OCR
+// legge i numeri dei campi (stampati in blu) come pezzi a sé, male («Q» per «3.») o per niente.
+test('patente: numeri dei campi letti a pezzi, male o per niente; numero dalla forma; tipo e luogo di rilascio certi', () => {
+  const pz = (testo, x0, y0, x1, y1) => ({ testo, bbox: { x0, y0, x1, y1 } });
+  const resp = Object.assign({ responsabile: true }, OPZ);
+  const leggi = righe => { const st = L.leggiTestoStampato(righe, OPZ); return { st, c: L.combinaLetture([{ mrz: null, stampato: st }], resp) }; };
+  const attesi = st => [st.cognome, st.nome, st.nascita, st.luogo && st.luogo.comune, st.luogo && st.luogo.provincia, st.numero];
+  // 1) numeri dei campi letti come pezzi a sé, «3.» letto «Q», un riflesso letto sullo stemma a destra della riga del nome, numero
+  //    senza «5.» (riconosciuto dalla forma)
+  const aPezzi = leggi([pz('PATENTE DI GUIDA REPUBLICA ITALIANA', 70, 20, 870, 45), pz('1', 79, 129, 89, 155), pz('ROSSI', 154, 126, 300, 155),
+    pz('2', 79, 183, 94, 209), pz('ADA', 155, 182, 240, 210), pz('dq ©', 744, 180, 830, 205), pz('Q', 78, 238, 94, 260), pz('10/11/90 ROMA (RM)', 155, 231, 520, 260),
+    pz('01/02/2030', 157, 340, 369, 384), pz('RM1234567X', 157, 388, 363, 427)]);
+  assert.deepEqual(attesi(aPezzi.st), ['ROSSI', 'ADA', '1990-11-10', 'ROMA', 'RM', 'RM1234567X']);
+  assert.deepEqual([aPezzi.c.campi.tipoDocumento.valore, aPezzi.c.campi.tipoDocumento.affidabilita], ['PATENTE DI GUIDA', L.SICURO]);
+  assert.deepEqual([aPezzi.c.campi.luogoRilascio.valore, aPezzi.c.campi.luogoRilascio.affidabilita], ['Italia', L.SICURO], '«REPUBLICA» con una B');
+  assert.equal(aPezzi.c.campi.numeroDocumento.affidabilita, L.DA_VERIFICARE, 'il numero resta da controllare: niente lo conferma');
+  // 2) numeri dei campi 1, 2 e 3 non letti: la riga 3 dal contenuto, cognome e nome sono le due righe di lettere sopra, nella stessa
+  //    colonna; «REPUBBLICA ITALIANA» non letta, ma il campo 4c dice Motorizzazione civile
+  const senzaNumeri = leggi([pz('PATENTE DI GUIDA REPOS', 80, 22, 690, 121), pz('ROSSI', 145, 115, 274, 140), pz('oT', 5, 119, 40, 133), pz('ADA', 145, 163, 230, 187),
+    pz('10/11/90 ROMA (RM)', 145, 205, 486, 235), pz('01/02/2020 4c. MC-RM', 147, 248, 494, 280), pz('01/02/2030', 145, 298, 326, 334), pz('RM1234567X', 145, 327, 329, 372)]);
+  assert.deepEqual(attesi(senzaNumeri.st), ['ROSSI', 'ADA', '1990-11-10', 'ROMA', 'RM', 'RM1234567X']);
+  assert.equal(senzaNumeri.c.campi.luogoRilascio.valore, 'Italia');
+  // il codice del retro (due lettere e sette cifre, senza la lettera finale) non è il numero della patente
+  assert.equal(L.leggiTestoStampato(['PATENTE DI GUIDA', 'AA 1234567'], OPZ).numero, undefined);
+  // senza l'intestazione della patente nessuna di queste regole
+  assert.equal(L.leggiTestoStampato([pz('ROSSI', 145, 115, 274, 140), pz('ADA', 145, 163, 230, 187), pz('10/11/90 ROMA (RM)', 145, 205, 486, 235)], OPZ).cognome, undefined);
 });
 
 test('elenco dei comuni: comuni di oggi, vecchi nomi e soppressi; province del modulo (con SU); licenza e generatore', () => {

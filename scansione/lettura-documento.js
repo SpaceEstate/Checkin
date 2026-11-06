@@ -706,7 +706,8 @@ export function dateNelTesto(riga) {
 const RE_PATENTE = /PATENTE DI GUIDA|DRIVING LICEN[CS]E|F[UÜ]HRERSCHEIN|PERMIS DE CONDUIRE|PERMISO DE CONDUC|RIJBEWIJS|PRAWO JAZDY|K[OÖ]RKORT|CARTA DE CONDU/;
 const RE_CARTA = /CARTA D\W?\s?IDENTIT|CARTA DI IDENTIT|IDENTITY CARD|PERSONALAUSWEIS|CARTE NATIONALE D|DOCUMENTO NACIONAL DE IDENTIDAD|IDENTITEITSKAART|DOWOD OSOBISTY|AUFENTHALTSTITEL|RESIDENCE PERMIT|PERMESSO DI SOGGIORNO|TITRE DE S[EÉ]JOUR|PERMISO DE RESIDENCIA/;
 const RE_PASSAPORTO = /PASSAPORTO|PASSPORT|REISEPASS|PASSEPORT|PASAPORTE|PASPOORT/;
-const RE_ITALIA = /REPUBBLICA ITALIANA|ITALIAN REPUBLIC|MINISTERO DELL\W?INTERNO|MINISTERO DELLE INFRASTRUTTURE|COMUNE DI /;
+// «REPUBBLICA ITALIANA» anche letta con una B o una I in meno, o senza lo spazio (06/11/2026: «REPUBLICA ITALIANA» sulla patente)
+const RE_ITALIA = /REPUB+LI?CA\s*ITALIAN[AO]|ITALIAN REPUBLIC|MINISTERO DELL\W?INTERNO|MINISTERO DELLE INFRASTRUTTURE|COMUNE DI /;
 
 // Gli spazi delle etichette diventano facoltativi (l'OCR a volte li perde: «NATAIL»).
 const etichetta = src => new RegExp(src.replace(/ /g, '\\s?'));
@@ -857,6 +858,34 @@ export function numeriCieIncerti(righe) {
 }
 const RE_NUMERO_CARTA_CARTACEA = /\b([A-Z]{2})\s?(\d{7})\b/;
 
+// Righe ricomposte dai riquadri dell'OCR: i pezzi alla stessa altezza (si sovrappongono per almeno metà dell'altezza) uniti da sinistra
+// a destra, in maiuscolo. Servono ai campi numerati della patente, dove l'OCR legge spesso il numero del campo come un pezzo a sé.
+function righeDaiRiquadri(elenco) {
+  const pezzi = elenco.filter(r => r.b).map(r => ({ t: r.t, b: r.b })).sort((x, y) => (x.b.y0 + x.b.y1) - (y.b.y0 + y.b.y1));
+  const righe = [];
+  for (const p of pezzi) {
+    const h = p.b.y1 - p.b.y0;
+    const r = righe.find(q => Math.min(q.y1, p.b.y1) - Math.max(q.y0, p.b.y0) >= 0.5 * Math.min(h, q.y1 - q.y0));
+    if (r) { r.pezzi.push(p); r.y0 = Math.min(r.y0, p.b.y0); r.y1 = Math.max(r.y1, p.b.y1); }
+    else righe.push({ y0: p.b.y0, y1: p.b.y1, pezzi: [p] });
+  }
+  // nella riga, solo i pezzi vicini (al più 3,5 volte l'altezza delle lettere): un pezzo lontano (un riflesso letto sullo stemma, a
+  // destra) fa riga a sé e non si attacca al valore
+  const out = [];
+  for (const r of righe) {
+    if (r.pezzi.length < 2) continue;
+    const ord = r.pezzi.sort((x, y) => x.b.x0 - y.b.x0), alt = mediana(ord.map(x => x.b.y1 - x.b.y0)) || 10;
+    let gruppo = [ord[0]];
+    for (let i = 1; i <= ord.length; i++) {
+      if (i < ord.length && ord[i].b.x0 - ord[i - 1].b.x1 <= 3.5 * alt) { gruppo.push(ord[i]); continue; }
+      if (gruppo.length > 1) out.push(gruppo.map(x => x.t).join(' ').toUpperCase());
+      gruppo = [ord[i]];
+    }
+  }
+  return out;
+}
+const mediana = a => { const b = a.slice().sort((x, y) => x - y); return b.length ? b[b.length >> 1] : 0; };
+
 // Lettura del testo stampato. `righe`: righe lette dall'OCR, nell'ordine. Restituisce i valori trovati e gli indizi sul tipo.
 export function leggiTestoStampato(righe, opzioni) {
   const o = opzioni || {};
@@ -874,13 +903,37 @@ export function leggiTestoStampato(righe, opzioni) {
   const indizi = { patente: RE_PATENTE.test(tutto), carta: RE_CARTA.test(tutto), passaporto: RE_PASSAPORTO.test(tutto), italia: RE_ITALIA.test(tutto) };
   const v = { indizi };
 
-  // patente UE: campi numerati 1. 2. 3. 4a. 4b. 4c. 5.
+  // patente UE: campi numerati 1. 2. 3. 4a. 4b. 4c. 5. Si cercano anche nelle righe ricomposte dai riquadri dell'OCR, perché il
+  // numero del campo (stampato in blu, a sinistra) può essere letto come un pezzo a sé («1» e «ROSSI»), anche senza il punto
+  const ricomposte = G ? righeDaiRiquadri(elenco) : [];
   const campoNumerato = n => {
     for (const r of U) { const m = new RegExp('^\\s*' + n + '\\s?[.,]\\s*(.+)$').exec(r); if (m) return m[1].trim(); }
+    for (const r of ricomposte) { const m = new RegExp('^\\s*' + n + '\\s?[.,]?\\s+(.+)$').exec(r); if (m) return m[1].trim(); }
     return null;
   };
-  const p1 = campoNumerato('1'), p2 = campoNumerato('2'), p3 = campoNumerato('3'), p5 = campoNumerato('5');
+  let p1 = campoNumerato('1'), p2 = campoNumerato('2');
+  const p5 = campoNumerato('5');
+  // campo 3 (data e luogo di nascita) anche dal contenuto: il «3.» si legge male («Q», «a»), la riga «GG/MM/AA COMUNE (PR)» no
+  let p3 = campoNumerato('3');
+  const riga3 = r => { const m = /(\d{1,2}\s?[\/.\-]\s?\d{1,2}\s?[\/.\-]\s?\d{2,4})\s+(.+)$/.exec(r); return m && !/^\s*4\s?[ABC]\b/.test(r) && leggiLuogo(m[2], o) ? m[1] + ' ' + m[2] : null; };
+  if (!p3 && indizi.patente) for (const r of U.concat(ricomposte)) { const x = riga3(r); if (x) { p3 = x; break; } }
+  // numeri dei campi 1 e 2 illeggibili (stampati in blu; 06/11/2026, patente del titolare letta da una foto piccola): con
+  // l'intestazione della patente letta, le due righe di sole lettere subito sopra la riga 3, nella stessa colonna, sono il
+  // cognome (la più alta) e il nome
+  if (indizi.patente && (!p1 || !p2) && G) {
+    const i3 = elenco.findIndex(r => r.b && riga3(r.t.toUpperCase()));
+    if (i3 >= 0) {
+      const b3 = elenco[i3].b, h3 = Math.max(1, b3.y1 - b3.y0);
+      const sopra = elenco.filter(r => r.b && r.b.y1 <= b3.y0 + 0.3 * h3 && b3.y0 - r.b.y1 <= 4 * h3 && Math.abs(r.b.x0 - b3.x0) <= 1.5 * h3 &&
+        /^[A-ZÀ-ÖØ-Ý][A-ZÀ-ÖØ-Ý' \-]+$/.test(r.t.toUpperCase().trim()) && !RE_PATENTE.test(r.t.toUpperCase()) && !RE_ITALIA.test(r.t.toUpperCase()))
+        .sort((x, y) => x.b.y0 - y.b.y0).slice(-2);
+      if (sopra.length === 2) { p1 = p1 || sopra[0].t.toUpperCase(); p2 = p2 || sopra[1].t.toUpperCase(); }
+    }
+  }
   indizi.campiPatente = !!(p1 && p2 && (p3 || p5));
+  // patente italiana anche se «REPUBBLICA ITALIANA» non si legge: nel campo 4c l'ufficio che l'ha rilasciata (MC-RM: Motorizzazione
+  // civile; MIT-UCO, DTT-…: Ministero dei trasporti)
+  if (indizi.patente && !indizi.italia && /\b(?:MC|MIT|DTT)\s?-\s?[A-Z]{2,3}\b/.test(tutto)) indizi.italia = true;
   if (indizi.patente && indizi.campiPatente) {
     v.cognome = pulisciNomeStampato(p1);
     v.nome = pulisciNomeStampato(p2);
@@ -893,7 +946,15 @@ export function leggiTestoStampato(righe, opzioni) {
       const luogo = leggiLuogo(p3, o);
       if (luogo) v.luogo = luogo;
     }
-    if (p5) { const n = p5.replace(/[^A-Z0-9]/g, ''); if (n.length >= 5 && n.length <= 16 && !codiceFiscaleValido(n)) v.numero = n; }
+    // numero: dal campo 5; se lì non ha la forma del numero della patente italiana (2 lettere, 7 cifre, 1 lettera: TN1234567X) e
+    // un'altra riga ce l'ha, vale quella (il «5.» si perde o si legge staccato; 06/11/2026). Il codice del retro («AI 1234567»,
+    // senza la lettera finale) non ha quella forma.
+    const formaPatente = /\b([A-Z]{2}\d{7}[A-Z])\b/;
+    const n5 = p5 ? p5.replace(/[^A-Z0-9]/g, '') : '';
+    const perForma = U.concat(ricomposte).map(r => formaPatente.exec(r.replace(/\s+/g, ' '))).find(Boolean);
+    if (n5 && !formaPatente.test(n5) && perForma) v.numero = perForma[1];
+    else if (n5.length >= 5 && n5.length <= 16 && !codiceFiscaleValido(n5)) v.numero = n5;
+    else if (perForma) v.numero = perForma[1];
     const p4b = campoNumerato('4B'); if (p4b) { const d = dateNelTesto(p4b)[0]; if (d) v.scadenza = d.breve ? dataDocumentoDaAnnoBreve(d.anno, d.m, d.g, o.oggi) : (isoValida(+d.anno, d.m, d.g) ? iso(+d.anno, d.m, d.g) : null); }
     const p4a = campoNumerato('4A'); if (p4a) { const d = dateNelTesto(p4a)[0]; if (d) v.rilascio = d.breve ? dataDocumentoDaAnnoBreve(d.anno, d.m, d.g, o.oggi) : (isoValida(+d.anno, d.m, d.g) ? iso(+d.anno, d.m, d.g) : null); }
   } else {
@@ -947,6 +1008,9 @@ export function leggiTestoStampato(righe, opzioni) {
     if (incerti.length) v.numeriCie = incerti;
     else if (indizi.carta && indizi.italia && !indizi.passaporto) { const cc = RE_NUMERO_CARTA_CARTACEA.exec(tutto); if (cc) v.numero = cc[1] + cc[2]; }
   }
+  // patente: il numero si riconosce dalla sola forma (TN1234567X) anche nelle letture in cui i campi numerati non si vedono (l'OCR
+  // a volte non legge i numeri dei campi, stampati in blu): quella lettura lo dà giusto e la seconda non lo sostituisce
+  if (indizi.patente && !v.numero) { const m = U.map(r => /\b([A-Z]{2}\d{7}[A-Z])\b/.exec(r)).find(Boolean); if (m && !codiceFiscaleValido(m[1])) v.numero = m[1]; }
   if (v.cognome && !nomeCredibile(v.cognome)) delete v.cognome;
   if (v.nome && !nomeCredibile(v.nome)) delete v.nome;
   // credibile anche da solo (senza MRZ) se c'è un segno di documento (intestazione, campi della patente, numero della CIE)
@@ -1125,11 +1189,15 @@ export function combinaLetture(letture, opzioni) {
     // di controllo esatte): il tipo non dipende dal numero. 06/11/2026, il titolare: «giusta ma in giallo». Gli altri tipi
     // riconosciuti restano da controllare (arancione).
     const cieCerta = !!(tipo && tipo.tipo === 'cie' && mrz && mrz.controlli && mrz.controlli.nascita && mrz.controlli.scadenza);
-    if (tipo && tipo.voce && (cieCerta || (tipo.modo === 'proposto' && mrz && mrz.valida))) campi.tipoDocumento = { valore: tipo.voce, affidabilita: cieCerta ? SICURO : DA_VERIFICARE, fonte: 'mrz' };
+    // patente: l'intestazione («PATENTE DI GUIDA») e i campi numerati letti dicono con certezza che è una patente, l'unica voce
+    // dell'elenco per le patenti; «REPUBBLICA ITALIANA» dice dove è rilasciata (06/11/2026, il titolare: «tutto giallo ma giusto»)
+    const patenteCerta = !!(tipo && tipo.tipo === 'patente' && !mrz && st.indizi.patente && st.indizi.campiPatente);
+    if (patenteCerta) campi.tipoDocumento = { valore: tipo.voce, affidabilita: SICURO, fonte: 'stampato' };
+    else if (tipo && tipo.voce && (cieCerta || (tipo.modo === 'proposto' && mrz && mrz.valida))) campi.tipoDocumento = { valore: tipo.voce, affidabilita: cieCerta ? SICURO : DA_VERIFICARE, fonte: 'mrz' };
     else if (tipo && tipo.voce) campi.tipoDocumento = { valore: null, suggerimento: tipo.voce, affidabilita: DA_VERIFICARE, fonte: mrz ? 'mrz' : 'stampato' };
     else avviso('tipo_da_scegliere', 'tipoDocumento');
     if (mrz && mrz.campi.luogoRilascio) campi.luogoRilascio = Object.assign({}, mrz.campi.luogoRilascio);
-    else if (!mrz && st.indizi.italia && (st.indizi.patente || st.indizi.carta)) campi.luogoRilascio = { valore: 'Italia', affidabilita: DA_VERIFICARE, fonte: 'stampato' };
+    else if (!mrz && st.indizi.italia && (st.indizi.patente || st.indizi.carta)) campi.luogoRilascio = { valore: 'Italia', affidabilita: patenteCerta ? SICURO : DA_VERIFICARE, fonte: 'stampato' };
   }
 
   // controlli di plausibilità (avvisi, mai blocchi)
