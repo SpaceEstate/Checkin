@@ -627,6 +627,22 @@ test('numero della CIE: dal fronte, confermato dalla MRZ anche con un carattere 
   assert.equal(t3.affidabilita, L.DA_VERIFICARE);
 });
 
+// 06/11/2026, foto del titolare: nel numero della CIE c'è una O lettera, che l'OCR della MRZ legge zero in tutte e tre le letture
+// (nessuna casella incerta): la cifra di controllo non tornava e il numero restava vuoto.
+test('numero della CIE nella MRZ con la O lettera letta zero: il formato della CIE impone la lettera; verde se tornano entrambe le cifre di controllo', () => {
+  const conZero = stato => { const r = td1({ tipo: 'C<', stato, cognome: 'PROVACCIA', nome: 'ERMENEGILDA', numero: 'CA12345OF', nascita: '800419', sesso: 'F', scadenza: '310419' }); return [r[0].replace('CA12345OF', 'CA123450F'), r[1], r[2]]; };
+  const zero = conZero('ITA'), f = L.fondiMrz([zero, zero, zero]);
+  for (const m of [L.leggiMrz(zero, OGGI), L.leggiMrz(f.righe, OGGI, f)]) {
+    assert.deepEqual([m.campi.numeroDocumento.valore, m.campi.numeroDocumento.affidabilita], ['CA12345OF', L.SICURO]);
+    assert.ok(!m.avvisi.some(a => a.codice === 'numero_corretto'), 'imposta dal formato, non un\'ipotesi');
+  }
+  const c = L.combinaLetture([{ mrz: L.leggiMrz(f.righe, OGGI, f), stampato: null }], Object.assign({ responsabile: true }, OPZ));
+  assert.deepEqual([c.campi.numeroDocumento.valore, c.campi.tipoDocumento.affidabilita, c.campi.genere.affidabilita], ['CA12345OF', L.SICURO, L.SICURO]);
+  // il formato vale solo per la CIE italiana: un altro documento con le stesse letture e nessuna casella incerta resta senza numero
+  const altro = conZero('FRA'), fa = L.fondiMrz([altro, altro, altro]);
+  assert.equal(L.leggiMrz(fa.righe, OGGI, fa).campi.numeroDocumento, undefined);
+});
+
 test('elenco dei comuni: comuni di oggi, vecchi nomi e soppressi; province del modulo (con SU); licenza e generatore', () => {
   const voci = RIGHE_COMUNI.map(r => r.split(';'));
   const oggi = voci.filter(v => v.length === 2), vecchi = voci.filter(v => v[2] && v[2][0] === '='), soppressi = voci.filter(v => v[2] === '-');

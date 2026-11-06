@@ -505,6 +505,29 @@ export function fondiMrz(candidati) {
   return cifre >= 2 ? migliore : null;
 }
 
+// CIE italiana: il numero ha un formato fisso (C, una lettera, 5 cifre, 2 lettere). Un carattere fuori formato è di sicuro letto male
+// (nella MRZ la O lettera e lo zero si confondono: 06/11/2026, CIE del titolare letta con lo zero in tutte le letture). Si prova solo
+// con i caratteri che l'OCR confonde e che stanno nel formato (al più 3 caratteri fuori formato); vale se uno solo fa tornare la cifra
+// di controllo del numero e la complessiva. Non è un'ipotesi tra caratteri plausibili: il formato la impone.
+function numeroNelFormatoCie(numero, cifra, verificaComplessiva) {
+  if (!numero || numero.length !== 9 || numero[0] !== 'C' || !/^[0-9]$/.test(cifra || '')) return null;
+  const lettera = c => /[A-Z]/.test(c), numerica = c => /[0-9]/.test(c);
+  const opzioni = [['C']];
+  let fuori = 0;
+  for (let i = 1; i < 9; i++) {
+    const c = numero[i], vuole = i === 1 || i >= 7 ? lettera : numerica;
+    if (vuole(c)) { opzioni.push([c]); continue; }
+    const alt = (AMBIGUI[c] || []).filter(vuole);
+    if (!alt.length) return null;
+    opzioni.push(alt); fuori++;
+  }
+  if (!fuori || fuori > 3) return null;
+  let comb = [''];
+  for (const o of opzioni) comb = comb.flatMap(x => o.map(y => x + y));
+  const buoni = comb.filter(n => cifraControllo(n) === cifra && (!verificaComplessiva || verificaComplessiva(n)));
+  return buoni.length === 1 ? buoni[0] : null;
+}
+
 // Numero del documento con cifra di controllo sbagliata: prova a sostituire i caratteri che l'OCR confonde (al massimo 2).
 // Se una sola versione fa tornare la cifra di controllo (e, se c'è, anche quella complessiva) la restituisce come «corretta».
 function correggiNumeroDocumento(numero, cifra, verificaComplessiva, soloIn) {
@@ -566,13 +589,15 @@ export function leggiMrz(righe, oggi, fusione) {
     // CIE italiana (TD1, «C», ITA): la correzione deve restare nel formato del numero della CIE (06/11/2026: cambiando due
     // caratteri si trovava anche un numero con una lettera tra le cifre che faceva tornare entrambe le cifre di controllo)
     const cieItaliana = r.format === 'TD1' && /^C/.test(out.codiceDocumento) && grezzo('issuingState').replace(/</g, '') === 'ITA';
-    const corretto = correggiNumeroDocumento(numeroGrezzo, cifraNumero, s => {
-      if (cieItaliana && !RE_FORMATO_CIE.test(s)) return false;
+    const complessivaCon = s => {
       const prova = righe.slice();
       prova[rng.line] = prova[rng.line].slice(0, rng.start) + s + prova[rng.line].slice(rng.end);
       try { const x = parseMrzLibreria(prova, { autocorrect: true }); const c = x.details.find(d => d.field === 'compositeCheckDigit'); return !c || c.valid; } catch { return false; }
-    }, incerte);
-    if (corretto) {
+    };
+    const nelFormato = cieItaliana ? numeroNelFormatoCie(numeroGrezzo, cifraNumero, complessivaCon) : null;
+    const corretto = nelFormato ? null : correggiNumeroDocumento(numeroGrezzo, cifraNumero, s => (!cieItaliana || RE_FORMATO_CIE.test(s)) && complessivaCon(s), incerte);
+    if (nelFormato) out.campi.numeroDocumento = { valore: nelFormato, affidabilita: out.controlli.complessiva === null ? DA_VERIFICARE : SICURO, fonte: 'mrz', nota: 'formato' };
+    else if (corretto) {
       out.campi.numeroDocumento = { valore: corretto.replace(/</g, ''), affidabilita: DA_VERIFICARE, fonte: 'mrz', nota: 'corretto' };
       out.avvisi.push({ codice: 'numero_corretto', campo: 'numeroDocumento' });
     }
