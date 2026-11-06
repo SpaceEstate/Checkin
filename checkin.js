@@ -937,7 +937,7 @@ function bloccoUploadLato(ospiteNum, lato) {
 // Spegnimento d'emergenza: rimettere 'spenta'. Il codice della scansione (scansione/) si scarica quando si apre il passo di un
 // ospite; le librerie dell'OCR (circa 4,5 MB) solo alla prima foto da leggere.
 const SCANSIONE_DOCUMENTI = 'prova';   // 05/11/2026: 'prova' sul branch claude/scansione-documenti per le prove del titolare
-const SCANSIONE_VERSIONE = '20261106b';
+const SCANSIONE_VERSIONE = '20261106c';
 // letto subito: dopo il caricamento daAreaClienti() toglie il frammento «#…» dall'indirizzo
 const scansioneInProva = /(?:^#|&)scansione=prova(?:&|$)/.test(window.location.hash || '');
 
@@ -1435,10 +1435,12 @@ window.openCamera = async function(ospiteNum, lato) {
 // già ritagliata sul documento; lato lungo 1600 px, JPEG di qualità 0,85 (resta sotto 1 MB come le foto di prima).
 async function fotoDalRiquadro(ospiteNum, lato, tela) {
   const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
-  const file = await window.FotocameraDocumento.inFile(tela, `documento_ospite_${ospiteNum}_${timestamp}.jpg`, 1600);
+  // lato lungo 2000 px (quello su cui lavora la lettura del documento); all'invio la foto si comprime come quelle caricate
+  // (comprimiImmagineBase64), e vale lo stesso limite dei file caricati (20 MB)
+  const file = await window.FotocameraDocumento.inFile(tela, `documento_ospite_${ospiteNum}_${timestamp}.jpg`, 2000);
   tela.width = 0; tela.height = 0;
   if (!file) { showNotification(t('notif.erroreCattura'), 'error'); return; }
-  if (file.size > 1 * 1024 * 1024) { showNotification(t('notif.fotoTroppoPesante'), 'error'); return; }
+  if (file.size > 20 * 1024 * 1024) { showNotification(t('notif.fotoTroppoPesante'), 'error'); return; }
   const fileInput = inputDocumento(ospiteNum, lato);
   if (fileInput) {
     const dt = new DataTransfer();

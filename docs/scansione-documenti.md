@@ -10,14 +10,20 @@ vedi [campi-elenco.md](campi-elenco.md).
 In cima al passo di ogni ospite ci sono le foto del documento (fronte e retro): sul telefono **«📷 Fotografa»** apre la fotocamera con il
 riquadro del documento, ovunque **«🖼️ Carica una foto»**. Il browser legge la MRZ (le righe `<<<`) e il testo stampato e compila i campi del
 modulo, che restano sempre lì da scrivere a mano se la lettura non riesce (nessuna scelta «a mano / scansione», nessuna spiegazione: richiesta
-del titolare, 06/11/2026). I campi letti sono evidenziati (verde = verificato, arancione = da controllare). Tutto avviene **sul dispositivo
-dell'ospite**: nessuna API, nessun servizio esterno, nessun costo.
+del titolare, 06/11/2026). Sopra i lati c'è solo il titolo «📄 Documento di identità»; a lettura riuscita nessun messaggio (restano errori,
+avvisi, valori diversi da quelli già scritti e «↩︎ Annulla»). I campi letti sono evidenziati: **verde** = verificato (MRZ con le cifre di
+controllo; CIE con la MRZ valida per il tipo; comune letto esatto e confermato dall'elenco dei comuni con la provincia letta, con provincia
+e Stato di nascita), **arancione** = da controllare. Tutto avviene **sul dispositivo dell'ospite**: nessuna API, nessun servizio esterno,
+nessun costo.
 
 - **Ospiti diversi dal responsabile**: la foto serve solo a leggere i dati. Non viene inviata, salvata, copiata né mostrata in anteprima.
 - **Responsabile**: la foto continua a essere caricata nei riquadri «Documento di identità» e inviata al gestore come prima. Con la
   scansione quel riquadro (lo stesso, non una copia) sale in cima al passo: si caricano le foto (file o fotocamera del check-in, sul telefono
-  quella con il riquadro) e i campi si compilano da soli, lato per lato. La scansione legge quei file (una copia decodificata in memoria)
-  senza toccarli. Se il codice della scansione non si scarica, il riquadro resta al suo posto di sempre e si compila a mano.
+  quella con il riquadro) e i campi si compilano da soli, lato per lato. In cima al passo il riquadro mostra solo titolo e lati: spiegazioni,
+  avviso sull'immagine inviata al gestore e contatore dei file sono nascosti (06/11/2026, richiesta del titolare; lo stesso avviso è
+  nell'informativa breve dell'ultimo passo, che l'ospite conferma, e nella pagina privacy). La scansione legge quei file (una copia
+  decodificata in memoria) senza toccarli. Se il codice della scansione non si scarica, il riquadro resta al suo posto di sempre, com'era,
+  e si compila a mano.
 
 ## Accendere, provare, spegnere
 
@@ -53,7 +59,11 @@ salvataggio). Le foto sintetiche per provare sono in `tests/browser/documenti-si
    o da «Carica una foto».
 2. La foto (lato con i dati o con la MRZ; un secondo lato facoltativo) viene decodificata in memoria: orientamento EXIF, HEIC/HEIF
    (Safari le apre da solo; altrove heic-to in un worker chiuso subito dopo), riduzione a 2000 px, scala di grigi (il canale più chiaro
-   di ogni pixel: le scritte nere restano nere, i fondi colorati del documento schiariscono).
+   di ogni pixel: le scritte nere restano nere, i fondi colorati del documento schiariscono). Le foto più piccole di 1600 px si
+   **ingrandiscono** fino a 1600 (al più 3 volte): con la carta larga 500-800 px, come negli scatti dal riquadro di una fotocamera a
+   bassa risoluzione, si perdevano luogo di nascita, comune, provincia e numero (06/11/2026, prove locali con le foto vere ridotte e con
+   la CIE sintetica a 520 px). Una maschera di contrasto sulle foto sfocate è stata provata e scartata: sulle foto nitide faceva perdere
+   dati.
 3. **Prima dell'OCR**, su una copia di 1400 px e senza OCR (`scansione/immagine.js`, pochi decimi di secondo): bianco e nero locale
    (Sauvola), lettere come macchie, macchie unite in righe di testo (in orizzontale e in verticale, con l'inclinazione), scarto delle
    «righe» della tovaglia, del portafoglio, dei disegni. Si trovano così la **MRZ** (2 o 3 righe lunghe, parallele, a passo fisso) e la

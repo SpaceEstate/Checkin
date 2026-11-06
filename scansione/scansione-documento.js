@@ -1,7 +1,7 @@
 // scansione/scansione-documento.js — scansione FACOLTATIVA del documento nel browser dell'ospite (docs/scansione-documenti.md).
 //
-// Si scarica solo quando l'ospite sceglie «Scansiona documento» (checkin.js → sceltaCompilazione). Tutto avviene qui, sul
-// dispositivo: l'immagine non viene mai inviata, salvata o copiata altrove. Regole:
+// Si scarica con il passo dell'ospite, quando la scansione è accesa (checkin.js → avviaScansione); le librerie dell'OCR solo alla
+// prima foto. Tutto avviene qui, sul dispositivo: l'immagine non viene mai inviata, salvata o copiata altrove. Regole:
 //  - ospiti diversi dal responsabile: la foto serve solo a leggere i dati. Si decodifica in memoria, si legge, e si scarta:
 //    campo file svuotato subito, bitmap chiusa, canvas azzerati, worker dell'OCR chiuso a fine lettura (la sua memoria,
 //    compresa quella che ha contenuto l'immagine, torna al sistema). Nessun indirizzo blob: tranne il ripiego per i browser
@@ -10,12 +10,13 @@
 //    loro campi e partono per il gestore come prima (raccogliDatiPrenotazioneConCompressione in checkin.js, invariata).
 //  - si compilano solo i campi vuoti dell'ospite giusto; ogni ospite ha il suo stato; «Annulla la compilazione» ripristina
 //    esattamente i valori di prima. La conferma finale resta dell'ospite. Se qualcosa non va, si continua a mano.
-import * as L from './lettura-documento.js?v=20261106a';
+import * as L from './lettura-documento.js?v=20261106c';
 import * as I from './immagine.js?v=20261106a';
 
 const VENDOR = new URL('./vendor/', import.meta.url);
 const TEMPI = Object.assign({ preparazione: 60000, lettura: 45000 }, (typeof window !== 'undefined' && window.__scansioneTempi) || {});
 const LATO_MAX = 2000;            // lato lungo dell'immagine di lavoro (px)
+const LATO_MIN = 1600;            // le foto più piccole si ingrandiscono fino a questo lato lungo (al più 3 volte): vedi preparaPagina
 const LATO_PRIMA_LETTURA = 1600;  // lato lungo per la prima lettura (testo e posizione della MRZ)
 const MRZ_LETTERE = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<';
 const MINIMO_PASSAGGIO = Math.min(3000, TEMPI.lettura);   // tempo minimo concesso a un passaggio dell'OCR
@@ -145,7 +146,8 @@ function disegnaPannello(s) {
       ${responsabile
         ? `<p class="scan-lato-stato" data-stato-lato="1" data-prefisso="guest.latoFronte">&nbsp;</p>
       <p class="scan-lato-stato" data-stato-lato="2" data-prefisso="guest.latoRetro">&nbsp;</p>`
-        : `<div class="scan-lati">${lato(1)}${lato(2)}</div>`}
+        : `<h3 class="document-title scan-titolo" data-i18n="guest.documentoTitolo">${esc(ctx.t('guest.documentoTitolo'))}</h3>
+      <div class="scan-lati">${lato(1)}${lato(2)}</div>`}
       <div class="scan-avanzamento" hidden>
         <div class="scan-barra" aria-hidden="true"><i></i></div>
         <p class="scan-avanzamento-testo" role="status">&nbsp;</p>
@@ -723,7 +725,11 @@ function azzera(c) { if (c && c.width) { c.width = 0; c.height = 0; } }
 // Immagine di lavoro: ridotta (lato lungo al massimo LATO_MAX), girata se serve, come matrice di grigi (il canale più chiaro
 // di ogni pixel: scritte nere, fondi colorati chiari). La tela usata per disegnarla si azzera subito.
 function preparaPagina(img) {
-  const f = Math.min(1, LATO_MAX / Math.max(img.w, img.h));
+  // Le foto grandi si riducono a LATO_MAX. Quelle piccole (lo scatto dal riquadro della fotocamera nella pagina, foto già ridotte)
+  // si ingrandiscono fino a LATO_MIN: la ricerca delle righe e l'OCR sono tarati sulle foto del telefono, e con la carta larga
+  // 500-800 px si perdevano luogo di nascita e numero (prove locali con foto vere ridotte, 06/11/2026).
+  const lungo = Math.max(img.w, img.h);
+  const f = lungo > LATO_MAX ? LATO_MAX / lungo : lungo < LATO_MIN ? Math.min(3, LATO_MIN / lungo) : 1;
   const w = img.w * f, h = img.h * f, gira = img.rotazione === 90 || img.rotazione === 270;
   const c = nuovaTela(gira ? h : w, gira ? w : h), g = c.getContext('2d', { willReadFrequently: true });
   try {
@@ -920,8 +926,15 @@ function concludi(s, errori) {
   if (proposte.comune && window.ElencoComuni && window.ElencoComuni.pronto()) {
     const r = window.ElencoComuni.simile(proposte.comune.valore, proposte.provincia && proposte.provincia.valore);
     if (r && !r.ambiguo) {
+      // comune letto esatto, comune di oggi, con la provincia letta uguale a quella dell'elenco: due letture indipendenti confermate
+      // dall'elenco ufficiale → verde (come i dati confermati dalla MRZ). Lettera corretta, vecchio nome o provincia mancante: arancione.
+      const confermato = !r.approssimato && !r.voce.oggi && proposte.provincia && proposte.provincia.valore === r.prov &&
+        window.ElencoComuni.norm(proposte.comune.valore) === window.ElencoComuni.norm(r.nome);
       proposte.comune = Object.assign({}, proposte.comune, { valore: r.nome }, r.approssimato ? { affidabilita: L.DA_VERIFICARE } : {});
       if (!proposte.provincia) proposte.provincia = { valore: r.prov, affidabilita: L.DA_VERIFICARE, fonte: 'elenco' };
+      if (confermato) {
+        for (const k of ['comune', 'provincia', 'luogoNascita']) if (proposte[k]) proposte[k] = Object.assign({}, proposte[k], { affidabilita: L.SICURO });
+      }
     } else delete proposte.comune;
   }
   const { scritti, conflitti } = letture.length ? applica(s, proposte) : { scritti: [], conflitti: [] };
@@ -953,7 +966,9 @@ function mostraEsito(s) {
   const e = s.esito;
   if (!box || !e) return;
   const t = ctx.t;
-  const righe = [`<p class="scan-esito-titolo">${esc(t(e.messaggio))}</p>`];
+  // lettura riuscita, anche in parte: nessun messaggio (richiesta del titolare, 06/11/2026), parlano i campi compilati; restano
+  // errori, avvisi, valori diversi da quelli già scritti e «Annulla». L'esito resta nella classe del riquadro (ok, parziale…).
+  const righe = e.tipo === 'ok' || e.tipo === 'parziale' ? [] : [`<p class="scan-esito-titolo">${esc(t(e.messaggio))}</p>`];
   for (const a of e.avvisi || []) righe.push(`<p class="scan-avviso">${esc(t('scan.avviso.' + a.codice, { n: a.n }))}</p>`);
   if (e.conflitti && e.conflitti.length) {
     righe.push(`<p class="scan-conflitti-titolo">${esc(t('scan.conflittiTitolo'))}</p>`);
@@ -962,7 +977,7 @@ function mostraEsito(s) {
       <button type="button" class="scan-mini scan-mini-chiaro" data-azione="tieni" data-indice="${i}">${esc(t('scan.tieniMio'))}</button></div>`));
   }
   if (s.istantanea && ((e.scritti && e.scritti.length) || s.scritti.size)) righe.push(`<button type="button" class="scan-annulla" data-azione="annulla">${esc(t('scan.annulla'))}</button>`);
-  box.className = 'scan-esito ' + (e.tipo || '');
+  box.className = 'scan-esito ' + (e.tipo || '') + (righe.every(r => r.startsWith('<button')) ? ' senza-testo' : '');      // solo «Annulla»: senza cornice
   box.innerHTML = righe.join('');
   box.hidden = false;
   box.querySelectorAll('[data-azione]').forEach(b => b.addEventListener('click', () => azioneEsito(s, b.getAttribute('data-azione'), parseInt(b.getAttribute('data-indice'), 10))));

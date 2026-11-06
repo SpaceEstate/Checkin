@@ -209,7 +209,9 @@ test('CIE italiana: retro (MRZ) e fronte (testo stampato) → campi del responsa
     ['PROVACCIA', 'ERMENEGILDA', 'F', '1980-04-19', 'Italia', 'Italia', 'ROMA', 'RM']);
   assert.deepEqual([v('tipoDocumento'), v('numeroDocumento'), v('luogoRilascio')], ["CARTA IDENTITA' ELETTRONICA", 'CA00000AA', 'Italia']);
   assert.deepEqual([a('cognome'), a('nome'), a('nascita'), a('numeroDocumento'), a('cittadinanza'), a('genere')], [L.SICURO, L.SICURO, L.SICURO, L.SICURO, L.SICURO, L.SICURO]);
-  assert.deepEqual([a('luogoNascita'), a('comune'), a('provincia'), a('tipoDocumento')], [L.DA_VERIFICARE, L.DA_VERIFICARE, L.DA_VERIFICARE, L.DA_VERIFICARE], 'testo stampato: sempre da verificare');
+  assert.deepEqual([a('luogoNascita'), a('comune'), a('provincia')], [L.DA_VERIFICARE, L.DA_VERIFICARE, L.DA_VERIFICARE], 'testo stampato: da verificare (il comune lo conferma poi l\'elenco dei comuni, nella pagina)');
+  // 06/11/2026 (il titolare: «giusta ma in giallo»): CIE con la MRZ valida e il numero nel formato della CIE, tipo certo
+  assert.equal(a('tipoDocumento'), L.SICURO, 'CIE con la MRZ valida: tipo certo');
   assert.equal(r.esito, 'ok');
   assert.equal(r.documento.tipo, 'cie');
   assert.ok(!r.avvisi.some(x => x.codice === 'documento_scaduto'));
@@ -615,6 +617,38 @@ test('campo comune: si scrive o si sceglie, ma vale solo un comune dell\'elenco;
   assert.deepEqual([ocr.nome, ocr.approssimato], ['GUBBIO', true], 'una lettera sbagliata dall\'OCR, nella provincia letta');
   assert.equal(E.simile('GUBBLO', 'RM'), null, 'non in un\'altra provincia');
   assert.equal(E.simile('XYZWQ', 'VE'), null);
+});
+
+test('fotocamera: zoom chiesto dentro i limiti del browser, zona dello scatto vero, nitidezza dei fotogrammi', () => {
+  const ctx = { navigator: { userAgent: '' }, document: {}, addEventListener() {}, Math, isFinite };
+  ctx.window = ctx;
+  vm.createContext(ctx);
+  vm.runInContext(read('fotocamera.js'), ctx, { filename: 'fotocamera.js' });
+  const F = ctx.FotocameraDocumento;
+  // zoom 2x se il browser lo offre; mai fuori dai limiti (Safari 17.4 poteva bloccarsi), sul passo dichiarato
+  assert.equal(F._zoom(undefined), null, 'nessuno zoom offerto');
+  assert.equal(F._zoom({ min: 1, max: 8, step: 0.1 }), 2);
+  assert.equal(F._zoom({ min: 0.5, max: 15, step: 0.5 }), 2, 'iPhone con il grandangolo: 1 = fotocamera principale');
+  assert.equal(F._zoom({ min: 1, max: 1.8, step: 0.1 }), 1.8, 'al massimo il massimo dichiarato');
+  assert.equal(F._zoom({ min: 1, max: 1.2, step: 0.1 }), null, 'meno di 1,5x: niente');
+  assert.equal(F._zoom({ min: 100, max: 400, step: 1 }), null, 'zoom in un\'altra scala: niente');
+  const z = F._zoom({ min: 1, max: 10, step: 0.3 });
+  assert.ok(Math.abs(z - 1.9) < 1e-9, 'sul passo: ' + z);
+  // scatto vero 3024x4032 e video 1080x1920 (stesso campo sul lato lungo): la zona del riquadro, più il margine, nella foto
+  const reg = { x: 90, y: 620, w: 900, h: 580 };
+  const m = F._mappa(reg, 1080, 1920, 3024, 4032);
+  assert.ok(Math.abs(m.scala - 2.1) < 1e-9);
+  const centro = [m.x + m.w / 2, m.y + m.h / 2], atteso = [(reg.x + reg.w / 2 - 540) * 2.1 + 1512, (reg.y + reg.h / 2 - 960) * 2.1 + 2016];
+  assert.ok(Math.abs(centro[0] - atteso[0]) < 1e-6 && Math.abs(centro[1] - atteso[1]) < 1e-6, 'stesso centro');
+  assert.ok(m.w > reg.w * 2.1 && m.h > reg.h * 2.1, 'con il margine');
+  const bordo = F._mappa({ x: 0, y: 0, w: 1080, h: 1920 }, 1080, 1920, 3024, 4032);
+  assert.ok(bordo.x >= 0 && bordo.y >= 0 && bordo.x + bordo.w <= 3024 && bordo.y + bordo.h <= 4032, 'dentro la foto');
+  // nitidezza: un fotogramma nitido vale più dello stesso sfocato; uno uniforme vale zero
+  const fotogramma = (w, h, valore) => { const data = new Uint8ClampedArray(w * h * 4); for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const v = valore(x, y), i = (y * w + x) * 4; data[i] = data[i + 1] = data[i + 2] = v; data[i + 3] = 255; } return { data, width: w, height: h }; };
+  const nitido = fotogramma(64, 40, (x, y) => ((x >> 2) + (y >> 2)) % 2 ? 230 : 20);
+  const sfocato = fotogramma(64, 40, (x, y) => 125 + 105 * Math.sin(x * Math.PI / 4) * Math.sin(y * Math.PI / 4) * 0.4);
+  assert.ok(F._nitidezza(nitido) > 4 * F._nitidezza(sfocato));
+  assert.equal(F._nitidezza(fotogramma(20, 20, () => 128)), 0);
 });
 
 test('fotocamera con il riquadro e campi con elenco: nessuna archiviazione, nessuna rete (solo l\'elenco dei comuni dal sito), nessuna console', () => {

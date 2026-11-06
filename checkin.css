@@ -2481,6 +2481,13 @@ body {
   font-weight: 700;
 }
 
+/* lettura riuscita senza nulla da dire (06/11/2026: niente messaggio): resta solo il pulsante «Annulla», senza cornice */
+.scan-esito.senza-testo {
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
 .scan-avviso {
   margin-top: 6px;
   padding-left: 10px;
@@ -2738,19 +2745,35 @@ html.fotocamera-aperta body {
 .fotocamera-scatta:active span {
   transform: scale(0.92);
 }
+/* durante lo scatto (si sceglie il fotogramma più nitido, mezzo secondo circa): riquadro colorato, pulsante spento */
+.fotocamera-scatto .fotocamera-riquadro {
+  border-color: var(--color-accent-200);
+}
+.fotocamera-scatto .fotocamera-scatta {
+  opacity: 0.45;
+  pointer-events: none;
+}
 /* su un computer non si fotografa: si carica il file */
 html.dispositivo-pc .camera-group {
   display: none;
 }
 
 /* Scansione senza spiegazioni (06/11/2026): un solo pulsante per lato su un computer; nel riquadro del documento del
-   responsabile, quando sta in cima al passo, restano titolo, lati e avviso sulla privacy (via i testi di spiegazione) */
+   responsabile, quando sta in cima al passo, restano solo il titolo «Documento di identità» e i lati (richiesta del titolare:
+   via le spiegazioni, l'avviso sull'immagine inviata al gestore e il contatore dei file; lo stesso avviso è nell'informativa
+   breve dell'ultimo passo e nella pagina privacy). Con la scansione spenta il riquadro resta com'era. */
 .scan-lato-azioni {
   grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
 }
-.scan-documento-in-alto .document-subtitle:not(.identity-hint),
+.scan-documento-in-alto .document-subtitle,
+.scan-documento-in-alto .upload-status,
 .scan-documento-in-alto .upload-side-hint {
   display: none;
+}
+/* lo stesso titolo per gli altri ospiti, sopra i due lati */
+.scan-pannello .scan-titolo {
+  margin: 0 0 12px;
+  text-align: center;
 }
 .scan-pannello.scan-responsabile > .scan-lato-stato:empty {
   display: none;

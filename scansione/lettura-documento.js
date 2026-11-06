@@ -966,7 +966,11 @@ export function combinaLetture(letture, opzioni) {
   // dati del documento: solo per il responsabile (il modulo non li chiede agli altri ospiti)
   const tipo = classificaDocumento(mrz, st);
   if (o.responsabile) {
-    if (tipo && tipo.voce && tipo.modo === 'proposto' && mrz && mrz.valida) campi.tipoDocumento = { valore: tipo.voce, affidabilita: DA_VERIFICARE, fonte: 'mrz' };
+    // CIE con la MRZ valida (tutte le cifre di controllo) e il numero nel formato della CIE: il tipo è certo (verde; il titolare,
+    // 06/11/2026: «giusta ma in giallo»). Gli altri tipi riconosciuti restano da controllare (arancione).
+    const numeroMrz = (mrz && mrz.campi.numeroDocumento && mrz.campi.numeroDocumento.valore) || '';
+    const cieCerta = !!(tipo && tipo.tipo === 'cie' && mrz && mrz.valida && /^C[A-Z]\d{5}[A-Z]{2}$/.test(numeroMrz));
+    if (tipo && tipo.voce && tipo.modo === 'proposto' && mrz && mrz.valida) campi.tipoDocumento = { valore: tipo.voce, affidabilita: cieCerta ? SICURO : DA_VERIFICARE, fonte: 'mrz' };
     else if (tipo && tipo.voce) campi.tipoDocumento = { valore: null, suggerimento: tipo.voce, affidabilita: DA_VERIFICARE, fonte: mrz ? 'mrz' : 'stampato' };
     else avviso('tipo_da_scegliere', 'tipoDocumento');
     if (mrz && mrz.campi.numeroDocumento) {

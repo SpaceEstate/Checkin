@@ -103,6 +103,9 @@ async function attendiFine(page, n, lati, timeout = 120000) {
   }, { n, lati }, { timeout });
   return page.$eval('#scan-pannello-' + n + ' .scan-esito', e => e.textContent);
 }
+// Esito della lettura dalla classe del riquadro (ok, parziale, errore, info). 06/11/2026, richiesta del titolare: a lettura riuscita
+// non c'è più il messaggio «Dati letti dal documento: controllali.»; le prove controllano l'esito e che quel messaggio non ci sia.
+const esitoTipo = (page, n) => page.$eval('#scan-pannello-' + n + ' .scan-esito', e => [...e.classList].filter(c => c !== 'scan-esito' && c !== 'senza-testo').join(' '));
 async function caricaPerOspite(page, n, percorso, lato = 1, buffer = null) {
   await page.evaluate(n => { const e = document.querySelector('#scan-pannello-' + n + ' .scan-esito'); if (e) e.hidden = true; }, n);
   const sel = '#scan-pannello-' + n + ' .scan-input[data-lato="' + lato + '"]:not([capture])';
@@ -165,6 +168,19 @@ async function inScena(page, percorso, { angolo = 0, scala = 0.5, seme = 1 } = {
     g.drawImage(bmp, -bmp.width / 2, -bmp.height / 2); g.restore();
     return c.toDataURL('image/jpeg', 0.85).split(',')[1];
   }, { b64, angolo, scala, seme });
+  return Buffer.from(out, 'base64');
+}
+
+// Documento ridotto a `lato` px di lato lungo, come lo scatto ritagliato sul riquadro di una fotocamera a bassa risoluzione
+async function ridotta(page, percorso, lato) {
+  const b64 = fs.readFileSync(percorso).toString('base64');
+  const out = await page.evaluate(async ({ b64, lato }) => {
+    const bmp = await createImageBitmap(await (await fetch('data:image/jpeg;base64,' + b64)).blob());
+    const f = lato / Math.max(bmp.width, bmp.height), c = document.createElement('canvas');
+    c.width = Math.round(bmp.width * f); c.height = Math.round(bmp.height * f);
+    const g = c.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(bmp, 0, 0, c.width, c.height);
+    return c.toDataURL('image/jpeg', 0.85).split(',')[1];
+  }, { b64, lato });
   return Buffer.from(out, 'base64');
 }
 
@@ -231,7 +247,8 @@ test('flusso completo con la scansione: CIE del responsabile, passaporto e carta
     await x.page.setInputFiles('#ospite1_documento_retro', CIE.retro);
     const esito1 = await attendiFine(x.page, 1, [1, 2]);
     misure.responsabileCie = Date.now() - t0;
-    assert.match(esito1, /Dati letti dal documento/);
+    assert.equal(await esitoTipo(x.page, 1), 'ok');
+    assert.doesNotMatch(esito1, /Dati letti/, 'nessun messaggio a lettura riuscita');
     assert.deepEqual(await valori(x.page, 1), RESPONSABILE_A_MANO);
     assert.deepEqual(await x.page.evaluate(() => ['fronte', 'retro'].map(l => document.getElementById('ospite1_documento_' + l).files[0].name)), ['cie-fronte.jpg', 'cie-retro.jpg'], 'file del responsabile ancora allegati');
     await avanti(x.page, '#step-3');
@@ -362,7 +379,8 @@ test('ospiti isolati: i dati letti vanno sempre all\'ospite giusto; una lettura 
     await caricaPerOspite(x.page, 3, file('carta-cartacea-it.jpg'));
     const e2 = await attendiEsito(x.page, 2), e3 = await attendiEsito(x.page, 3);
     assert.match(e2, /interrotta/);
-    assert.match(e3, /Dati letti/);
+    assert.equal(await esitoTipo(x.page, 3), 'ok');
+    assert.doesNotMatch(e3, /Dati letti/);
     assert.equal((await valori(x.page, 2)).cognome, '', 'nessun dato della carta spagnola nell\'ospite 2');
     assert.equal((await valori(x.page, 3)).nome, 'CLOTILDE');
   } finally { await x.chiudi(); }
@@ -463,6 +481,36 @@ test('foto come quelle vere: documento piccolo e storto su una tovaglia a disegn
   } finally { await x.chiudi(); }
 });
 
+// 06/11/2026: con lo scatto della fotocamera nella pagina (fotogramma di un video a 720p-1080p) la carta era larga 500-800 px e si
+// perdevano luogo di nascita, comune e provincia. Con il documento ridotto a 520 px la lettura di prima li perdeva; ora le foto
+// piccole si ingrandiscono prima della lettura.
+test('foto piccola, come uno scatto a bassa risoluzione: si leggono anche luogo di nascita, comune, provincia e numero; verdi i dati confermati; solo il titolo sopra i lati', async () => {
+  const x = await apri({ scansione: 'attiva' });
+  try {
+    await iniziaFlusso(x.page);
+    await scegliScansione(x.page, 1);
+    // prima del caricamento: solo il titolo «Documento di identità» e i due lati (niente spiegazioni, avviso, contatore)
+    const visibile = sel => x.page.$eval(sel, e => getComputedStyle(e).display !== 'none' && !!e.getClientRects().length);
+    assert.equal(await visibile('#scan-pannello-1 .document-title'), true);
+    for (const sel of ['#scan-pannello-1 .identity-hint', '#upload-status-1']) assert.equal(await visibile(sel), false, sel + ' nascosto');
+    await x.page.setInputFiles('#ospite1_documento_fronte', { name: 'fronte.jpg', mimeType: 'image/jpeg', buffer: await ridotta(x.page, CIE.fronte, 520) });
+    await x.page.setInputFiles('#ospite1_documento_retro', { name: 'retro.jpg', mimeType: 'image/jpeg', buffer: await ridotta(x.page, CIE.retro, 520) });
+    const esito = await attendiFine(x.page, 1, [1, 2]);
+    assert.equal(await esitoTipo(x.page, 1), 'ok');
+    assert.doesNotMatch(esito, /Dati letti/);
+    assert.deepEqual(await valori(x.page, 1), RESPONSABILE_A_MANO);
+    // verde: tipo (CIE con la MRZ valida), comune e provincia (letti esatti e confermati dall'elenco dei comuni), Stato di nascita
+    for (const k of ['tipo_documento', 'comune', 'provincia', 'luogo_nascita']) {
+      assert.ok(await x.page.$eval('#ospite1_' + k + '__testo', e => e.classList.contains('scan-letto')), k + ': verde');
+    }
+    // altri ospiti: lo stesso titolo sopra i due lati
+    await x.page.evaluate(() => { currentStep = 3; mostraStepCorrente(); });
+    await scegliScansione(x.page, 2);
+    assert.equal((await x.page.locator('#scan-pannello-2 .scan-titolo').innerText()).trim(), '📄 Documento di identità');
+    assert.deepEqual(x.errori, []);
+  } finally { await x.chiudi(); }
+});
+
 test('responsabile: tipo di documento riconosciuto (patente) compilato da controllare; PDF caricato per il gestore non si legge ma resta allegato', async () => {
   const x = await apri({ scansione: 'attiva' });
   try {
@@ -470,7 +518,8 @@ test('responsabile: tipo di documento riconosciuto (patente) compilato da contro
     await scegliScansione(x.page, 1);
     await x.page.setInputFiles('#ospite1_documento_fronte', file('patente-it.jpg'));
     const esito = await attendiFine(x.page, 1, [1]);
-    assert.match(esito, /Dati letti dal documento/);
+    assert.equal(await esitoTipo(x.page, 1), 'ok');
+    assert.doesNotMatch(esito, /Dati letti/);
     // 06/11/2026, richiesta del titolare: niente domanda «È giusto? Sì / Scelgo io»; il tipo si compila, segnato da controllare
     assert.ok(await x.page.$eval('#ospite1_tipo_documento__testo', e => e.classList.contains('scan-verifica') && e.value === 'PATENTE DI GUIDA'), 'tipo compilato, bordo «da controllare»');
     assert.equal(await x.page.locator('#scan-pannello-1 [data-azione="tipo-si"]').count(), 0);
@@ -633,7 +682,8 @@ test('schermo stretto, CPU della pagina rallentata 6 volte (il worker dell\'OCR 
     await caricaPerOspite(x.page, 2, file('passaporto-de.jpg'));
     const esito = await attendiEsito(x.page, 2, 180000);
     misure.passaportoCpuRallentata6x = Date.now() - t0;
-    assert.match(esito, /Data read from the document/);
+    assert.equal(await esitoTipo(x.page, 2), 'ok');
+    assert.doesNotMatch(esito, /Data read/);
     assert.equal((await valori(x.page, 2)).nome, 'TEODORICO');
     const larghezza = await x.page.evaluate(() => document.documentElement.scrollWidth);
     assert.ok(larghezza <= 390, 'nessuno scorrimento orizzontale (' + larghezza + ' px)');

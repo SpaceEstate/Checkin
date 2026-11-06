@@ -44,13 +44,24 @@ primo tocco sul comune). Se non si scarica (rete), il comune torna un testo libe
 
 Sul **telefono**, «📷 Fotografa» (nel riquadro «Documento di identità» del responsabile e, con la scansione, nel pannello degli altri ospiti)
 apre la fotocamera a tutto schermo con il **riquadro** in cui mettere il documento. La fotocamera di sistema non permette di disegnare un
-riquadro: per questo si apre dentro la pagina. Lo scatto è il fotogramma ritagliato sul riquadro (con un margine), quindi il documento
-riempie la foto e le scritte piccole restano leggibili.
+riquadro: per questo si apre dentro la pagina. Lo scatto è ritagliato sul riquadro (con un margine), quindi il documento riempie la foto e
+le scritte piccole restano leggibili.
 
-- Responsabile: la foto va nel riquadro di caricamento come prima (stesso nome di file, stesso campo, JPEG sotto 1 MB, lato lungo 1600 px)
-  e parte per il gestore come prima; manca un lato → si apre subito la fotocamera per quello. Prima la foto della fotocamera era il
-  fotogramma intero a 1280×720 con qualità 0,7: il documento occupava solo una parte e le scritte piccole (luogo di nascita, numero rosso
-  della CIE) non si leggevano.
+Pixel e nitidezza (06/11/2026: nella prova del titolare, con il fotogramma di un video a bassa risoluzione, mancavano luogo di nascita,
+tipo e numero):
+
+- si chiede la risoluzione più alta che la fotocamera dà (fino al 4K, 3840×2160);
+- **zoom 2×** dove il browser lo offre (Safari recenti; sempre dentro i limiti dichiarati): il telefono si tiene a circa 30 cm, dove mette a
+  fuoco anche quando la fotocamera principale non mette a fuoco da vicino (iPhone Pro), e la carta prende più pixel del sensore;
+- allo scatto il riquadro si colora per circa mezzo secondo: si esaminano 5 fotogrammi e si tiene il **più nitido** (toccando il pulsante
+  il telefono si muove);
+- dove c'è lo **scatto vero** (`ImageCapture.takePhoto`, per esempio Chrome su Android) e ha più pixel del video, si usa quello (senza
+  flash), ritagliato con un margine in più; se manca, non ha più pixel o è orientato diversamente, resta il fotogramma.
+
+- Responsabile: la foto va nel riquadro di caricamento come prima (stesso nome di file, stesso campo), JPEG con lato lungo 2000 px (quello
+  su cui lavora la lettura), stesso limite dei file caricati (20 MB); all'invio si comprime come le foto caricate. Manca un lato → si
+  apre subito la fotocamera per quello. Prima la foto della fotocamera era il fotogramma intero a 1280×720 con qualità 0,7, poi (fino al
+  06/11/2026) il fotogramma ritagliato a 1600 px sotto 1 MB.
 - Altri ospiti: lo scatto (una tela in memoria) va solo alla lettura e si azzera subito; nessun file, nessun invio.
 - Se il browser non dà la fotocamera (permesso negato, browser vecchio) compare un messaggio e si usa «Carica una foto».
 - Su un **computer** il pulsante della fotocamera non c'è: si carica un file.
@@ -61,4 +72,6 @@ riempie la foto e le scritte piccole restano leggibili.
 nessuna archiviazione in `fotocamera.js` e `campi-elenco.js`, markup dei passi identico a prima salvo la provincia SU, `openCamera` identica
 a prima salvo il blocco della fotocamera con il riquadro. `tests/browser/scansione.browser.cjs`: campi con elenco (scrivere, scegliere,
 voce inventata, comune e provincia, vecchio nome, «Avanti» fermo, valori dal codice, lingua) e fotocamera con il riquadro (fotocamera finta
-di Chromium: riquadro, scatto nel riquadro del responsabile sotto 1 MB, fotocamera del retro, chiusura).
+di Chromium: riquadro, scatto nel riquadro del responsabile sotto 1 MB, fotocamera del retro, chiusura). Dal 06/11/2026 anche: zoom dentro i
+limiti del browser, zona dello scatto vero, nitidezza dei fotogrammi (`tests/scansione.test.mjs`); foto piccola (CIE sintetica a 520 px)
+letta per intero, con i dati confermati in verde e solo il titolo sopra i lati (`tests/browser/scansione.browser.cjs`).
