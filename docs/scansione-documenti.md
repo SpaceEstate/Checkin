@@ -47,15 +47,31 @@ salvataggio). Le foto sintetiche per provare sono in `tests/browser/documenti-si
 1. L'ospite sceglie «Scansiona documento»: solo ora il browser scarica `scansione/scansione-documento.js` e, alla prima lettura, le librerie
    (circa 4,5 MB la prima volta, poi dalla cache del browser). Tutti i file sono **dello stesso sito** (`scansione/vendor/`).
 2. La foto (lato con i dati o con la MRZ; un secondo lato facoltativo) viene decodificata in memoria: orientamento EXIF, HEIC/HEIF
-   (Safari le apre da solo; altrove heic-to in un worker chiuso subito dopo), riduzione a 2000 px, scala di grigi, contrasto.
-3. Prima lettura OCR (Tesseract.js in un Web Worker) su tutta l'immagine; se ci sono righe che sembrano MRZ, la fascia viene ritagliata,
-   ingrandita, portata in bianco e nero e riletta con i soli caratteri `A-Z0-9<`. Se non si legge nulla si provano le rotazioni
-   (prima quelle dell'asse stimato delle righe di testo), entro un tempo massimo.
-4. `scansione/lettura-documento.js` (modulo puro, provato in CI) interpreta il testo e propone i valori, campo per campo, con un'affidabilità.
-5. Si compilano **solo i campi vuoti** dell'ospite giusto. Un valore già scritto e diverso diventa una scelta («Usa il documento» /
+   (Safari le apre da solo; altrove heic-to in un worker chiuso subito dopo), riduzione a 2000 px, scala di grigi (il canale più chiaro
+   di ogni pixel: le scritte nere restano nere, i fondi colorati del documento schiariscono).
+3. **Prima dell'OCR**, su una copia di 1400 px e senza OCR (`scansione/immagine.js`, pochi decimi di secondo): bianco e nero locale
+   (Sauvola), lettere come macchie, macchie unite in righe di testo (in orizzontale e in verticale, con l'inclinazione), scarto delle
+   «righe» della tovaglia, del portafoglio, dei disegni. Si trovano così la **MRZ** (2 o 3 righe lunghe, parallele, a passo fisso) e la
+   **zona del testo stampato**. L'OCR legge solo quelle zone, ritagliate dritte: è questo che rende la lettura veloce sulle foto vere
+   (documento piccolo, storto, su un fondo a disegni) e le evita di leggere lettere nello sfondo.
+4. **MRZ**: la fascia ritagliata si divide nelle caselle della griglia (caratteri a passo fisso, righe allineate; una casella sbiadita
+   diventa «ignota»). I «<» si riconoscono **dalla forma** (l'OCR li legge spesso L, K o C) e dicono anche se la MRZ è sottosopra.
+   L'OCR (Tesseract.js in un Web Worker, soli caratteri `A-Z0-9<`) legge la fascia tre volte, preparata in modo diverso (solo i
+   caratteri, senza i «<», in grigio); ogni lettera va nella sua casella e le tre letture si uniscono con le **cifre di controllo**
+   (`fondiMrz`): in una casella di sole cifre una O diventa 0, tra più letture vale quella che fa tornare la cifra del campo, un codice
+   di Stato deve esistere. Un campo che non si può decidere resta vuoto (mai «corretto» a caso: vedi Limiti).
+5. **Testo stampato**: la zona ritagliata si legge in uno o due versi (dritta, capovolta) e, se mancano dati, una seconda volta con
+   un'altra impostazione. Le etichette trovano il loro valore anche in colonna (riquadri dell'OCR: sulla CIE «CITTADINANZA» ha il valore
+   sotto di sé, non sulla riga di «SESSO»), saltano le traduzioni lette male («SURAT» per SURNAME) e il rumore dopo il nome.
+6. Se nella foto non si trova nessuna riga ma ci sono lettere (foto piccola o molto sfocata), si legge l'immagine intera come prima,
+   con le rotazioni. Se non ci sono lettere in riga (non è un documento) si risponde subito.
+7. `scansione/lettura-documento.js` (modulo puro, provato in CI) interpreta il testo e propone i valori, campo per campo, con un'affidabilità.
+   Fronte e retro dello stesso ospite si uniscono: per i nomi vale la MRZ se il testo stampato è diverso (di solito è il testo stampato a
+   essere letto male), il testo stampato se coincide (accenti, apostrofi, Ü = UE) o se la MRZ è troncata.
+8. Si compilano **solo i campi vuoti** dell'ospite giusto. Un valore già scritto e diverso diventa una scelta («Usa il documento» /
    «Tieni il mio»). «Annulla la compilazione automatica» rimette tutti i campi come prima.
-6. A fine lettura il worker dell'OCR viene chiuso (con lui la memoria che ha contenuto l'immagine), le tele vengono azzerate, le bitmap chiuse,
-   il campo file svuotato. L'ospite conferma i dati con il solito «Avanti».
+9. A fine lettura il worker dell'OCR viene chiuso (con lui la memoria che ha contenuto l'immagine), le tele e le matrici di grigi vengono
+   azzerate, le bitmap chiuse, il campo file svuotato. L'ospite conferma i dati con il solito «Avanti».
 
 ## Documenti e regole
 
@@ -135,10 +151,18 @@ Nessuna API a pagamento, nessun abbonamento, nessun servizio a consumo.
 
 - `tests/scansione.test.mjs` (con le altre, `npm test`, anche su GitHub): comportamento di prima con la scansione spenta (markup identico,
   funzioni del percorso di oggi invariate), librerie identiche alle impronte, MRZ (specimen ICAO, letture imperfette), secolo, codice fiscale,
-  codici ISO, tipi di documento, testo stampato, controlli, compilazione senza sovrascritture, TXT Alloggiati.
+  codici ISO, tipi di documento, testo stampato, controlli, compilazione senza sovrascritture, TXT Alloggiati. Dal 06/11/2026 anche
+  `scansione/immagine.js` su disegni fatti nella prova (forma del «<», griglia della MRZ con una casella sbiadita, MRZ tra il disordine,
+  storta, in verticale e capovolta, ritagli, nitidezza) e l'unione delle letture con le cifre di controllo, con dati di fantasia.
 - `tests/browser/scansione.browser.cjs` (Chromium + Playwright; su GitHub nel job «scansione»): flusso completo da ospite con API finte,
   verifica di rete, archiviazione, annullamento, isolamento tra ospiti, documenti difficili (rotazioni, sfocatura, MRZ coperta, HEIC, EXIF, PDF,
-  foto qualsiasi), due lati scelti uno dopo l'altro, tempo scaduto, lettore non scaricabile, motore senza SIMD, schermo stretto, inglese.
+  foto qualsiasi), due lati scelti uno dopo l'altro, tempo scaduto, lettore non scaricabile, motore senza SIMD, schermo stretto, inglese, e
+  «foto come quelle vere»: documento sintetico piccolo e storto su una tovaglia a disegni accanto a un portafoglio (CIE fronte girato in
+  verticale e retro, passaporto storto, carta capovolta), con un limite di tempo.
+- Messa a punto sulle foto vere (06/11/2026): sette foto di documenti veri mandate dal titolare (permesso di soggiorno tedesco, due CIE,
+  passaporto) sono state usate **solo sul computer di chi ha fatto le prove** e non sono nel repository. Risultato: tutti i retro con la MRZ
+  letti con le cifre di controllo esatte (un numero di CIE consumato resta vuoto, non sbagliato), fronte e retro insieme danno i dati
+  completi di tutte e tre le persone, 1,3–4 secondi per foto su un computer (prima 4–30 secondi, con dati quasi tutti sbagliati o mancanti).
 
 ### Da provare sui telefoni veri (modalità `'prova'`)
 
@@ -155,10 +179,15 @@ Le prove automatiche usano Chromium. Prima di passare ad `'attiva'` vanno fatte 
 
 - Affidabile soprattutto sulla MRZ (cifre di controllo). Il testo stampato (fronte della CIE, patente, carta cartacea) dipende molto da luce,
   riflessi e font: è sempre «da verificare». La carta cartacea, consumata o scritta a mano, è il caso più difficile.
-- Il nome nella MRZ non ha cifra di controllo; con foto sfocate può uscire storpiato (resta «da verificare»).
-- Lo Stato di nascita degli stranieri quasi sempre va scelto a mano (non è nella MRZ).
+- Il nome nella MRZ non ha cifra di controllo; con foto sfocate può uscire storpiato (resta «da verificare»). Il nome letto solo dal
+  fronte (testo stampato su un fondo disegnato) può avere una lettera sbagliata: con anche il retro vale la MRZ.
+- Numero del documento: una cifra di controllo non basta a ricostruire un carattere sbiadito (A, K e U, per esempio, danno la stessa
+  cifra; quella complessiva contiene il numero con gli stessi pesi e non aiuta). Si corregge solo un carattere incerto se una sola scelta
+  torna; altrimenti il numero resta vuoto e si scrive a mano.
+- Lo Stato di nascita degli stranieri: dalla CIE italiana si legge la sigla tra parentesi (per esempio «(BRA)»); dagli altri documenti
+  quasi sempre va scelto a mano (non è nella MRZ).
 - Testo stampato in alfabeti non latini: non letto (la MRZ sì). PDF: non letti (il PDF del responsabile si invia come prima).
-- Tempi: su un computer recente 2–5 secondi per foto (12 secondi per una foto che non è un documento). **Su un telefono datato non sono stati
+- Tempi: su un computer recente 1–4 secondi per foto (meno di un secondo per una foto che non è un documento). **Su un telefono datato non sono stati
   misurati**: il rallentamento della CPU simulato nelle prove vale per la pagina, non per il worker dell'OCR, quindi non dice quanto ci vorrà.
   Vanno misurati con le prove sui telefoni veri. Tempo massimo per foto 45 s, per la preparazione 60 s: oltre, messaggio e si continua a mano.
   Il motore senza SIMD (iPhone e Android datati) è provato: legge correttamente, con un altro file del motore.

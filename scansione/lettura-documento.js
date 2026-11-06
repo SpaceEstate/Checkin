@@ -107,6 +107,9 @@ const AMBIGUI = { O: ['0', 'Q', 'D'], 0: ['O', 'D', 'Q'], Q: ['0', 'O'], D: ['0'
 const senzaAccenti = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '');
 // Forma di confronto di un nome: maiuscole, senza accenti, solo lettere (come nella MRZ, dove apostrofi e trattini spariscono).
 export const chiaveNome = s => senzaAccenti(s).toUpperCase().replace(/[^A-Z]/g, '');
+// Come la scrive la MRZ (ICAO 9303, traslitterazione): Ä → AE, Ö → OE, Ü → UE, ß → SS, Å → AA, Æ → AE, Ø → OE…
+const TRASLITTERA = { 'Ä': 'AE', 'Ö': 'OE', 'Ü': 'UE', 'ß': 'SS', 'Å': 'AA', 'Æ': 'AE', 'Ø': 'OE', 'Œ': 'OE', 'Þ': 'TH', 'Ð': 'D', 'Ĳ': 'IJ' };
+export const chiaveIcao = s => chiaveNome(String(s || '').toUpperCase().replace(/[ÄÖÜßÅÆØŒÞÐĲ]/g, c => TRASLITTERA[c] || c));
 // Forma di confronto di una voce (Stato, provincia, comune): maiuscole, senza accenti e punteggiatura, spazi singoli.
 const chiaveVoce = s => senzaAccenti(s).toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
 
@@ -253,7 +256,8 @@ function punteggio(righe) {
   let punti = 0;
   for (const d of r.details) {
     if (!d.field) continue;
-    if (/CheckDigit$/.test(d.field) && d.valid) punti += 2;
+    // la cifra di controllo di un campo vale più di quella complessiva (che, con due errori, può tornare per caso)
+    if (/CheckDigit$/.test(d.field) && d.valid) punti += d.field === 'compositeCheckDigit' ? 2 : 3;
     if (d.valid && /^(issuingState|nationality|birthDate|expirationDate|sex|documentCode)$/.test(d.field)) punti += 1;
   }
   return { punti, risultato: r };
@@ -309,11 +313,203 @@ export function trovaMrz(righeLette) {
   return migliore;
 }
 
+// Che cosa può stare in ogni casella della MRZ (ICAO 9303): d = solo cifre, l = lettere o «<», s = sesso (M, F, <),
+// a = tutto. Solo le caselle sicure: i numeri dei documenti e i dati facoltativi possono avere lettere e cifre.
+const VERSO_CIFRA = { O: '0', D: '0', Q: '0', U: '0', I: '1', L: '1', J: '1', Z: '2', S: '5', B: '8', G: '6', T: '7', A: '4' };
+function classiRiga(lunghezza, tratti) {
+  const r = new Array(lunghezza).fill('a');
+  for (const [da, a, c] of tratti) for (let i = da; i <= a; i++) r[i] = c;
+  return r;
+}
+// Dati facoltativi (riga, prima e ultima casella): quasi sempre solo «<»
+const CAMPI_FACOLTATIVI = { TD1: [[0, 15, 29], [1, 18, 28]], TD2: [[1, 28, 34]], TD3: [[1, 28, 41]] };
+const CLASSI_MRZ = {
+  TD1: [classiRiga(30, [[0, 0, 'l'], [2, 4, 'l']]),
+    classiRiga(30, [[0, 6, 'd'], [7, 7, 's'], [8, 14, 'd'], [15, 17, 'l'], [29, 29, 'd']]),
+    classiRiga(30, [[0, 29, 'l']])],
+  TD2: [classiRiga(36, [[0, 0, 'l'], [2, 35, 'l']]),
+    classiRiga(36, [[13, 19, 'd'], [20, 20, 's'], [21, 27, 'd'], [10, 12, 'l'], [35, 35, 'd']])],
+  TD3: [classiRiga(44, [[0, 0, 'l'], [2, 43, 'l']]),
+    classiRiga(44, [[13, 19, 'd'], [20, 20, 's'], [21, 27, 'd'], [10, 12, 'l'], [43, 43, 'd']])]
+};
+
+// Letture della stessa griglia con le righe un po' più lunghe o più corte del formato (un pezzo di sfondo ai bordi della fascia,
+// un carattere iniziale o finale perso): si prova a togliere caselle all'inizio o alla fine (o ad aggiungerne di ignote) e si
+// tiene la scelta con più cifre di controllo esatte, la stessa per tutte le letture (sono le stesse caselle).
+function lunghezzeMrz(lista) {
+  if (!lista.length) return lista;
+  const n = lista[0].righe.length, lunghezze = lista[0].righe.map(r => r.length);
+  if (!lista.every(c => c.righe.length === n && c.righe.every((r, i) => r.length === lunghezze[i]))) return lista;
+  const media = lunghezze.reduce((x, y) => x + y, 0) / n;
+  const attesa = n === 3 ? 30 : n === 2 ? (media > 40 ? 44 : 36) : 0;
+  if (!attesa || lunghezze.every(l => l === attesa) || lunghezze.some(l => Math.abs(l - attesa) > 4)) return lista;
+  // per ogni riga, i modi di portarla alla lunghezza giusta: [quante togliere (o aggiungere, se negativo) all'inizio, alla fine]
+  const modi = lunghezze.map(l => { const d = l - attesa, out = []; for (let k = 0; k <= Math.abs(d); k++) out.push(d >= 0 ? [k, d - k] : [-k, -(Math.abs(d) - k)]); return out; });
+  const taglia = (r, [a, b], riempi) => a >= 0 ? r.slice(a, r.length - b) : riempi.repeat(-a) + r + riempi.repeat(-b);
+  let migliore = null;
+  const giro = (k, scelta) => {
+    if (k === n) {
+      const righe = lista[0].righe.map((r, i) => taglia(r, scelta[i], '?'));
+      const p = punteggio(righe).punti;
+      if (!migliore || p > migliore.p) migliore = { p, scelta: scelta.slice() };
+      return;
+    }
+    for (const m of modi[k]) { scelta.push(m); giro(k + 1, scelta); scelta.pop(); }
+  };
+  giro(0, []);
+  return lista.map(c => ({
+    righe: c.righe.map((r, i) => taglia(r, migliore.scelta[i], '?')),
+    conf: c.conf ? c.conf.map((r, i) => { const [a, b] = migliore.scelta[i]; return a >= 0 ? r.slice(a, r.length - b) : new Array(-a).fill(0).concat(r, new Array(-b).fill(0)); }) : null
+  }));
+}
+
+// Più letture della stessa MRZ (l'OCR su immagini preparate in modo diverso), già divise nelle caselle della griglia.
+// Ogni casella prende il carattere letto con più fiducia. Per i campi con la cifra di controllo (numero, nascita, scadenza):
+//  - se la lettura migliore torna, si tiene;
+//  - se non torna, vale la lettura intera del campo fatta da una delle altre letture, se torna (e sono d'accordo);
+//  - altrimenti si cambia UNA sola casella (con il carattere letto da un'altra lettura, o con ogni cifra dove può stare solo
+//    una cifra e nessuno ha letto niente): se una sola scelta torna il campo è «dedotto» (da controllare);
+//  - se tornano più scelte il campo è «ambiguo» e non si usa. (Una cifra di controllo torna per caso una volta su dieci:
+//    mescolando caratteri di letture diverse si trova quasi sempre una combinazione che torna, ma non è quella giusta;
+//    la cifra complessiva non aiuta, perché contiene gli stessi caratteri con gli stessi pesi.)
+// Restituisce { formato, righe, punti, dedotti, ambigui } oppure null. Nessun carattere inventato: le caselle che nessuna
+// lettura ha letto restano «?».
+export function fondiMrz(candidati) {
+  // un candidato: righe (stringhe) oppure { righe, conf } con la fiducia dell'OCR per ogni casella
+  const norm = lunghezzeMrz(candidati.filter(Boolean).map(c => Array.isArray(c) ? { righe: c, conf: null } : c));
+  const formato = c => c.length === 3 && c.every(r => r.length === 30) ? 'TD1' : c.length === 2 && c.every(r => r.length === 44) ? 'TD3' : c.length === 2 && c.every(r => r.length === 36) ? 'TD2' : null;
+  const gruppi = {};
+  for (const c of norm) { const f = formato(c.righe); if (f) (gruppi[f] = gruppi[f] || []).push(c); }
+  let migliore = null;
+  for (const [f, lista] of Object.entries(gruppi)) {
+    // per ogni casella: i caratteri letti (senza «?»), prima quello con più fiducia sommata. Nelle caselle di sole cifre
+    // una lettera diventa la cifra che le somiglia (O→0, B→8…) e viceversa nelle caselle di sole lettere
+    const classi = CLASSI_MRZ[f];
+    const opzioni = lista[0].righe.map((r, ri) => Array.from(r, (_, i) => {
+      const peso = new Map(), classe = classi[ri][i];
+      for (const c of lista) {
+        let ch = c.righe[ri][i];
+        if (ch === '?') continue;
+        if (classe === 'd' && /[A-Z]/.test(ch)) ch = VERSO_CIFRA[ch] || '?';
+        else if (classe === 'l' && /[0-9]/.test(ch)) ch = VERSO_LETTERA[ch] || '?';
+        else if (classe === 's' && !/[MF<]/.test(ch)) ch = '?';
+        if (ch === '?') continue;
+        peso.set(ch, (peso.get(ch) || 0) + (c.conf ? c.conf[ri][i] : 1));
+      }
+      return [...peso.entries()].sort((x, y) => y[1] - x[1]).map(x => x[0]);
+    }));
+    const celle = opzioni.map(r => r.map(o => o[0] || '?'));
+    // dati facoltativi: una casella in mezzo a una fila di «<» letta come L, K, C… è un «<» che la forma non ha riconosciuto
+    // (un graffio, un riflesso); i nomi non si toccano
+    for (const [ri, da, a] of CAMPI_FACOLTATIVI[f]) for (let i = da; i <= a; i++) {
+      const sx = i > 0 ? celle[ri][i - 1] : '<', dx = i + 1 < celle[ri].length ? celle[ri][i + 1] : '<';
+      if (sx === '<' && (dx === '<' || i === a) && /^[LKCEX(]$/.test(celle[ri][i])) celle[ri][i] = '<';
+    }
+    const righeDa = () => celle.map(r => r.join(''));
+    let r0;
+    try { r0 = parseMrzLibreria(righeDa(), { autocorrect: true }); } catch { continue; }
+    const dedotti = [], ambigui = [];
+    const det = (x, n) => x.details.find(d => d.field === n);
+    const torna = (prova, campo) => {
+      let x = null; try { x = parseMrzLibreria(prova.map(r => r.join('')), { autocorrect: true }); } catch { return false; }
+      return det(x, campo).valid && det(x, campo + 'CheckDigit').valid;
+    };
+    const converti = (ch, classe) => classe === 'd' && /[A-Z]/.test(ch) ? (VERSO_CIFRA[ch] || '?') : classe === 'l' && /[0-9]/.test(ch) ? (VERSO_LETTERA[ch] || '?') : ch;
+    for (const campo of ['documentNumber', 'birthDate', 'expirationDate']) {
+      const d = det(r0, campo), dc = det(r0, campo + 'CheckDigit');
+      if (!d || !dc || d.line == null || dc.line == null || (d.valid && dc.valid)) continue;
+      const posti = [];
+      for (let i = d.start; i < d.end; i++) posti.push([d.line, i]);
+      posti.push([dc.line, dc.start]);
+      // 1) la lettura intera del campo fatta da una delle letture: se torna, vale come una lettura normale
+      const intere = new Map();
+      for (const c of lista) {
+        const prova = celle.map(r => r.slice());
+        let completa = true;
+        for (const [ri, i] of posti) { const ch = converti(c.righe[ri][i], classi[ri][i]); if (ch === '?') completa = false; prova[ri][i] = ch; }
+        if (completa && torna(prova, campo)) intere.set(posti.map(([ri, i]) => prova[ri][i]).join(''), prova);
+      }
+      if (intere.size === 1) { const prova = [...intere.values()][0]; for (const [ri, i] of posti) celle[ri][i] = prova[ri][i]; continue; }
+      if (intere.size > 1) { ambigui.push(campo); continue; }
+      // 2) una sola casella cambiata rispetto alla lettura migliore (un'altra lettura di quella casella; tutte le cifre dove
+      //    può stare solo una cifra e nessuno ha letto niente): si tiene solo se una sola scelta torna, ed è «dedotta»
+      const soluzioni = [];
+      for (const [ri, i] of posti) {
+        const cifra = classi[ri][i] === 'd' || (ri === dc.line && i === dc.start);
+        const alternative = opzioni[ri][i].length ? opzioni[ri][i].slice(1) : (cifra ? Array.from('0123456789') : []);
+        for (const ch of alternative) {
+          if (ch === celle[ri][i]) continue;
+          const prova = celle.map(r => r.slice()); prova[ri][i] = ch;
+          if (torna(prova, campo)) soluzioni.push([ri, i, ch]);
+        }
+      }
+      if (soluzioni.length === 1) { const [ri, i, ch] = soluzioni[0]; celle[ri][i] = ch; dedotti.push(campo); }
+      else if (soluzioni.length > 1) ambigui.push(campo);
+    }
+    // cifra complessiva che non torna, con numero, nascita e scadenza tutti confermati dalle loro cifre: l'errore è nei dati
+    // facoltativi o nella cifra complessiva stessa. Se una sola scelta tra le letture la fa tornare, si tiene. (Con un campo
+    // principale sbagliato no: un carattere qualsiasi dei dati facoltativi potrebbe compensarlo e far tornare la cifra per caso.)
+    let rc; try { rc = parseMrzLibreria(righeDa(), { autocorrect: true }); } catch { rc = null; }
+    const comp = rc && det(rc, 'compositeCheckDigit');
+    const principali = rc ? ['documentNumber', 'birthDate', 'expirationDate'].map(campo => [det(rc, campo), det(rc, campo + 'CheckDigit')]) : [];
+    if (comp && !comp.valid && comp.line != null && principali.every(([d, dc]) => d && dc && d.valid && dc.valid && d.line != null)) {
+      const confermate = new Set();
+      for (const [d, dc] of principali) { for (let i = d.start; i < d.end; i++) confermate.add(d.line + ':' + i); confermate.add(dc.line + ':' + dc.start); }
+      const soluzioni = [];
+      opzioni.forEach((r, ri) => r.forEach((o, i) => {
+        const ultima = ri === comp.line && i === comp.start;
+        if (confermate.has(ri + ':' + i) || classi[ri][i] === 'l' || classi[ri][i] === 's') return;
+        const alternative = o.length > 1 ? o.slice(1) : (ultima && !o.length ? Array.from('0123456789') : []);
+        for (const ch of alternative) {
+          if (ch === celle[ri][i]) continue;
+          const prova = celle.map(x => x.slice()); prova[ri][i] = ch;
+          let x = null; try { x = parseMrzLibreria(prova.map(y => y.join('')), { autocorrect: true }); } catch { x = null; }
+          if (x && det(x, 'compositeCheckDigit').valid) soluzioni.push([ri, i, ch]);
+        }
+      }));
+      if (soluzioni.length === 1) { const [ri, i, ch] = soluzioni[0]; celle[ri][i] = ch; }
+    }
+    // Stato emittente e cittadinanza (nessuna cifra di controllo): se la lettura migliore non è un codice esistente, tra i
+    // caratteri letti dalle letture si cerca l'unica combinazione che dà un codice esistente (TTA, LIA, ITA → ITA)
+    const noto = c => { const x = statoDaCodice(c); return !!x.stato || x.motivo === 'senza_voce'; };
+    for (const campo of ['issuingState', 'nationality']) {
+      const d = det(r0, campo);
+      if (!d || d.line == null) continue;
+      const posti = []; for (let i = d.start; i < d.end; i++) posti.push([d.line, i]);
+      if (noto(posti.map(([ri, i]) => celle[ri][i]).join(''))) continue;
+      const liste = posti.map(([ri, i]) => opzioni[ri][i].length ? opzioni[ri][i] : ['?']);
+      if (liste.reduce((x, o) => x * o.length, 1) > 512) continue;
+      const trovati = [];
+      const giro = (k, pref) => { if (k === liste.length) { if (noto(pref)) trovati.push(pref); return; } for (const ch of liste[k]) giro(k + 1, pref + ch); };
+      giro(0, '');
+      if (trovati.length === 1) posti.forEach(([ri, i], k) => { celle[ri][i] = trovati[0][k]; });
+    }
+    const righe = righeDa(), punti = punteggio(righe).punti;
+    // caselle incerte: lette in modi diversi, o con poca fiducia (per la correzione del numero in leggiMrz)
+    const incerte = [];
+    opzioni.forEach((r, ri) => r.forEach((o, i) => {
+      const peso = lista.reduce((x, c) => x + (c.righe[ri][i] === celle[ri][i] ? (c.conf ? c.conf[ri][i] : 100) : 0), 0);
+      if (o.length !== 1 || peso < lista.length * 50) incerte.push([ri, i]);
+    }));
+    if (!migliore || punti > migliore.punti) migliore = { formato: f, righe, punti, dedotti, ambigui, incerte };
+  }
+  // letture non divise nella griglia (lunghezze diverse): come prima, riga per riga
+  for (const c of norm) {
+    if (formato(c.righe)) continue;
+    const t = trovaMrz(c.righe);
+    if (t && (!migliore || t.punti > migliore.punti)) migliore = Object.assign({ dedotti: [], ambigui: [], incerte: null }, t);
+  }
+  if (!migliore) return null;
+  const p = punteggio(migliore.righe);
+  const cifre = p.risultato ? p.risultato.details.filter(d => d.field && /CheckDigit$/.test(d.field) && d.valid && !(d.field === 'documentNumberCheckDigit' && migliore.ambigui.includes('documentNumber'))).length : 0;
+  return cifre >= 2 ? migliore : null;
+}
+
 // Numero del documento con cifra di controllo sbagliata: prova a sostituire i caratteri che l'OCR confonde (al massimo 2).
 // Se una sola versione fa tornare la cifra di controllo (e, se c'è, anche quella complessiva) la restituisce come «corretta».
-function correggiNumeroDocumento(numero, cifra, verificaComplessiva) {
+function correggiNumeroDocumento(numero, cifra, verificaComplessiva, soloIn) {
   const pos = [];
-  for (let i = 0; i < numero.length; i++) if (AMBIGUI[numero[i]]) pos.push(i);
+  for (let i = 0; i < numero.length; i++) if (AMBIGUI[numero[i]] && (!soloIn || soloIn.has(i))) pos.push(i);
   if (!pos.length || pos.length > 9) return null;
   const trovati = new Set();
   const prova = s => { if (cifraControllo(s) === cifra && (!verificaComplessiva || verificaComplessiva(s))) trovati.add(s); };
@@ -338,12 +534,15 @@ function nomiDaCampoMrz(campo) {
 }
 
 // Interpreta un blocco MRZ (già alla lunghezza esatta). `oggi` (ms) serve per il secolo delle date.
-export function leggiMrz(righe, oggi) {
+export function leggiMrz(righe, oggi, fusione) {
   let r;
   try { r = parseMrzLibreria(righe, { autocorrect: true }); } catch { return null; }
   const det = {};
   for (const d of r.details) if (d.field) det[d.field] = d;
-  const ok = f => !!(det[f] && det[f].valid);
+  // dalla fusione di più letture (fondiMrz): un campo «ambiguo» non si usa, uno «dedotto» resta da controllare
+  const ambigui = new Set((fusione && fusione.ambigui) || []), dedotti = new Set((fusione && fusione.dedotti) || []);
+  const campoDi = f => f.replace(/CheckDigit$/, '');
+  const ok = f => !!(det[f] && det[f].valid) && !ambigui.has(campoDi(f));
   const grezzo = campo => { const d = det[campo]; return d && d.line != null && righe[d.line] ? righe[d.line].slice(d.start, d.end) : ''; };
   const f = r.fields;
   const out = { formato: r.format, codiceDocumento: (righe[0] || '').slice(0, 2), campi: {}, controlli: {}, avvisi: [] };
@@ -355,15 +554,20 @@ export function leggiMrz(righe, oggi) {
   let numero = r.documentNumber || f.documentNumber || null;
   const numeroGrezzo = grezzo('documentNumber'), cifraNumero = grezzo('documentNumberCheckDigit');
   if (ok('documentNumber') && ok('documentNumberCheckDigit') && numero) {
-    out.campi.numeroDocumento = { valore: numero.replace(/</g, ''), affidabilita: out.controlli.complessiva === false ? DA_VERIFICARE : SICURO, fonte: 'mrz' };
-  } else if (numeroGrezzo && /^[0-9]$/.test(cifraNumero) && det.documentNumber.line != null) {
+    out.campi.numeroDocumento = { valore: numero.replace(/</g, ''), affidabilita: out.controlli.complessiva === false || dedotti.has('documentNumber') ? DA_VERIFICARE : SICURO, fonte: 'mrz' };
+    if (dedotti.has('documentNumber')) { out.campi.numeroDocumento.nota = 'corretto'; out.avvisi.push({ codice: 'numero_corretto', campo: 'numeroDocumento' }); }
+  } else if (!ambigui.has('documentNumber') && numeroGrezzo && /^[0-9]$/.test(cifraNumero) && det.documentNumber.line != null) {
     // la cifra di controllo non torna: si prova a correggere i caratteri ambigui (O/0, I/1, B/8, S/5…)
     const rng = det.documentNumber;
+    // con più letture unite (fondiMrz) si correggono solo le caselle incerte (lette in modi diversi o con poca fiducia): la
+    // cifra di controllo, da sola, torna anche cambiando un carattere giusto che compensa quello sbagliato, e quella
+    // complessiva non aiuta (contiene il numero con gli stessi pesi)
+    const incerte = fusione && fusione.incerte ? new Set(fusione.incerte.filter(x => x[0] === rng.line && x[1] >= rng.start && x[1] < rng.end).map(x => x[1] - rng.start)) : null;
     const corretto = correggiNumeroDocumento(numeroGrezzo, cifraNumero, s => {
       const prova = righe.slice();
       prova[rng.line] = prova[rng.line].slice(0, rng.start) + s + prova[rng.line].slice(rng.end);
       try { const x = parseMrzLibreria(prova, { autocorrect: true }); const c = x.details.find(d => d.field === 'compositeCheckDigit'); return !c || c.valid; } catch { return false; }
-    });
+    }, incerte);
     if (corretto) {
       out.campi.numeroDocumento = { valore: corretto.replace(/</g, ''), affidabilita: DA_VERIFICARE, fonte: 'mrz', nota: 'corretto' };
       out.avvisi.push({ codice: 'numero_corretto', campo: 'numeroDocumento' });
@@ -374,7 +578,7 @@ export function leggiMrz(righe, oggi) {
   // nascita
   if (f.birthDate && /^\d{6}$/.test(f.birthDate) && ok('birthDate') && ok('birthDateCheckDigit')) {
     const d = dataNascitaDaAnnoBreve(f.birthDate.slice(0, 2), f.birthDate.slice(2, 4), f.birthDate.slice(4, 6), oggi);
-    if (d) out.campi.nascita = { valore: d.iso, affidabilita: d.incerta ? DA_VERIFICARE : SICURO, fonte: 'mrz', secoloIncerto: d.incerta };
+    if (d) out.campi.nascita = { valore: d.iso, affidabilita: d.incerta || dedotti.has('birthDate') ? DA_VERIFICARE : SICURO, fonte: 'mrz', secoloIncerto: d.incerta };
   }
   // scadenza: non va nel modulo, serve solo all'avviso «documento scaduto»
   if (f.expirationDate && /^\d{6}$/.test(f.expirationDate) && ok('expirationDate') && ok('expirationDateCheckDigit')) {
@@ -433,7 +637,7 @@ export function dateNelTesto(riga) {
 }
 
 const RE_PATENTE = /PATENTE DI GUIDA|DRIVING LICEN[CS]E|F[UÜ]HRERSCHEIN|PERMIS DE CONDUIRE|PERMISO DE CONDUC|RIJBEWIJS|PRAWO JAZDY|K[OÖ]RKORT|CARTA DE CONDU/;
-const RE_CARTA = /CARTA D\W?\s?IDENTIT|CARTA DI IDENTIT|IDENTITY CARD|PERSONALAUSWEIS|CARTE NATIONALE D|DOCUMENTO NACIONAL DE IDENTIDAD|IDENTITEITSKAART|DOWOD OSOBISTY/;
+const RE_CARTA = /CARTA D\W?\s?IDENTIT|CARTA DI IDENTIT|IDENTITY CARD|PERSONALAUSWEIS|CARTE NATIONALE D|DOCUMENTO NACIONAL DE IDENTIDAD|IDENTITEITSKAART|DOWOD OSOBISTY|AUFENTHALTSTITEL|RESIDENCE PERMIT|PERMESSO DI SOGGIORNO|TITRE DE S[EÉ]JOUR|PERMISO DE RESIDENCIA/;
 const RE_PASSAPORTO = /PASSAPORTO|PASSPORT|REISEPASS|PASSEPORT|PASAPORTE|PASPOORT/;
 const RE_ITALIA = /REPUBBLICA ITALIANA|ITALIAN REPUBLIC|MINISTERO DELL\W?INTERNO|MINISTERO DELLE INFRASTRUTTURE|COMUNE DI /;
 
@@ -441,7 +645,7 @@ const RE_ITALIA = /REPUBBLICA ITALIANA|ITALIAN REPUBLIC|MINISTERO DELL\W?INTERNO
 const etichetta = src => new RegExp(src.replace(/ /g, '\\s?'));
 const ETICHETTE = {
   cognome: etichetta('\\b(COGNOME|SURNAME|NACHNAME|NOM\\b|APELLIDOS?)'),
-  nome: etichetta('\\b(NOME|NOMI|GIVEN NAMES?|VORNAMEN?|PR[EÉ]NOMS?|NOMBRES?|FORENAMES?)\\b'),
+  nome: etichetta('\\b(NOME|NOMI|GIVEN NAMES?|VORNAMEN?|PR[EÉ]NOMS?|NOMBRES?|FORENAMES?|NAME)\\b'),
   luogoData: etichetta('LUOGO E DATA DI NASCITA|PLACE AND DATE OF BIRTH'),
   luogo: etichetta('LUOGO DI NASCITA|PLACE OF BIRTH|GEBURTSORT|LIEU DE NAISSANCE|LUGAR DE NACIMIENTO|\\bNAT[OA] A\\b'),
   data: etichetta('DATA DI NASCITA|DATE OF BIRTH|GEBURTSDATUM|GEBURTSTAG|DATE DE NAISSANCE|FECHA DE NACIMIENTO|\\bNAT[OA] IL\\b'),
@@ -457,16 +661,59 @@ const pulisciNomeStampato = s => String(s || '').toUpperCase().replace(/[’‘`
 // Un nome credibile: da 2 a 50 caratteri, al massimo 5 parole, nessuna parola oltre 20 lettere (l'OCR su una foto qualsiasi
 // produce lunghe file di lettere a caso).
 const nomeCredibile = s => !!s && s.length >= 2 && s.length <= 50 && s.split(' ').length <= 5 && s.split(/[ '\-]/).every(p => p.length <= 20);
+
+// Parole delle etichette (soprattutto le traduzioni inglesi, francesi, tedesche…) come l'OCR può leggerle male: «SURAT»,
+// «SUMAME» per SURNAME. Una riga che dopo l'etichetta ha una di queste parole è una riga di etichette, non un valore.
+const PAROLE_ETICHETTA = ['SURNAME', 'SURNAMES', 'NAME', 'NAMES', 'GIVEN', 'FORENAMES', 'NOM', 'NOMS', 'PRENOMS', 'NOMBRE', 'NOMBRES',
+  'APELLIDOS', 'VORNAMEN', 'NACHNAME', 'COGNOME', 'NOME', 'PLACE', 'DATE', 'BIRTH', 'NATIONALITY', 'NATIONALITE', 'SEX', 'SEXE',
+  'HEIGHT', 'ISSUING', 'ISSUE', 'EXPIRY', 'SIGNATURE', 'MUNICIPALITY', 'AUTHORITY', 'STATURA', 'CITTADINANZA', 'SESSO', 'LUOGO',
+  'NASCITA', 'EMISSIONE', 'SCADENZA', 'FIRMA', 'TITOLARE', 'HOLDER', 'GESCHLECHT', 'STAATSANGEHORIGKEIT', 'GEBURTSDATUM'];
+function pareEtichetta(parola) {
+  const p = senzaAccenti(parola).toUpperCase().replace(/[^A-Z]/g, '');
+  if (p.length < 3) return false;
+  return PAROLE_ETICHETTA.some(e => {
+    const d = distanza(p, e), sim = 1 - d / Math.max(p.length, e.length);
+    return sim >= 0.7 || (p.length >= 4 && p.slice(0, 3) === e.slice(0, 3) && sim >= 0.45);
+  });
+}
+// Pulizia del valore di un nome: via le parole con minuscole o simboli (pezzi di firma, di foto, di ologramma) quando ci sono
+// parole tutte maiuscole (i nomi sui documenti sono in maiuscolo; il permesso tedesco scrive il nome in minuscolo: lì resta).
+function soloParoleNome(orig) {
+  const parole = String(orig || '').split(/\s+/).filter(Boolean);
+  const pulite = parole.filter(w => /^[A-ZÀ-ÖØ-Ý][A-ZÀ-ÖØ-Ý'\-]+$/.test(w));
+  return (pulite.length ? pulite : parole).join(' ');
+}
 // Valore che segue un'etichetta: il resto della riga (tolte le etichette in più lingue, le barre e i numeri dei campi tra
-// parentesi come «(1)») oppure, se lì non c'è nulla, la riga sotto (se non è a sua volta un'etichetta).
-function valoreDopoEtichetta(U, re) {
+// parentesi come «(1)»), se sembra davvero un valore (in maiuscolo, non un'altra etichetta letta male); altrimenti la riga
+// sotto, saltando al più due righe di sole etichette (la CIE ha l'etichetta in italiano e sotto quella in inglese).
+// U: righe in maiuscolo; O: le stesse righe come lette (con le minuscole); G: riquadri delle righe (facoltativi): se ci sono,
+// la riga «sotto» è quella più vicina sotto l'etichetta che le sta in colonna (sulla CIE i campi sono su più colonne).
+function valoreDopoEtichetta(U, re, O, G, escludi, accettabile) {
+  O = O || U;
+  const etichettaSola = i => ETICHETTA_QUALSIASI.test(U[i]) && !/[A-Z]{2,}/.test(U[i].replace(ETICHETTE_TUTTE, ' ').replace(/\b[A-Z]{1,3}\b/g, ' ').split(/\s+/).filter(w => !pareEtichetta(w)).join(' '));
+  const sotto = i => {
+    if (!G || !G[i]) return [i + 1, i + 2, i + 3].filter(j => j < U.length);
+    const a = G[i], h = Math.max(4, a.y1 - a.y0);
+    return G.map((b, j) => ({ j, b })).filter(({ j, b }) => j !== i && b && b.y0 >= a.y0 + h * 0.5 && b.y0 <= a.y1 + h * 4.5
+      && Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0) > 0.3 * Math.min(a.x1 - a.x0, b.x1 - b.x0))
+      .sort((x, y) => x.b.y0 - y.b.y0).map(x => x.j).slice(0, 3);
+  };
   for (let i = 0; i < U.length; i++) {
     const m = re.exec(U[i]);
-    if (!m) continue;
-    const resto = U[i].slice(m.index + m[0].length).replace(ETICHETTE_TUTTE, ' ').replace(/(^|\s)[\/|:]+(?=\s|$)|\(\d+\)/g, ' ').replace(/\s+/g, ' ').trim();
-    if (/[A-Z0-9]{2,}/.test(resto) || /^[MF]$/.test(resto)) return { valore: resto, riga: i };
-    const sotto = U[i + 1];
-    if (sotto && !ETICHETTA_QUALSIASI.test(sotto)) return { valore: sotto.trim(), riga: i + 1 };
+    if (!m || (escludi && escludi.test(U[i]))) continue;
+    const fine = m.index + m[0].length;
+    const togli = t => t.replace(ETICHETTE_TUTTE, ' ').replace(/(^|\s)[\/|:.,]+(?=\s|$)|\(\d+\)/g, ' ').replace(/\s+/g, ' ').trim();
+    const resto = togli(U[i].slice(fine)), restoO = O[i].length === U[i].length ? togli(O[i].slice(fine)) : resto;
+    const prima = (restoO.match(/[A-Za-zÀ-ÿ]{3,}/) || [''])[0];
+    const lettere = restoO.replace(/[^A-Za-zÀ-ÿ]/g, ''), maiuscole = restoO.replace(/[^A-ZÀ-ÖØ-Ý]/g, '');
+    const sembraValore = (/[A-Z0-9]{2,}/.test(resto) || /^[MF]$/.test(resto)) && !pareEtichetta(prima) && (!lettere.length || maiuscole.length >= 0.8 * lettere.length)
+      && (!accettabile || accettabile(restoO));
+    if (sembraValore) return { valore: resto, originale: restoO, riga: i, etichetta: i };
+    for (const j of sotto(i)) {
+      if (etichettaSola(j)) continue;
+      if (ETICHETTA_QUALSIASI.test(U[j]) && re.test(U[j])) break;
+      return { valore: U[j].trim(), originale: O[j].trim(), riga: j, etichetta: i };
+    }
   }
   return null;
 }
@@ -476,10 +723,12 @@ export function leggiLuogo(testo, { province, stati }) {
   const s = String(testo || '').toUpperCase();
   const m = /([A-ZÀ-ÖØ-Ý][A-ZÀ-ÖØ-Ý' .\-]{1,40}?)\s*\(\s*([A-ZÀ-ÖØ-Ý' .\-]{2,40}?)\s*\)/.exec(s);
   if (!m) return null;
-  const nome = m[1].replace(/^(A|DI|IN)\s+/, '').trim(), tra = m[2].trim();
+  const nome = m[1].replace(/^(?:[A-Z]\s+)+/, '').replace(/^(A|DI|IN)\s+/, '').trim(), tra = m[2].trim();
   if (/^[A-Z]{2}$/.test(tra) && (province || []).includes(tra)) return { stato: 'Italia', comune: nome, provincia: tra };
   const stato = (stati || []).find(x => chiaveVoce(x) === chiaveVoce(tra));
   if (stato) return { stato, comune: stato === 'Italia' ? nome : undefined, provincia: undefined };
+  // sigla ISO a 3 lettere dello Stato (CIE di chi è nato all'estero: «SAO PAULO (BRA)»)
+  if (/^[A-Z]{3}$/.test(tra) && ISO_STATI[tra] && tra !== 'ITA' && (!stati || !stati.length || stati.includes(ISO_STATI[tra]))) return { stato: ISO_STATI[tra], comune: undefined, provincia: undefined };
   return null;
 }
 
@@ -489,7 +738,16 @@ const RE_NUMERO_CARTA_CARTACEA = /\b([A-Z]{2})\s?(\d{7})\b/;
 // Lettura del testo stampato. `righe`: righe lette dall'OCR, nell'ordine. Restituisce i valori trovati e gli indizi sul tipo.
 export function leggiTestoStampato(righe, opzioni) {
   const o = opzioni || {};
-  const U = (Array.isArray(righe) ? righe : String(righe || '').split('\n')).map(r => String(r || '').toUpperCase().replace(/[’‘`´]/g, "'").replace(/\s+/g, ' ').trim()).filter(Boolean);
+  // righe: stringhe, oppure { testo, bbox: { x0, y0, x1, y1 } } (con i riquadri l'etichetta trova il valore in colonna)
+  const elenco = (Array.isArray(righe) ? righe : String(righe || '').split('\n'))
+    .map(r => (r && typeof r === 'object') ? { t: String(r.testo || ''), b: r.bbox || null } : { t: String(r || ''), b: null })
+    .map(r => ({ t: r.t.replace(/[’‘`´]/g, "'").replace(/\s+/g, ' ').trim(), b: r.b })).filter(r => r.t);
+  const O = elenco.map(r => r.t), G = elenco.some(r => r.b) ? elenco.map(r => r.b) : null;
+  const U = O.map(r => r.toUpperCase());
+  const dopo = (re, escludi, accettabile) => valoreDopoEtichetta(U, re, O, G, escludi, accettabile);
+  // un nome sulla stessa riga dell'etichetta («Cognome PROVACCIA» della carta cartacea) solo se è pulito: lettere maiuscole,
+  // parole di almeno due lettere; altrimenti è un pezzo dell'etichetta inglese letto male («Pe, TES») e il nome è sotto
+  const nomePulito = t => /^[A-ZÀ-ÖØ-Ý][A-ZÀ-ÖØ-Ý' \-]*$/.test(t.trim()) && t.trim().split(/[ '\-]+/).every(p => p.length >= 2);
   const tutto = U.join('\n');
   const indizi = { patente: RE_PATENTE.test(tutto), carta: RE_CARTA.test(tutto), passaporto: RE_PASSAPORTO.test(tutto), italia: RE_ITALIA.test(tutto) };
   const v = { indizi };
@@ -517,13 +775,24 @@ export function leggiTestoStampato(righe, opzioni) {
     const p4b = campoNumerato('4B'); if (p4b) { const d = dateNelTesto(p4b)[0]; if (d) v.scadenza = d.breve ? dataDocumentoDaAnnoBreve(d.anno, d.m, d.g, o.oggi) : (isoValida(+d.anno, d.m, d.g) ? iso(+d.anno, d.m, d.g) : null); }
     const p4a = campoNumerato('4A'); if (p4a) { const d = dateNelTesto(p4a)[0]; if (d) v.rilascio = d.breve ? dataDocumentoDaAnnoBreve(d.anno, d.m, d.g, o.oggi) : (isoValida(+d.anno, d.m, d.g) ? iso(+d.anno, d.m, d.g) : null); }
   } else {
-    const c = valoreDopoEtichetta(U, ETICHETTE.cognome), n = valoreDopoEtichetta(U, ETICHETTE.nome);
-    if (c) v.cognome = pulisciNomeStampato(c.valore);
-    if (n && (!c || n.riga !== c.riga)) v.nome = pulisciNomeStampato(n.valore);
-    const ld = valoreDopoEtichetta(U, ETICHETTE.luogoData);
-    const luogoTesto = ld ? ld.valore : (valoreDopoEtichetta(U, ETICHETTE.luogo) || {}).valore;
+    const c = dopo(ETICHETTE.cognome, null, nomePulito), n = dopo(ETICHETTE.nome, ETICHETTE.cognome, nomePulito);
+    if (c) v.cognome = pulisciNomeStampato(soloParoleNome(c.originale));
+    if (n && (!c || n.riga !== c.riga)) v.nome = pulisciNomeStampato(soloParoleNome(n.originale));
+    // cognome e nome con le etichette sulla stessa riga («NAMEN/VORNAMEN · SURNAMES/FORENAMES»): i valori sono le due righe sotto
+    if (c && !v.nome && c.riga !== c.etichetta && ETICHETTE.nome.test(U[c.etichetta].replace(ETICHETTE.cognome, ' '))) {
+      const j = c.riga + 1;
+      if (U[j] && !ETICHETTA_QUALSIASI.test(U[j]) && !/\d/.test(U[j])) v.nome = pulisciNomeStampato(soloParoleNome(O[j]));
+    }
+    // un nome con una parte senza vocali («CG OVANNA») o di una lettera sola («C OVANNA»): probabilmente letto male (dubbi: la
+    // lettura ne cerca una seconda; se non c'è, si usa lo stesso, da controllare)
+    for (const k of ['cognome', 'nome']) {
+      const parti = v[k] ? v[k].split(/[ '\-]+/).filter(Boolean) : [];
+      if (parti.some(p => (p.length >= 2 && !/[AEIOUYÀ-ÖØ-Ý]/.test(p)) || (p.length === 1 && parti.length > 1))) (v.dubbi = v.dubbi || []).push(k);
+    }
+    const ld = dopo(ETICHETTE.luogoData);
+    const luogoTesto = ld ? ld.valore : (dopo(ETICHETTE.luogo) || {}).valore;
     if (luogoTesto) { const l = leggiLuogo(luogoTesto, o); if (l) v.luogo = l; }
-    const dt = ld ? null : valoreDopoEtichetta(U, ETICHETTE.data);
+    const dt = ld ? null : dopo(ETICHETTE.data);
     const dataTesto = ld ? ld.valore : (dt || {}).valore;
     // carta cartacea: «nato il …», poi (atto n. …), poi «a COMUNE (PR)» nelle due righe sotto
     if (!v.luogo && dt) for (const r of U.slice(dt.riga + 1, dt.riga + 3)) { if (/^A\s/.test(r)) { const l = leggiLuogo(r, o); if (l) { v.luogo = l; break; } } }
@@ -532,17 +801,18 @@ export function leggiTestoStampato(righe, opzioni) {
       if (d && !d.breve && isoValida(+d.anno, d.m, d.g)) v.nascita = iso(+d.anno, d.m, d.g);
       else if (d && d.breve) { const x = dataNascitaDaAnnoBreve(d.anno, d.m, d.g, o.oggi); if (x) { v.nascita = x.iso; v.nascitaIncerta = x.incerta; } }
     }
-    const ct = valoreDopoEtichetta(U, ETICHETTE.cittadinanza);
+    const ct = dopo(ETICHETTE.cittadinanza);
     if (ct) {
       const codice = (ct.valore.match(/\b[A-Z]{3}\b/g) || []).find(c => ISO_STATI[c]);
       if (codice) v.cittadinanza = ISO_STATI[codice];
       else if (/\bITALIAN[AO]\b/.test(ct.valore)) v.cittadinanza = 'Italia';
     }
-    const sx = valoreDopoEtichetta(U, ETICHETTE.sesso);
-    if (sx) { const m = /^\s*([MF])\b/.exec(sx.valore) || /\b([MF])\b/.exec(sx.valore); if (m) v.sesso = m[1]; }
-    const sc = valoreDopoEtichetta(U, ETICHETTE.scadenza);
+    const sx = dopo(ETICHETTE.sesso);
+    // «M», anche se l'OCR ci ha attaccato una lettera minuscola («Mm»)
+    if (sx) { const m = /^\s*([MF])(?![A-Z])/.exec(sx.originale || sx.valore) || /\b([MF])\b/.exec(sx.valore); if (m) v.sesso = m[1]; }
+    const sc = dopo(ETICHETTE.scadenza);
     if (sc) { const ds = dateNelTesto(sc.valore); const d = ds[ds.length - 1]; if (d) v.scadenza = d.breve ? dataDocumentoDaAnnoBreve(d.anno, d.m, d.g, o.oggi) : (isoValida(+d.anno, d.m, d.g) ? iso(+d.anno, d.m, d.g) : null); }
-    const em = valoreDopoEtichetta(U, ETICHETTE.rilascio);
+    const em = dopo(ETICHETTE.rilascio);
     if (em) { const d = dateNelTesto(em.valore)[0]; if (d) v.rilascio = d.breve ? dataDocumentoDaAnnoBreve(d.anno, d.m, d.g, o.oggi) : (isoValida(+d.anno, d.m, d.g) ? iso(+d.anno, d.m, d.g) : null); }
     // CIE: «SCADENZA» e «EMISSIONE» spesso sono sulla stessa riga, con le due date nella riga sotto
     if (!v.scadenza && em) { const ds = dateNelTesto(em.valore); if (ds.length >= 2) { const d = ds[1]; v.scadenza = d.breve ? dataDocumentoDaAnnoBreve(d.anno, d.m, d.g, o.oggi) : (isoValida(+d.anno, d.m, d.g) ? iso(+d.anno, d.m, d.g) : null); } }
@@ -625,12 +895,19 @@ export function combinaLetture(letture, opzioni) {
   const avviso = (codice, campo) => { if (!avvisi.some(a => a.codice === codice && a.campo === campo)) avvisi.push(campo ? { codice, campo } : { codice }); };
   if (mrz) for (const a of mrz.avvisi) avviso(a.codice, a.campo);
 
-  // nomi: struttura della MRZ; il testo stampato conferma (e conserva accenti e apostrofi, che la MRZ non ha)
+  // nomi: struttura della MRZ; il testo stampato conferma (e conserva accenti e apostrofi, che la MRZ non ha: MÜLLER, che
+  // la MRZ scrive MUELLER, è la stessa persona). Se i due differiscono, uno dei due è letto male: vale la MRZ (carattere
+  // fatto per l'OCR, separatori «<» riconosciuti dalla forma, tre letture unite), da controllare, perché sulle foto vere il
+  // testo stampato su un fondo disegnato si legge peggio (GIOVANNA letto «CIOVANNA», «CG OVANNA»). Due eccezioni, in cui vale il
+  // testo stampato: la MRZ troncata (nome lungo: la MRZ ne ha solo l'inizio) e la MRZ con meno di due cifre di controllo esatte.
   for (const k of ['cognome', 'nome']) {
     const m = mrz && mrz.campi[k], s = st[k];
-    if (m && s && chiaveNome(m.valore) === chiaveNome(s)) campi[k] = { valore: s, affidabilita: SICURO, fonte: 'mrz+stampato' };
-    else if (m && s && simili(chiaveNome(m.valore), chiaveNome(s))) campi[k] = { valore: s, affidabilita: DA_VERIFICARE, fonte: 'stampato' };
-    else if (m) campi[k] = Object.assign({}, m);
+    const uguali = m && s && (chiaveNome(m.valore) === chiaveNome(s) || chiaveNome(m.valore) === chiaveIcao(s));
+    const troncata = m && s && mrz.avvisi.some(a => a.codice === 'nome_troncato') && [chiaveNome(s), chiaveIcao(s)].some(x => x.length > chiaveNome(m.valore).length && x.startsWith(chiaveNome(m.valore)));
+    if (uguali) campi[k] = { valore: s, affidabilita: SICURO, fonte: 'mrz+stampato' };
+    else if (m && s && simili(chiaveNome(m.valore), chiaveNome(s)) && (troncata || mrz.verificate < 2)) campi[k] = { valore: s, affidabilita: DA_VERIFICARE, fonte: 'stampato' };
+    else if (m && s && troncata) campi[k] = { valore: s, affidabilita: DA_VERIFICARE, fonte: 'stampato' };
+    else if (m) campi[k] = Object.assign({}, m, s ? { affidabilita: DA_VERIFICARE } : {});
     else if (s) campi[k] = { valore: s, affidabilita: DA_VERIFICARE, fonte: 'stampato' };
   }
   if (mrz && mrz.campi.cognome && mrz.campi.nome && st.cognome && st.nome && chiaveNome(st.cognome) === chiaveNome(mrz.campi.nome.valore) && chiaveNome(st.nome) === chiaveNome(mrz.campi.cognome.valore)) {

@@ -936,7 +936,7 @@ function bloccoUploadLato(ospiteNum, lato) {
 //  'attiva' → compare a tutti.
 // Spegnimento d'emergenza: rimettere 'spenta'. Il codice della scansione (scansione/) si scarica solo se l'ospite la sceglie.
 const SCANSIONE_DOCUMENTI = 'prova';   // 05/11/2026: 'prova' sul branch claude/scansione-documenti per le prove del titolare
-const SCANSIONE_VERSIONE = '20261105b';
+const SCANSIONE_VERSIONE = '20261106a';
 // letto subito: dopo il caricamento daAreaClienti() toglie il frammento «#…» dall'indirizzo
 const scansioneInProva = /(?:^#|&)scansione=prova(?:&|$)/.test(window.location.hash || '');
 

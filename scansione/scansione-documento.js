@@ -10,7 +10,8 @@
 //    loro campi e partono per il gestore come prima (raccogliDatiPrenotazioneConCompressione in checkin.js, invariata).
 //  - si compilano solo i campi vuoti dell'ospite giusto; ogni ospite ha il suo stato; «Annulla la compilazione» ripristina
 //    esattamente i valori di prima. La conferma finale resta dell'ospite. Se qualcosa non va, si continua a mano.
-import * as L from './lettura-documento.js?v=20261105b';
+import * as L from './lettura-documento.js?v=20261106a';
+import * as I from './immagine.js?v=20261106a';
 
 const VENDOR = new URL('./vendor/', import.meta.url);
 const TEMPI = Object.assign({ preparazione: 60000, lettura: 45000 }, (typeof window !== 'undefined' && window.__scansioneTempi) || {});
@@ -18,6 +19,10 @@ const LATO_MAX = 2000;            // lato lungo dell'immagine di lavoro (px)
 const LATO_PRIMA_LETTURA = 1600;  // lato lungo per la prima lettura (testo e posizione della MRZ)
 const MRZ_LETTERE = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<';
 const MINIMO_PASSAGGIO = Math.min(3000, TEMPI.lettura);   // tempo minimo concesso a un passaggio dell'OCR
+const LATO_ANALISI = 1400;        // lato lungo della copia piccola su cui si cercano le righe e la MRZ (senza OCR)
+const ALTEZZA_MRZ = 40;           // altezza delle lettere nel ritaglio della MRZ (px)
+const ALTEZZA_TESTO = 26;         // altezza delle lettere nel ritaglio del testo stampato (px)
+const PARAMETRI_MRZ = { tessedit_char_whitelist: MRZ_LETTERE, tessedit_pageseg_mode: '6' };
 
 let ctx = null;                  // funzioni e dati di checkin.js: t, stati, province, numeroOspiti(), inputDocumento…
 const ospiti = new Map();        // numero dell'ospite → stato isolato
@@ -291,21 +296,193 @@ async function esegui(s, elenco) {
 async function leggiFile(l, file, quota) {
   const immagine = await decodifica(file);
   if (l.annullato) { immagine.chiudi(); throw errore('annullato'); }
-  let lavoroCanvas = null;
+  let pagina = null;
   try {
-    lavoroCanvas = preparaCanvas(immagine);
+    pagina = preparaPagina(immagine);
   } finally {
     immagine.chiudi();
   }
   const inizio = Date.now();
   const resto = () => TEMPI.lettura - (Date.now() - inizio);
   try {
-    const sfocata = misuraSfocatura(lavoroCanvas) < 18;
+    const sfocata = I.nitidezza(pagina.g, pagina.w, pagina.h) < 18;
     if (!l.worker) l.worker = await avviaWorker(l, q => quota(0.05 + 0.25 * q));
     if (l.annullato) throw errore('annullato');
     quota(0.35);
-    // rotazioni: si stima se le righe di testo sono orizzontali o verticali e si provano prima le due rotazioni di quell'asse;
-    // le altre due solo se resta molto tempo (su un telefono lento ogni tentativo costa parecchi secondi)
+    // 1) righe di testo e MRZ cercate su una copia piccola, senza OCR (pochi decimi di secondo): l'OCR leggerà solo quelle
+    //    zone, ritagliate dritte, e non la tovaglia, il portafoglio o i disegni intorno al documento
+    const f = Math.min(1, LATO_ANALISI / Math.max(pagina.w, pagina.h));
+    const pw = Math.max(1, Math.round(pagina.w * f)), ph = Math.max(1, Math.round(pagina.h * f));
+    const piccola = I.riduci(pagina.g, pagina.w, pagina.h, pw, ph);
+    const an = I.analizzaPagina(piccola, pw, ph);
+    piccola.fill(0);
+    const scala = pagina.w / pw;
+    let mrz = null, stampato = null;
+    if (an.mrz) mrz = await leggiZonaMrz(l, pagina, an.mrz, scala, resto);
+    if (l.annullato) throw errore('annullato');
+    quota(0.6);
+    // 2) testo stampato: serve se non c'è una MRZ buona, e sul passaporto per il luogo di nascita (la MRZ non lo contiene)
+    if (an.testo && (!mrz || mrz.formato === 'TD3' || mrz.verificate < 2) && resto() > MINIMO_PASSAGGIO) {
+      stampato = await leggiZonaTesto(l, pagina, an.testo, scala, resto);
+      if (l.annullato) throw errore('annullato');
+    }
+    quota(0.85);
+    // 3) nessuna riga riconoscibile (foto piccola, sfocata o molto storta): lettura dell'immagine intera, come prima. Non se
+    //    nella foto non c'è quasi nessuna lettera in riga (non è un documento): si risponde subito invece che dopo 10-15 s
+    if (!mrz && punteggioStampato(stampato) === 0 && an.lettere >= 12 && resto() > 6000) {
+      const intera = await leggiIntera(l, pagina, resto, q => quota(0.85 + 0.1 * q));
+      if (intera.mrz) mrz = intera.mrz;
+      if (punteggioStampato(intera.stampato) > punteggioStampato(stampato)) stampato = intera.stampato;
+    }
+    const vuota = punteggioLettura({ mrz, stampato }) === 0;
+    return { mrz, stampato, sfocata, vuota };
+  } finally {
+    pagina.g.fill(0);
+  }
+}
+
+const punteggioStampato = st => st ? ['cognome', 'nome', 'nascita', 'numero', 'luogo'].filter(k => st[k]).length : 0;
+
+// MRZ: fascia ritagliata dritta e in bianco e nero; i «<» si riconoscono dalla forma, le altre lettere le legge l'OCR (tre
+// letture della stessa fascia preparata in modo diverso, unite con le cifre di controllo: lettura-documento.js, fondiMrz).
+async function leggiZonaMrz(l, pagina, zm, scala, resto) {
+  const zona = { cx: zm.zona.cx * scala, cy: zm.zona.cy * scala, lungo: zm.zona.lungo * scala, traverso: zm.zona.traverso * scala, angolo: zm.zona.angolo };
+  const fattore = Math.max(0.5, Math.min(4, ALTEZZA_MRZ / (zm.s * scala)));
+  if (zona.lungo * fattore * zona.traverso * fattore > 6e6) return null;
+  const prepara = crop => { const bin = I.sauvola(crop.g, crop.w, crop.h, (ALTEZZA_MRZ * 2) | 1, 0.2); return { crop, bin, gl: I.glifiMrz(bin, crop.w, crop.h, ALTEZZA_MRZ) }; };
+  let x = prepara(I.estrai(pagina.g, pagina.w, pagina.h, zona, fattore));
+  if (x.gl.capovolti > x.gl.chevron) x = prepara(I.ruota180(x.crop));      // MRZ sottosopra: i «<» sono girati
+  const { crop, bin, gl } = x, oggi = Date.now(), grezze = [];
+  try {
+    if (gl.chevron >= 3) {
+      const candidati = [];
+      for (const variante of ['pulita', 'senzaChevron', 'grigio']) {
+        if (candidati.length && resto() < MINIMO_PASSAGGIO) break;
+        const img = variante === 'grigio' ? I.distendi(crop.g) : I.soloGlifi(bin, crop.w, crop.h, gl.lab, gl.righe, variante === 'senzaChevron');
+        const d = await ocr(l, img, crop.w, crop.h, PARAMETRI_MRZ, resto);
+        img.fill(0);
+        grezze.push(righeDaRisultato(d).map(r => r.testo));
+        const simboli = simboliDa(d);
+        const al = gl.righe.map(r => I.allineaSimboli(simboli, r));
+        candidati.push({ righe: al.map(a => a.testo), conf: al.map(a => a.conf) });
+        // le prime due letture coincidono e tornano: la terza non serve
+        if (candidati.length === 2 && candidati[0].righe.join('\n') === candidati[1].righe.join('\n')) {
+          const f2 = L.fondiMrz(candidati), m2 = f2 && L.leggiMrz(f2.righe, oggi, f2);
+          if (m2 && m2.valida) return m2;
+        }
+      }
+      const fusa = L.fondiMrz(candidati);
+      if (fusa) return L.leggiMrz(fusa.righe, oggi, fusa);
+    } else {
+      // nessun «<» riconoscibile: forse non è una MRZ (tre righe regolari sul fronte di una CIE) o la forma dei «<» non si
+      // distingue (foto piccola): una sola lettura del ritaglio, con la pulizia delle righe di prima
+      const d = await ocr(l, I.distendi(crop.g), crop.w, crop.h, PARAMETRI_MRZ, resto);
+      grezze.push(righeDaRisultato(d).map(r => r.testo));
+    }
+    for (const t of grezze) { const m = L.trovaMrz(t); if (m) return L.leggiMrz(m.righe, oggi); }
+    return null;
+  } finally {
+    crop.g.fill(0); bin.fill(0);
+  }
+}
+
+// Testo stampato: la zona con le righe del documento, ritagliata dritta; l'OCR la legge in uno o due versi (dritta e capovolta)
+// e, se mancano dati importanti e c'è tempo, una seconda volta con un'altra impostazione.
+async function leggiZonaTesto(l, pagina, zt, scala, resto) {
+  const base = { cx: zt.cx * scala, cy: zt.cy * scala, lungo: zt.lungo * scala, traverso: zt.traverso * scala, angolo: zt.angolo };
+  const opz = { oggi: Date.now(), stati: ctx.stati, province: ctx.province };
+  const leggi = async (giro, psm, altezza) => {
+    const fattore = Math.max(0.35, Math.min(2.5, altezza / (zt.s * scala)));
+    if (base.lungo * fattore * base.traverso * fattore > 8e6) return null;
+    const crop = I.estrai(pagina.g, pagina.w, pagina.h, Object.assign({}, base, { angolo: base.angolo + giro * Math.PI / 180 }), fattore);
+    const img = I.distendi(crop.g);
+    crop.g.fill(0);
+    try {
+      const d = await ocr(l, img, crop.w, crop.h, { tessedit_pageseg_mode: psm }, resto);
+      const { segmenti, fiducia } = segmentiDa(d);
+      const st = L.leggiTestoStampato(segmenti, opz);
+      return { st, fiducia, giro, punti: punteggioStampato(st) + fiducia / 100 };
+    } finally {
+      img.fill(0);
+    }
+  };
+  let migliore = null;
+  for (const giro of [0, 180]) {
+    if (migliore && resto() < MINIMO_PASSAGGIO) break;
+    const r = await leggi(giro, '11', ALTEZZA_TESTO);
+    if (r && (!migliore || r.punti > migliore.punti)) migliore = r;
+    if (r && r.fiducia >= 45 && punteggioStampato(r.st) >= 1) break;         // verso giusto: il capovolto non serve
+  }
+  if (!migliore) return null;
+  const dubbi = new Set(migliore.st.dubbi || []);
+  const mancano = ['cognome', 'nome', 'nascita', 'luogo'].filter(k => !migliore.st[k] || dubbi.has(k)).length;
+  if (mancano && migliore.fiducia >= 45 && resto() > 2 * MINIMO_PASSAGGIO) {
+    const r2 = await leggi(migliore.giro, '3', ALTEZZA_TESTO - 2);
+    if (r2) {
+      const st = migliore.st, dubbi2 = new Set(r2.st.dubbi || []);
+      for (const [k, val] of Object.entries(r2.st)) {
+        if (k === 'indizi') { for (const [i, b] of Object.entries(val || {})) st.indizi[i] = st.indizi[i] || b; }
+        else if (k === 'credibile') st.credibile = st.credibile || val;
+        else if (k === 'dubbi') continue;
+        else if (val != null && (st[k] == null || (dubbi.has(k) && !dubbi2.has(k)))) st[k] = val;   // un nome dubbio lascia il posto a uno pulito
+      }
+    }
+  }
+  return migliore.st;
+}
+
+// Un passaggio dell'OCR su una matrice di grigi (la tela si azzera subito dopo).
+async function ocr(l, img, w, h, parametri, resto) {
+  const c = nuovaTela(w, h), g = c.getContext('2d');
+  const dati = g.createImageData(c.width, c.height), p = dati.data;
+  for (let i = 0, j = 0; i < img.length; i++, j += 4) { p[j] = p[j + 1] = p[j + 2] = img[i]; p[j + 3] = 255; }
+  g.putImageData(dati, 0, 0);
+  p.fill(0);
+  try {
+    const r = await conTempo(l.worker.recognize(c, parametri, { text: true, blocks: true }), Math.max(MINIMO_PASSAGGIO, resto()), 'timeout');
+    if (l.annullato) throw errore('annullato');
+    return r && r.data;
+  } finally {
+    azzera(c);
+  }
+}
+
+function simboliDa(data) {
+  const out = [];
+  for (const b of (data && data.blocks) || []) for (const p of b.paragraphs || []) for (const r of p.lines || []) for (const w of r.words || []) for (const s of w.symbols || []) out.push(s);
+  return out;
+}
+
+// Righe del testo stampato come pezzi con il loro riquadro: una riga dell'OCR si divide dove le parole sono molto distanti
+// (sulla CIE «SESSO», «STATURA» e «CITTADINANZA» sono tre colonne). In ordine dall'alto in basso, da sinistra a destra.
+function segmentiDa(data) {
+  const segmenti = [];
+  let somma = 0, n = 0;
+  for (const b of (data && data.blocks) || []) for (const p of b.paragraphs || []) for (const r of p.lines || []) {
+    const parole = (r.words || []).filter(w => w && w.bbox && String(w.text || '').trim());
+    const altezze = parole.map(w => w.bbox.y1 - w.bbox.y0).sort((x, y) => x - y), alt = altezze[altezze.length >> 1] || 10;
+    let seg = null;
+    for (const w of parole) {
+      somma += w.confidence || 0; n++;
+      if (seg && w.bbox.x0 - seg.bbox.x1 <= 2.5 * alt) {
+        seg.testo += ' ' + w.text.trim();
+        seg.bbox.x1 = Math.max(seg.bbox.x1, w.bbox.x1); seg.bbox.y0 = Math.min(seg.bbox.y0, w.bbox.y0); seg.bbox.y1 = Math.max(seg.bbox.y1, w.bbox.y1);
+      } else {
+        if (seg) segmenti.push(seg);
+        seg = { testo: w.text.trim(), bbox: { x0: w.bbox.x0, y0: w.bbox.y0, x1: w.bbox.x1, y1: w.bbox.y1 } };
+      }
+    }
+    if (seg) segmenti.push(seg);
+  }
+  segmenti.sort((a, b) => (a.bbox.y0 - b.bbox.y0) || (a.bbox.x0 - b.bbox.x0));
+  return { segmenti, fiducia: n ? somma / n : 0 };
+}
+
+// Ripiego: l'immagine intera, come prima della ricerca delle zone (rotazioni secondo il verso delle righe, MRZ dalla prima
+// lettura o dal terzo inferiore).
+async function leggiIntera(l, pagina, resto, quota) {
+  const lavoroCanvas = telaDa(I.distendi(pagina.g), pagina.w, pagina.h);
+  try {
     const asseVerticale = righeVerticali(lavoroCanvas);
     const rotazioni = asseVerticale ? [90, 270, 0, 180] : [0, 180, 90, 270];
     let migliore = null;
@@ -315,7 +492,7 @@ async function leggiFile(l, file, quota) {
       const tela = rotazioni[r] === 0 ? lavoroCanvas : ruota(lavoroCanvas, rotazioni[r]);
       try {
         const lettura = await leggiTela(l, tela, resto);
-        quota(0.35 + 0.6 * (r + 1) / rotazioni.length);
+        quota((r + 1) / rotazioni.length);
         if (!migliore || punteggioLettura(lettura) > punteggioLettura(migliore)) migliore = lettura;
         if (migliore.mrz && migliore.mrz.verificate >= 2) break;
         if (punteggioLettura(migliore) >= 3) break;
@@ -323,11 +500,19 @@ async function leggiFile(l, file, quota) {
         if (tela !== lavoroCanvas) azzera(tela);
       }
     }
-    const vuota = !migliore || punteggioLettura(migliore) === 0;
-    return { mrz: migliore && migliore.mrz, stampato: migliore && migliore.stampato, sfocata, vuota };
+    return { mrz: migliore && migliore.mrz, stampato: migliore && migliore.stampato };
   } finally {
     azzera(lavoroCanvas);
   }
+}
+
+function telaDa(img, w, h) {
+  const c = nuovaTela(w, h), g = c.getContext('2d', { willReadFrequently: true });
+  const dati = g.createImageData(c.width, c.height), p = dati.data;
+  for (let i = 0, j = 0; i < img.length; i++, j += 4) { p[j] = p[j + 1] = p[j + 2] = img[i]; p[j + 3] = 255; }
+  g.putImageData(dati, 0, 0);
+  p.fill(0); img.fill(0);
+  return c;
 }
 
 const punteggioLettura = x => !x ? 0 : (x.mrz ? 2 + x.mrz.verificate : 0) + (x.stampato ? ['cognome', 'nome', 'nascita', 'numero', 'luogo'].filter(k => x.stampato[k]).length : 0);
@@ -537,34 +722,26 @@ function nuovaTela(w, h) {
 }
 function azzera(c) { if (c && c.width) { c.width = 0; c.height = 0; } }
 
-// Immagine di lavoro: ridotta (lato lungo al massimo LATO_MAX), girata se serve, in scala di grigi con il contrasto disteso.
-function preparaCanvas(img) {
+// Immagine di lavoro: ridotta (lato lungo al massimo LATO_MAX), girata se serve, come matrice di grigi (il canale più chiaro
+// di ogni pixel: scritte nere, fondi colorati chiari). La tela usata per disegnarla si azzera subito.
+function preparaPagina(img) {
   const f = Math.min(1, LATO_MAX / Math.max(img.w, img.h));
   const w = img.w * f, h = img.h * f, gira = img.rotazione === 90 || img.rotazione === 270;
   const c = nuovaTela(gira ? h : w, gira ? w : h), g = c.getContext('2d', { willReadFrequently: true });
-  g.imageSmoothingQuality = 'high';
-  g.save();
-  g.translate(c.width / 2, c.height / 2);
-  g.rotate(img.rotazione * Math.PI / 180);
-  g.drawImage(img.sorgente, -w / 2, -h / 2, w, h);
-  g.restore();
-  grigiContrasto(c);
-  return c;
-}
-
-function grigiContrasto(c) {
-  const g = c.getContext('2d', { willReadFrequently: true });
-  const dati = g.getImageData(0, 0, c.width, c.height), p = dati.data;
-  const ist = new Uint32Array(256);
-  for (let i = 0; i < p.length; i += 4) { const y = (p[i] * 299 + p[i + 1] * 587 + p[i + 2] * 114) / 1000 | 0; p[i] = y; ist[y]++; }
-  const tot = p.length / 4;
-  let basso = 0, alto = 255, somma = 0;
-  for (let v = 0; v < 256; v++) { somma += ist[v]; if (somma >= tot * 0.01) { basso = v; break; } }
-  somma = 0;
-  for (let v = 255; v >= 0; v--) { somma += ist[v]; if (somma >= tot * 0.01) { alto = v; break; } }
-  const k = alto > basso + 10 ? 255 / (alto - basso) : 1;
-  for (let i = 0; i < p.length; i += 4) { const y = Math.max(0, Math.min(255, (p[i] - basso) * k)); p[i] = p[i + 1] = p[i + 2] = y; p[i + 3] = 255; }
-  g.putImageData(dati, 0, 0);
+  try {
+    g.imageSmoothingQuality = 'high';
+    g.save();
+    g.translate(c.width / 2, c.height / 2);
+    g.rotate(img.rotazione * Math.PI / 180);
+    g.drawImage(img.sorgente, -w / 2, -h / 2, w, h);
+    g.restore();
+    const dati = g.getImageData(0, 0, c.width, c.height);
+    const grigio = I.grigioMassimo(dati.data, c.width, c.height);
+    dati.data.fill(0);
+    return { g: grigio, w: c.width, h: c.height };
+  } finally {
+    azzera(c);
+  }
 }
 
 function riduci(c, lato) {
@@ -624,24 +801,6 @@ function righeVerticali(c) {
     }
     const varianza = a => { let m = 0; for (const v of a) m += v; m /= a.length || 1; let q = 0; for (const v of a) q += (v - m) * (v - m); return q / (a.length || 1) / ((m * m) || 1); };
     return varianza(colonne) > varianza(righe) * 1.6;
-  } finally {
-    if (piccola !== c) azzera(piccola);
-  }
-}
-
-// Nitidezza: varianza del laplaciano su una copia piccola. Valori bassi = foto mossa o sfocata.
-function misuraSfocatura(c) {
-  const piccola = riduci(c, 512);
-  try {
-    const g = piccola.getContext('2d', { willReadFrequently: true });
-    const { data: p, width: w, height: h } = g.getImageData(0, 0, piccola.width, piccola.height);
-    let n = 0, s = 0, s2 = 0;
-    for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
-      const i = (y * w + x) * 4;
-      const v = 4 * p[i] - p[i - 4] - p[i + 4] - p[i - w * 4] - p[i + w * 4];
-      s += v; s2 += v * v; n++;
-    }
-    return n ? Math.sqrt(s2 / n - (s / n) * (s / n)) : 0;
   } finally {
     if (piccola !== c) azzera(piccola);
   }

@@ -141,6 +141,30 @@ async function trasforma(page, percorso, op) {
   return Buffer.from(out, 'base64');
 }
 
+// Foto «come quelle vere»: il documento sintetico piccolo e storto, su una tovaglia grigia a rami bianchi, accanto a un
+// portafoglio scuro (le foto vere dei titolari erano così: 06/11/2026). Disegnata nel browser, sempre uguale (seme fisso).
+async function inScena(page, percorso, { angolo = 0, scala = 0.5, seme = 1 } = {}) {
+  const b64 = fs.readFileSync(percorso).toString('base64');
+  const out = await page.evaluate(async ({ b64, angolo, scala, seme }) => {
+    const bmp = await createImageBitmap(await (await fetch('data:image/jpeg;base64,' + b64)).blob());
+    const c = document.createElement('canvas'); c.width = 1500; c.height = 2000;
+    const g = c.getContext('2d');
+    let s = seme; const caso = () => (s = (s * 16807) % 2147483647) / 2147483647;
+    g.fillStyle = '#8e9196'; g.fillRect(0, 0, c.width, c.height);
+    g.strokeStyle = '#f2f2f2'; g.lineCap = 'round';
+    for (let k = 0; k < 160; k++) {
+      const x = caso() * c.width, y = caso() * c.height, l = 40 + caso() * 160, a = caso() * Math.PI * 2;
+      g.lineWidth = 4 + caso() * 14;
+      g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + Math.cos(a + 0.6) * l * 0.6, y + Math.sin(a + 0.6) * l * 0.6, x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke();
+    }
+    g.fillStyle = '#1d1a18'; g.fillRect(250, 60, 1000, 640);
+    g.save(); g.translate(c.width / 2, c.height * 0.6); g.rotate(angolo * Math.PI / 180); g.scale(scala, scala);
+    g.drawImage(bmp, -bmp.width / 2, -bmp.height / 2); g.restore();
+    return c.toDataURL('image/jpeg', 0.85).split(',')[1];
+  }, { b64, angolo, scala, seme });
+  return Buffer.from(out, 'base64');
+}
+
 const CIE = { fronte: file('cie-fronte.jpg'), retro: file('cie-retro.jpg') };
 const RESPONSABILE_A_MANO = { cognome: 'PROVACCIA', nome: 'ERMENEGILDA', genere: 'F', nascita: '1980-04-19', cittadinanza: 'Italia', luogo_nascita: 'Italia',
   comune: 'ROMA', provincia: 'RM', tipo_documento: "CARTA IDENTITA' ELETTRONICA", numero_documento: 'CA12345XY', luogo_rilascio: 'Italia' };
@@ -392,6 +416,43 @@ test('documenti e foto difficili (ospite diverso dal responsabile): rotazioni, s
   } finally { await x.chiudi(); }
 });
 
+test('foto come quelle vere: documento piccolo e storto su una tovaglia a disegni, accanto a un portafoglio; letto in pochi secondi', async () => {
+  const x = await apri({ scansione: 'attiva' });
+  try {
+    await iniziaFlusso(x.page);
+    await x.page.evaluate(() => { currentStep = 3; mostraStepCorrente(); });
+    // ospite 2: CIE, fronte girato di quasi 90° (foto in verticale) e retro storto di 4°, metà della foto
+    await scegliScansione(x.page, 2);
+    const fronte = await inScena(x.page, file('cie-fronte.jpg'), { angolo: 87, scala: 0.5, seme: 5 });
+    const retro = await inScena(x.page, file('cie-retro.jpg'), { angolo: 4, scala: 0.5, seme: 3 });
+    let t0 = Date.now();
+    await caricaPerOspite(x.page, 2, null, 1, fronte);
+    await caricaPerOspite(x.page, 2, null, 2, retro);
+    await attendiFine(x.page, 2, [1, 2]);
+    misure['scena: CIE fronte e retro'] = Date.now() - t0;
+    const v2 = await valori(x.page, 2);
+    assert.deepEqual([v2.cognome, v2.nome, v2.genere, v2.nascita, v2.cittadinanza, v2.luogo_nascita, v2.comune, v2.provincia],
+      ['PROVACCIA', 'ERMENEGILDA', 'F', '1980-04-19', 'Italia', 'Italia', 'ROMA', 'RM']);
+    // ospite 3: passaporto storto di −5°, carta spagnola capovolta (183°)
+    await x.page.evaluate(() => { currentStep = 4; mostraStepCorrente(); });
+    await scegliScansione(x.page, 3);
+    for (const [f, op, attesi] of [['passaporto-de.jpg', { angolo: -5, scala: 0.55, seme: 9 }, ['PROVACCIA', 'TEODORICO', 'M', '2010-11-10', 'Germania']],
+      ['carta-estera-es.jpg', { angolo: 183, scala: 0.45, seme: 13 }, ['ESEMPIO', 'LUCIA', 'F', '1992-07-21', 'Spagna']]]) {
+      await imposta(x.page, 3, { luogo_nascita: '', cognome: '', nome: '', genere: '', nascita: '', cittadinanza: '' });
+      t0 = Date.now();
+      await caricaPerOspite(x.page, 3, null, 1, await inScena(x.page, file(f), op));
+      await attendiEsito(x.page, 3);
+      misure['scena: ' + f] = Date.now() - t0;
+      const v = await valori(x.page, 3);
+      assert.deepEqual([v.cognome, v.nome, v.genere, v.nascita, v.cittadinanza], attesi, f);
+    }
+    // in pochi secondi anche qui (prima di questa versione la sola lettura di una foto così durava decine di secondi);
+    // limite largo per le macchine lente della CI: i tempi veri vanno misurati sui telefoni
+    for (const k of Object.keys(misure).filter(k => k.startsWith('scena:'))) assert.ok(misure[k] < 30000, k + ': ' + misure[k] + ' ms');
+    assert.deepEqual(x.errori, []);
+  } finally { await x.chiudi(); }
+});
+
 test('responsabile: tipo di documento suggerito (patente) confermato con un tocco; PDF caricato per il gestore non si legge ma resta allegato', async () => {
   const x = await apri({ scansione: 'attiva' });
   try {
@@ -448,7 +509,8 @@ test('responsabile: il riquadro del documento sale in cima e torna al suo posto;
 });
 
 test('tempo scaduto e lettore non scaricabile: messaggio chiaro, si continua a mano', async () => {
-  const lento = await apri({ scansione: 'attiva', initScript: () => { window.__scansioneTempi = { lettura: 300 }; } });
+  // tempo di lettura simulato: 50 ms (06/11/2026: era 300 ms, ma la lettura per zone ora ci sta dentro e il limite non scattava)
+  const lento = await apri({ scansione: 'attiva', initScript: () => { window.__scansioneTempi = { lettura: 50 }; } });
   try {
     await iniziaFlusso(lento.page);
     await scegliScansione(lento.page, 1);

@@ -83,14 +83,14 @@ NODE_PATH=/tmp/pw/node_modules node --test tests/browser/scansione.browser.cjs  
 
 Per provare il flusso da ospite senza dati veri: `node tests/browser/server-prova.cjs 8765 attiva` e aprire `http://127.0.0.1:8765/` (prenotazione `PROVA1`). Nel repository non vanno mai immagini di documenti reali (`.gitignore`).
 
-## Baseline (05/11/2026, dopo la scansione facoltativa dei documenti: 21 prove nuove in `tests/scansione.test.mjs`)
+## Baseline (06/11/2026, dopo la lettura per zone delle foto vere: 6 prove nuove in `tests/scansione.test.mjs`, 1 in `tests/browser/scansione.browser.cjs`)
 
 | Prova | Risultato |
 |---|---|
-| `npm test` senza variabili | 90 ok, 0 falliti, 4 saltati |
-| con `LACOLUMBERA_DIR` e `TEST_DATABASE_URL` (PostgreSQL 16 locale con SSL) | 94 ok, 0 falliti, 0 saltati (verificato il 05/11/2026 con il solo `LACOLUMBERA_DIR`: 91 ok, 3 saltati, quelli del database; le prove nuove non usano il database) |
-| `tests/browser/scansione.browser.cjs` (Chromium, Playwright 1.63.0) | 13 ok, 0 falliti, 0 saltati |
+| `npm test` senza variabili | 96 ok, 0 falliti, 4 saltati |
+| con `LACOLUMBERA_DIR` e `TEST_DATABASE_URL` (PostgreSQL 16 locale con SSL) | 100 ok, 0 falliti, 0 saltati (verificato il 06/11/2026 con il solo `LACOLUMBERA_DIR`: 97 ok, 3 saltati, quelli del database; le prove nuove non usano il database) |
+| `tests/browser/scansione.browser.cjs` (Chromium, Playwright 1.63.0) | 14 ok, 0 falliti, 0 saltati |
 
-Prima della scansione dei documenti (commit `aca8d57`): 69 ok e 4 saltati; 73 ok con le variabili. Prima dei nomi ufficiali dei paesi (commit `36f8683`): 68 ok e 4 saltati; 72 ok con le variabili. Prima della correzione degli Stati (commit `b152d3e`): 67 ok e 4 saltati; 71 ok con le variabili. Prima del selettore della lingua con bandiere disegnate (commit `262b272`): 66 ok e 4 saltati; 70 ok con le variabili. Prima del PDF di riepilogo nello stile del sito (commit `1586d31`): 65 ok e 4 saltati; 69 ok con le variabili. Prima dell'email nel pagamento nella pagina (commit `ae993ac`): 63 ok e 4 saltati; 67 ok con le variabili. Prima della prova del pagamento nella pagina lato browser (commit `cb17045`): 62 ok e 4 saltati; 66 ok con le variabili. Prima delle scritte in oro (commit `853a5ee`): 61 ok e 4 saltati; 65 ok con le variabili. Prima delle regole per Gmail (commit `c37476d`): 60 ok e 4 saltati; 64 ok con le variabili. Prima della nuova email all'ospite (commit `63e4da8`): 50 ok e 3 saltati; 53 ok con le variabili.
+Prima della lettura per zone (commit `f61c70b`): 90 ok e 4 saltati, 94 ok con le variabili; 13 prove nel browser. Prima della scansione dei documenti (commit `aca8d57`): 69 ok e 4 saltati; 73 ok con le variabili. Prima dei nomi ufficiali dei paesi (commit `36f8683`): 68 ok e 4 saltati; 72 ok con le variabili. Prima della correzione degli Stati (commit `b152d3e`): 67 ok e 4 saltati; 71 ok con le variabili. Prima del selettore della lingua con bandiere disegnate (commit `262b272`): 66 ok e 4 saltati; 70 ok con le variabili. Prima del PDF di riepilogo nello stile del sito (commit `1586d31`): 65 ok e 4 saltati; 69 ok con le variabili. Prima dell'email nel pagamento nella pagina (commit `ae993ac`): 63 ok e 4 saltati; 67 ok con le variabili. Prima della prova del pagamento nella pagina lato browser (commit `cb17045`): 62 ok e 4 saltati; 66 ok con le variabili. Prima delle scritte in oro (commit `853a5ee`): 61 ok e 4 saltati; 65 ok con le variabili. Prima delle regole per Gmail (commit `c37476d`): 60 ok e 4 saltati; 64 ok con le variabili. Prima della nuova email all'ospite (commit `63e4da8`): 50 ok e 3 saltati; 53 ok con le variabili.
 
 Quando un intervento aggiunge prove, aggiornare questa tabella nello stesso commit.

@@ -324,16 +324,222 @@ test('OCR imperfetto: «<» letti come C/K, etichette senza spazi («NATAIL»), 
   assert.equal(L.trovaMrz(['ANRAEIENSEELIWRENNARATERESHANSNQWERTYUIOPAS<', 'ZXCVBNMLKJHGFDSAQWERTYUIOPLKJHGFDSAZXCVBNMQ<']), null);
 });
 
-test('nomi: MRZ e testo stampato quasi uguali (lettura imperfetta, Ü/UE) → vale il testo stampato, da verificare', () => {
+test('nomi: MRZ e testo stampato quasi uguali → vale la MRZ, da verificare; Ü/UE e MRZ troncata → il testo stampato', () => {
   const m = L.leggiMrz(L.trovaMrz(td3({ stato: 'D', cittadinanza: 'D', cognome: 'MUELLER', nome: 'TEODORID', numero: 'C01X00T47', nascita: '101110', sesso: 'M', scadenza: '300101' })).righe, OGGI);
   const st = L.leggiTestoStampato(['REISEPASS / PASSPORT', 'NAME / SURNAME / NOM', 'MÜLLER', 'VORNAMEN / GIVEN NAMES / PRÉNOMS', 'TEODORICO'], OPZ);
   assert.equal(st.nome, 'TEODORICO', 'etichetta accentata («PRÉNOMS») riconosciuta');
   const r = L.combinaLetture([{ mrz: m, stampato: st }], OPZ);
-  assert.deepEqual([r.campi.cognome.valore, r.campi.nome.valore], ['MÜLLER', 'TEODORICO']);
-  assert.equal(r.campi.nome.affidabilita, L.DA_VERIFICARE);
+  assert.deepEqual([r.campi.cognome.valore, r.campi.cognome.affidabilita], ['MÜLLER', L.SICURO], 'MÜLLER = MUELLER (traslitterazione ICAO)');
+  assert.deepEqual([r.campi.nome.valore, r.campi.nome.affidabilita], ['TEODORID', L.DA_VERIFICARE], 'diversi: la MRZ, da controllare');
+  // come sulle foto vere (CIE): GIOVANNA nella MRZ, «CIOVANNA» nel testo stampato → GIOVANNA
+  const cie = L.leggiMrz(L.trovaMrz(td1({ tipo: 'C<', stato: 'ITA', cognome: 'PROVACCIA', nome: 'GIOVANNA', numero: 'CA00000AA', nascita: '800419', sesso: 'F', scadenza: '300419' })).righe, OGGI);
+  const r2 = L.combinaLetture([{ mrz: cie, stampato: L.leggiTestoStampato(['COGNOME / SURNAME', 'PROVACCIA', 'NOME / NAME', 'CIOVANNA'], OPZ) }], OPZ);
+  assert.equal(r2.campi.nome.valore, 'GIOVANNA');
+  // MRZ troncata (nome lungo): la MRZ ha solo l'inizio, vale il testo stampato
+  const lungo = td3({ stato: 'D', cittadinanza: 'D', cognome: 'MUELLER', nome: 'TEODORICO MASSIMILIANO GIOVANNI', numero: 'C01X00T47', nascita: '101110', sesso: 'M', scadenza: '300101' });
+  assert.ok(!lungo[0].endsWith('<'), 'la riga dei nomi è piena');
+  const mt = L.leggiMrz(L.trovaMrz(lungo).righe, OGGI);
+  const st3 = L.leggiTestoStampato(['REISEPASS / PASSPORT', 'NAME / SURNAME / NOM', 'MÜLLER', 'VORNAMEN / GIVEN NAMES / PRÉNOMS', 'TEODORICO MASSIMILIANO GIOVANNI'], OPZ);
+  const r3 = L.combinaLetture([{ mrz: mt, stampato: st3 }], OPZ);
+  assert.deepEqual([r3.campi.nome.valore, r3.campi.nome.affidabilita], ['TEODORICO MASSIMILIANO GIOVANNI', L.DA_VERIFICARE]);
 });
 
 // ---- Aggancio in checkin.js e regole di privacy del codice della scansione ----
+
+// ---- Foto vere (06/11/2026): righe di testo e MRZ trovate prima dell'OCR, «<» riconosciuti dalla forma, letture unite ----
+// Le prove usano solo disegni fatti qui e dati di fantasia: le foto dei documenti veri usate per mettere a punto il codice
+// sono rimaste sul computer di chi ha fatto le prove e non sono nel repository.
+const I = await import('../scansione/immagine.js');
+function foglio(w, h) { return { g: new Uint8Array(w * h).fill(255), w, h }; }
+function tratto(t, x0, y0, x1, y1, sp) {
+  const n = Math.ceil(Math.hypot(x1 - x0, y1 - y0)) * 2 + 1, r = sp / 2;
+  for (let k = 0; k <= n; k++) {
+    const x = x0 + (x1 - x0) * k / n, y = y0 + (y1 - y0) * k / n;
+    for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+      const xx = Math.round(x + dx), yy = Math.round(y + dy);
+      if (xx >= 0 && yy >= 0 && xx < t.w && yy < t.h) t.g[yy * t.w + xx] = 0;
+    }
+  }
+}
+// Caratteri disegnati a tratti: «<» come nell'OCR-B (due tratti dagli angoli a destra alla punta a sinistra), qualche lettera
+// che l'OCR confonde con il «<» (L, K, C, E, I) e un riquadro per tutte le altre lettere e cifre.
+function glifo(t, ch, x, y, w, h, sp) {
+  const T = (a, b, c, d) => tratto(t, x + a * w, y + b * h, x + c * w, y + d * h, sp);
+  if (ch === '<') { T(1, 0, 0, 0.5); T(0, 0.5, 1, 1); }
+  else if (ch === '>') { T(0, 0, 1, 0.5); T(1, 0.5, 0, 1); }
+  else if (ch === 'L') { T(0, 0, 0, 1); T(0, 1, 1, 1); }
+  else if (ch === 'K') { T(0, 0, 0, 1); T(1, 0, 0, 0.5); T(0, 0.5, 1, 1); }
+  else if (ch === 'E') { T(0, 0, 0, 1); T(0, 0, 1, 0); T(0, 0.5, 0.8, 0.5); T(0, 1, 1, 1); }
+  else if (ch === 'C') { T(1, 0, 0.25, 0); T(0.25, 0, 0, 0.3); T(0, 0.3, 0, 0.7); T(0, 0.7, 0.25, 1); T(0.25, 1, 1, 1); }
+  else if (ch === 'I') { T(0.5, 0, 0.5, 1); T(0.2, 0, 0.8, 0); T(0.2, 1, 0.8, 1); }
+  else { T(0, 0, 1, 0); T(1, 0, 1, 1); T(1, 1, 0, 1); T(0, 1, 0, 0); T(0, 0.5, 1, 0.5); }
+}
+// MRZ disegnata: righe di caratteri a passo fisso, con un'inclinazione (gradi) intorno al centro del foglio
+function disegnaMrz(t, righe, { x0, y0, passo, alt, larg, interlinea, sp, inclinazione = 0, salta = [] }) {
+  const a = inclinazione * Math.PI / 180, cx = t.w / 2, cy = t.h / 2;
+  righe.forEach((r, ri) => [...r].forEach((ch, i) => {
+    if (salta.some(([sr, si]) => sr === ri && si === i)) return;
+    const px = x0 + i * passo, py = y0 + ri * interlinea;
+    const qx = cx + (px - cx) * Math.cos(a) - (py - cy) * Math.sin(a), qy = cy + (px - cx) * Math.sin(a) + (py - cy) * Math.cos(a);
+    glifo(t, ch, qx, qy, larg, alt, sp);
+  }));
+}
+const trasposto = t => { const o = foglio(t.h, t.w); for (let y = 0; y < t.h; y++) for (let x = 0; x < t.w; x++) o.g[x * t.h + (t.h - 1 - y)] = t.g[y * t.w + x]; return o; };   // girato di 90° in senso orario
+
+test('forma del «<»: riconosciuto sottile e spesso (OCR-B), capovolto (MRZ sottosopra); L, K, C, E, I e le altre lettere no', () => {
+  const t = foglio(900, 120), voci = ['<', '<', '>', 'L', 'K', 'C', 'E', 'I', 'B'];
+  voci.forEach((ch, i) => glifo(t, ch, 20 + i * 95, 30, 30, 44, i === 1 ? 9 : 4));
+  const { comp, lab } = I.macchie(t.g, t.w, t.h, true);
+  const forme = comp.filter(c => c.area > 30).sort((a, b) => a.x0 - b.x0).map(c => I.eChevron(lab, t.w, c.id, c));
+  assert.deepEqual(forme, [1, 1, -1, 0, 0, 0, 0, 0, 0]);
+});
+
+test('MRZ nell\'immagine: caselle della griglia, «<» dalla forma, carattere sbiadito come casella ignota; l\'OCR legge L al posto di «<»', () => {
+  const righe = td1({ tipo: 'C<', stato: 'ITA', cognome: 'PROVACCIA', nome: 'ERMENEGILDA', numero: 'CA00000AA', nascita: '800419', sesso: 'F', scadenza: '310419' });
+  const t = foglio(1300, 260);
+  disegnaMrz(t, righe, { x0: 40, y0: 40, passo: 40, alt: 40, larg: 26, interlinea: 70, sp: 5, salta: [[0, 6]] });   // la «A» di CA sbiadita
+  const gl = I.glifiMrz(t.g, t.w, t.h, 40);
+  assert.equal(gl.righe.length, 3);
+  assert.deepEqual(gl.righe.map(r => r.glifi.length), [30, 30, 30], 'tre righe da 30 caselle');
+  gl.righe.forEach((r, ri) => assert.deepEqual(r.glifi.map(g => g.chevron ? '<' : g.ignoto ? '?' : '·').join(''),
+    [...righe[ri]].map((c, i) => c === '<' ? '<' : (ri === 0 && i === 6 ? '?' : '·')).join(''), 'riga ' + (ri + 1)));
+  // l'OCR (finto): ogni «<» letto L, la casella sbiadita letta «A»; simboli con i riquadri delle caselle
+  const simboli = [];
+  gl.righe.forEach((r, ri) => r.glifi.forEach((g, i) => simboli.push({ text: righe[ri][i] === '<' ? 'L' : righe[ri][i], confidence: 80, bbox: { x0: g.x0, y0: r.y0, x1: g.x1, y1: r.y1 } })));
+  assert.deepEqual(gl.righe.map(r => I.allineaSimboli(simboli, r).testo), righe, 'le L tornano «<», la casella ignota prende la lettera letta');
+  assert.equal(L.leggiMrz(gl.righe.map(r => I.allineaSimboli(simboli, r).testo), OGGI).valida, true);
+  // un simbolo di un'altra riga non entra; una casella senza simbolo resta «?» (nessun dato inventato)
+  const r0 = gl.righe[0];
+  assert.equal(I.allineaSimboli(simboli.filter(x => !(x.bbox.y0 === r0.y0 && x.bbox.x0 === r0.glifi[3].x0)), r0).testo, righe[0].slice(0, 3) + '?' + righe[0].slice(4));
+  // immagine pulita per l'OCR: solo le caselle delle righe; senza i «<» se richiesto
+  const pulita = I.soloGlifi(t.g, t.w, t.h, gl.lab, gl.righe, true);
+  const g20 = gl.righe[0].glifi[20];
+  assert.ok(pulita.slice(g20.y0 * t.w + g20.x0, g20.y0 * t.w + g20.x1).every(v => v === 255), 'un «<» tolto');
+});
+
+test('pagina: la MRZ si trova tra il disordine anche storta, in verticale (inclinazione con il segno giusto) e capovolta', () => {
+  const td3 = ['P<D<<PROVACCIA<<TEODORICO<<<<<<<<<<<<<<<<<<<', 'C01X00T478D<<1011108M3001019<<<<<<<<<<<<<<<8'];
+  const t = foglio(1000, 700);
+  // «tovaglia» intorno al documento: tratti di misure e spessori diversi (fuori dal riquadro del documento, 40-960 × 300-650)
+  let seme = 7; const caso = () => (seme = (seme * 16807) % 2147483647) / 2147483647;
+  for (let k = 0; k < 140; k++) {
+    const x = caso() * 1000, y = caso() * 700, l = 20 + caso() * 90, a = caso() * Math.PI, x1 = x + Math.cos(a) * l, y1 = y + Math.sin(a) * l;
+    if (Math.max(x, x1) > 30 && Math.min(x, x1) < 970 && Math.max(y, y1) > 290 && Math.min(y, y1) < 660) continue;
+    tratto(t, x, y, x1, y1, 2 + Math.round(caso() * 8));
+  }
+  // testo stampato e MRZ (righe di 44 caratteri, inclinate di 2°)
+  for (let r = 0; r < 4; r++) disegnaMrz(t, ['PROVA DI TESTO ' + r], { x0: 120, y0: 330 + r * 40, passo: 16, alt: 18, larg: 11, interlinea: 0, sp: 2 });
+  disegnaMrz(t, td3, { x0: 70, y0: 540, passo: 19, alt: 20, larg: 13, interlinea: 34, sp: 3, inclinazione: 2 });
+  const an = I.analizzaPagina(t.g, t.w, t.h);
+  assert.ok(an.mrz, 'MRZ trovata');
+  assert.equal(an.mrz.righe, 2);
+  assert.equal(an.mrz.verticale, false);
+  assert.ok(Math.abs(an.mrz.zona.angolo * 180 / Math.PI - 2) < 0.8, 'inclinazione di circa 2°: ' + (an.mrz.zona.angolo * 180 / Math.PI).toFixed(2));
+  // girata di 90°: righe verticali; la riga va verso il basso con l'inclinazione riportata (π/2 + 2°)
+  const v = trasposto(t), av = I.analizzaPagina(v.g, v.w, v.h);
+  assert.equal(av.mrz && av.mrz.verticale, true);
+  assert.ok(Math.abs(av.mrz.zona.angolo * 180 / Math.PI - 92) < 0.8, 'angolo in verticale: ' + (av.mrz.zona.angolo * 180 / Math.PI).toFixed(2));
+  // ritaglio dritto: i «<» della MRZ girata tornano «<» (o tutti capovolti se il verso è l'opposto)
+  for (const [m, an2] of [[t, an], [v, av]]) {
+    const crop = I.estrai(m.g, m.w, m.h, an2.mrz.zona, 40 / an2.mrz.s);
+    const bin = I.sauvola(crop.g, crop.w, crop.h, 81, 0.2), gl = I.glifiMrz(bin, crop.w, crop.h, 40);
+    assert.deepEqual(gl.righe.map(r => r.glifi.length), [44, 44]);
+    assert.ok(gl.chevron >= 30 && gl.capovolti === 0, 'chevron ' + gl.chevron + ', capovolti ' + gl.capovolti);
+  }
+  // capovolta: i «<» risultano tutti capovolti (la lettura gira il ritaglio di 180°)
+  const c = { g: t.g.slice().reverse(), w: t.w, h: t.h }, ac = I.analizzaPagina(c.g, c.w, c.h);
+  const crop = I.estrai(c.g, c.w, c.h, ac.mrz.zona, 40 / ac.mrz.s);
+  const gl = I.glifiMrz(I.sauvola(crop.g, crop.w, crop.h, 81, 0.2), crop.w, crop.h, 40);
+  assert.ok(gl.capovolti >= 30 && gl.chevron === 0);
+  // solo disordine: nessuna MRZ e nessuna zona di testo
+  const d = foglio(800, 600); seme = 11;
+  for (let k = 0; k < 120; k++) { const x = caso() * 800, y = caso() * 600, l = 10 + caso() * 120, a = caso() * Math.PI; tratto(d, x, y, x + Math.cos(a) * l, y + Math.sin(a) * l, 2 + Math.round(caso() * 10)); }
+  const ad = I.analizzaPagina(d.g, d.w, d.h);
+  assert.equal(ad.mrz, null);
+  assert.equal(ad.testo, null);
+});
+
+test('immagine: ritaglio girato, nitidezza, contrasto', () => {
+  const t = foglio(200, 100);
+  for (let y = 40; y < 44; y++) for (let x = 150; x < 154; x++) t.g[y * 200 + x] = 0;
+  // zona centrata sul punto, riga verso il basso (90°): il punto finisce al centro del ritaglio
+  const r = I.estrai(t.g, t.w, t.h, { cx: 152, cy: 42, lungo: 40, traverso: 20, angolo: Math.PI / 2 }, 1);
+  assert.deepEqual([r.w, r.h], [40, 20]);
+  assert.ok(r.g[10 * 40 + 20] < 60 && r.g[2 * 40 + 2] > 200);
+  const nitida = foglio(300, 300);
+  for (let k = 0; k < 20; k++) tratto(nitida, 10, 10 + k * 14, 290, 10 + k * 14, 3);
+  // sfocata: media su 11×11 pixel (come una foto mossa)
+  const sfocata = new Uint8Array(300 * 300);
+  for (let y = 0; y < 300; y++) for (let x = 0; x < 300; x++) {
+    let somma = 0, n = 0;
+    for (let dy = -5; dy <= 5; dy++) for (let dx = -5; dx <= 5; dx++) { const yy = y + dy, xx = x + dx; if (yy >= 0 && yy < 300 && xx >= 0 && xx < 300) { somma += nitida.g[yy * 300 + xx]; n++; } }
+    sfocata[y * 300 + x] = somma / n;
+  }
+  assert.ok(I.nitidezza(nitida.g, 300, 300) > 18);
+  assert.ok(I.nitidezza(sfocata, 300, 300) < I.nitidezza(nitida.g, 300, 300) / 2, 'sfocata: ' + I.nitidezza(sfocata, 300, 300).toFixed(1));
+  assert.deepEqual([...I.distendi(Uint8Array.from([100, 110, 120]))].map(v => v > 127), [false, false, true]);
+});
+
+test('letture unite: le cifre di controllo scelgono tra le letture; un campo che non si può decidere resta vuoto, mai corretto a caso', () => {
+  const td1v = td1({ tipo: 'C<', stato: 'ITA', cognome: 'PROVACCIA', nome: 'ERMENEGILDA', numero: 'CA00000KL', nascita: '800419', sesso: 'F', scadenza: '310419' });
+  // tre letture dello stesso retro: la «A» del numero sbiadita (letta 1 o non letta), la cifra di controllo della nascita letta
+  // U, J e 0, «ITA» della cittadinanza letta LIA, 1TA, TTA, una L in mezzo ai «<» dei dati facoltativi
+  const v = [
+    [td1v[0].replace('CA0', 'C10'), td1v[1].slice(0, 6) + 'U' + td1v[1].slice(7, 15) + 'LIA' + td1v[1].slice(18, 21) + 'L' + td1v[1].slice(22), td1v[2]],
+    [td1v[0].replace('CA0', 'C?0'), td1v[1].slice(0, 6) + 'J' + td1v[1].slice(7, 15) + '1TA' + td1v[1].slice(18), td1v[2]],
+    [td1v[0].replace('CA0', 'C?0'), td1v[1].slice(0, 15) + 'TTA' + td1v[1].slice(18), td1v[2]]
+  ];
+  const f = L.fondiMrz(v);
+  assert.equal(f.formato, 'TD1');
+  assert.equal(f.righe[1], td1v[1], 'nascita 0 (cifra), ITA (codice esistente), «<» al posto della L');
+  const m = L.leggiMrz(f.righe, OGGI, f);
+  assert.deepEqual([m.campi.nascita.valore, m.campi.cittadinanza.valore, m.campi.cognome.valore, m.campi.nome.valore], ['1980-04-19', 'Italia', 'PROVACCIA', 'ERMENEGILDA']);
+  // il numero non si può leggere: niente numero. (Cambiare la L finale in I farebbe tornare la cifra di controllo, e anche
+  // quella complessiva: C100000KI. Si correggono solo le caselle incerte, cioè quella sbiadita.)
+  assert.equal(m.campi.numeroDocumento, undefined);
+  assert.equal(L.leggiMrz(f.righe, OGGI).campi.numeroDocumento.valore, 'C100000KI', 'senza le caselle incerte la correzione sbaglierebbe');
+  // due letture su tre coincidono e tornano: si tiene quella
+  const buona = L.fondiMrz([td1v, td1v, v[0]]);
+  assert.deepEqual(buona.righe, td1v);
+  assert.equal(L.leggiMrz(buona.righe, OGGI, buona).valida, true);
+  // una sola casella incerta in una data: la cifra di controllo la determina (il campo resta da controllare)
+  const d = L.fondiMrz([[td1v[0], td1v[1].slice(0, 3) + '?' + td1v[1].slice(4), td1v[2]]]);
+  assert.deepEqual([d.righe[1], d.dedotti], [td1v[1], ['birthDate']]);
+  assert.equal(L.leggiMrz(d.righe, OGGI, d).campi.nascita.affidabilita, L.DA_VERIFICARE);
+  // TD3: la cifra complessiva letta B in una lettura (casella di sole cifre: diventa 8) e 3 in un'altra; un «<» dei dati
+  // facoltativi letto D: la cifra complessiva sceglie
+  const p = td3({ stato: 'D', cittadinanza: 'D', cognome: 'PROVACCIA', nome: 'TEODORICO', numero: 'C01X00T47', nascita: '101110', sesso: 'M', scadenza: '300101' });
+  assert.equal(p[1][43], '8');
+  const p2 = L.fondiMrz([[p[0], p[1].slice(0, 43) + 'B'], [p[0], p[1].slice(0, 43) + '3'], [p[0], p[1].slice(0, 42) + 'D' + p[1].slice(43)]]);
+  assert.deepEqual(p2.righe, p);
+  assert.equal(L.leggiMrz(p2.righe, OGGI, p2).valida, true);
+});
+
+test('testo stampato delle foto vere: etichette lette male, rumore dopo il nome, colonne della CIE, permesso tedesco, Stato con la sigla', () => {
+  // CIE: «SURNAME» letto «SURAT» con rumore, «NOME» letto «NCE», etichetta inglese sulla riga sotto, Stato estero con la sigla ISO
+  const cie = L.leggiTestoStampato(['REPUBBLICA ITALIANA', 'CARTA DI IDENTITA / IDENTITY CARD', 'COGNOME SURAT x, NS ©', 'PROVACCIA x Ch i', 'NCE / NAME', 'GIOVANNA',
+    'LUOGO E DATA DI NASCITA', 'PLACE AND DATE OF BIRTH Yo 4 @ Ph', 'SAO PAULO (BRA) 15.01.1990'], OPZ);
+  assert.deepEqual([cie.cognome, cie.nome, cie.luogo && cie.luogo.stato, cie.nascita], ['PROVACCIA', 'GIOVANNA', 'Brasile', '1990-01-15']);
+  // passaporto: etichette in tre lingue («Surname» letto «Sumame»), rumore della foto dopo i nomi, sesso sulla riga del luogo
+  const pass = L.leggiTestoStampato(['PASSAPORTO', 'Cognome. Sumame. Nom. (1)', 'PROVACCIA Eo)', 'Nome. Given Names. Prénoms. (2)', 'TEODORA Jo =.',
+    'Sessc Sex. Sexe. (5) Luogo di nascita. Place of birth. Lieu de naissance. (6)', 'F ROMA (RM)'], OPZ);
+  assert.deepEqual([pass.cognome, pass.nome, pass.sesso, pass.luogo], ['PROVACCIA', 'TEODORA', 'F', { stato: 'Italia', comune: 'ROMA', provincia: 'RM' }]);
+  // CIE con le colonne (riquadri dell'OCR): sotto «CITTADINANZA» c'è ITA, non la riga di SESSO e STATURA; «Mm» = M
+  const b = (x0, y0, x1, y1) => ({ x0, y0, x1, y1 });
+  const col = L.leggiTestoStampato([{ testo: 'CARTA DI IDENTITA', bbox: b(90, 180, 870, 230) }, { testo: 'SESSO STATURA', bbox: b(420, 610, 810, 640) },
+    { testo: 'CITTADINANZA', bbox: b(985, 606, 1187, 656) }, { testo: 'SEX HEIGHT', bbox: b(424, 640, 785, 670) }, { testo: 'NATIONALITY', bbox: b(986, 646, 1266, 673) },
+    { testo: 'Mm 170', bbox: b(424, 680, 748, 709) }, { testo: 'ITA', bbox: b(985, 678, 1042, 707) }], OPZ);
+  assert.deepEqual([col.sesso, col.cittadinanza], ['M', 'Italia']);
+  // permesso di soggiorno tedesco: etichette di cognome e nome sulla stessa riga, valori sulle due righe sotto (nome in minuscolo)
+  const pe = L.leggiTestoStampato(['AUFENTHALTSTITEL', 'NAMEN Vornamen/ SURNAMES Forenames', 'PROVACCIA', 'Teodoro', 'GESCHLECHT/ STAATSANGEHORIGKEIT/ GEBURTSDATUM',
+    'SEX NATIONALITY DATE OF BIRTH', 'M SRB 01 02 1990'], OPZ);
+  assert.deepEqual([pe.cognome, pe.nome, pe.sesso, pe.cittadinanza, pe.credibile], ['PROVACCIA', 'TEODORO', 'M', 'Serbia', true]);
+  // un nome con una parte senza vocali è segnato come dubbio (la lettura ne cerca una seconda)
+  assert.deepEqual(L.leggiTestoStampato(['COGNOME / SURNAME', 'PROVACCIA', 'NOME / NAME', 'CG OVANNA'], OPZ).dubbi, ['nome']);
+  // la sigla ITA tra parentesi non è uno Stato estero; una provincia sconosciuta non dà un luogo
+  assert.equal(L.leggiLuogo('ROMA (ITA)', OPZ), null);
+  assert.equal(L.chiaveIcao('MÜLLER'), 'MUELLER');
+});
 
 test('flag della scansione: «spenta» nel codice pubblicato; «prova» solo con #scansione=prova; «attiva» per tutti', () => {
   // valore deciso dal titolare: 05/11/2026 'prova' sul branch delle prove (gli ospiti non vedono nulla senza #scansione=prova).
@@ -363,7 +569,7 @@ test('flag della scansione: «spenta» nel codice pubblicato; «prova» solo con
 });
 
 test('codice della scansione: nessuna rete, nessuna archiviazione, nessuna console; Tesseract solo con i file del sito', () => {
-  const moduli = ['scansione/scansione-documento.js', 'scansione/lettura-documento.js', 'scansione/decodifica-heic.js'].map(f => [f, read(f)]);
+  const moduli = ['scansione/scansione-documento.js', 'scansione/lettura-documento.js', 'scansione/immagine.js', 'scansione/decodifica-heic.js'].map(f => [f, read(f)]);
   // via i commenti di riga; i brevi commenti /* … */ restano (non c'è nulla di vietato) e «image/*» nei campi file non è un commento
   const senzaCommenti = s => s.replace(/^\s*\/\/.*$/gm, '').replace(/\s\/\/\s.*$/gm, '');
   for (const [f, src] of moduli) {
