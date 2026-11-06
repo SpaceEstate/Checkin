@@ -66,6 +66,19 @@ tipo e numero):
 - Se il browser non dà la fotocamera (permesso negato, browser vecchio) compare un messaggio e si usa «Carica una foto».
 - Su un **computer** il pulsante della fotocamera non c'è: si carica un file.
 
+## La ✕ dei file caricati (`togliFileDocumento` in `checkin.js`)
+
+Richiesta del titolare, 06/11/2026: in ogni riquadro «Fronte» / «Retro» del documento del responsabile, appena c'è un file (caricato o
+fotografato), compare una piccola **✕ in alto a destra**: se il file è sbagliato si toglie, senza doverne scegliere un altro. Il riquadro
+torna com'era prima del caricamento («📎 Scegli file», contatore dei file, bordo), il file non resta da nessuna parte e «Avanti» chiede di
+nuovo quel lato. Vale anche con la scansione spenta.
+
+Come è fatto: un pulsante in più nel riquadro (`bloccoUploadLato`), nascosto dal CSS finché il riquadro non ha la classe `completo`, che
+`aggiornaLabelUpload` (invariata) mette e toglie con il file. `togliFileDocumento` svuota il campo file e chiama `aggiornaLabelUpload` e
+`aggiornaStatoDocumenti`, come dopo un caricamento. Il nome del pulsante per i lettori di schermo («Togli il file», «Remove file», «Datei
+entfernen») è un testo nascosto con `data-i18n`, quindi segue il cambio di lingua; da tastiera, tolto il file, il fuoco passa al campo file
+dello stesso lato. Con la scansione accesa si tolgono anche i dati letti da quel lato: vedi [scansione-documenti.md](scansione-documenti.md).
+
 ## Prove
 
 `tests/scansione.test.mjs`: elenco dei comuni (numeri, province, licenza), ricerca dei comuni (vecchi nomi, omonimi, OCR), nessuna rete e
@@ -74,4 +87,6 @@ a prima salvo il blocco della fotocamera con il riquadro. `tests/browser/scansio
 voce inventata, comune e provincia, vecchio nome, «Avanti» fermo, valori dal codice, lingua) e fotocamera con il riquadro (fotocamera finta
 di Chromium: riquadro, scatto nel riquadro del responsabile sotto 1 MB, fotocamera del retro, chiusura). Dal 06/11/2026 anche: zoom dentro i
 limiti del browser, zona dello scatto vero, nitidezza dei fotogrammi (`tests/scansione.test.mjs`); foto piccola (CIE sintetica a 520 px)
-letta per intero, con i dati confermati in verde e solo il titolo sopra i lati (`tests/browser/scansione.browser.cjs`).
+letta per intero, con i dati confermati in verde e solo il titolo sopra i lati (`tests/browser/scansione.browser.cjs`). La ✕ dei file
+caricati: markup (una per riquadro, nome tradotto), CSS e `togliFileDocumento` in `tests/scansione.test.mjs`; nel browser, con la
+scansione spenta, si vede solo con un file, piccola in alto a destra, toglie il file anche da tastiera e senza il file «Avanti» si ferma.

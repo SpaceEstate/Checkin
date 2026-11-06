@@ -901,6 +901,7 @@ function bloccoUploadLato(ospiteNum, lato) {
 
   return `
             <div class="upload-side" id="upload-side-${suffisso}">
+              <button type="button" class="upload-side-togli" onclick="togliFileDocumento(${ospiteNum}, '${lato}', event)"><svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false"><path d="M2.5 2.5l7 7M9.5 2.5l-7 7"/></svg><span class="testo-nascosto" data-i18n="guest.togliFile">${t('guest.togliFile')}</span></button>
               <div class="upload-side-header">
                 <span class="upload-side-step">${isFronte ? '1' : '2'}</span>
                 <span class="upload-side-title" data-i18n="${keyTitolo}">${t(keyTitolo)}</span>
@@ -937,7 +938,7 @@ function bloccoUploadLato(ospiteNum, lato) {
 // Spegnimento d'emergenza: rimettere 'spenta'. Il codice della scansione (scansione/) si scarica quando si apre il passo di un
 // ospite; le librerie dell'OCR (circa 4,5 MB) solo alla prima foto da leggere.
 const SCANSIONE_DOCUMENTI = 'prova';   // 05/11/2026: 'prova' sul branch claude/scansione-documenti per le prove del titolare
-const SCANSIONE_VERSIONE = '20261106h';
+const SCANSIONE_VERSIONE = '20261106i';
 // letto subito: dopo il caricamento daAreaClienti() toglie il frammento «#…» dall'indirizzo
 const scansioneInProva = /(?:^#|&)scansione=prova(?:&|$)/.test(window.location.hash || '');
 // diagnosi per le prove sul telefono («#scansione=prova&diagnosi»): letta subito, perché daAreaClienti toglie il «#» dall'indirizzo
@@ -1372,6 +1373,19 @@ window.handleFileUpload = function(input, ospiteNum, lato) {
 
   if (file) notificaLatoCaricato(ospiteNum, latoEffettivo);
 }
+
+// La ✕ in alto a destra di un lato caricato (06/11/2026, richiesta del titolare): toglie il file sbagliato senza doverne scegliere
+// un altro. Il riquadro torna com'era prima del caricamento (etichetta, contatore dei file); la ✕ si vede solo con un file
+// (classe «completo», checkin.css). Con la scansione accesa si tolgono anche i dati letti da quel lato (scansione-documento.js).
+window.togliFileDocumento = function(ospiteNum, lato, evento) {
+  const input = inputDocumento(ospiteNum, lato);
+  if (!input) return;
+  input.value = '';
+  aggiornaLabelUpload(ospiteNum, lato);
+  aggiornaStatoDocumenti(ospiteNum);
+  // da tastiera (click con detail 0) la ✕ sparisce: il fuoco passa al campo file dello stesso lato
+  if (evento && evento.detail === 0) input.focus();
+};
 
 console.log('✅ Documento responsabile: fronte + retro obbligatori (solo fronte per il passaporto) - supporto fino a 9 ospiti');
 

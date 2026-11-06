@@ -100,13 +100,15 @@ function osservaCaricamenti(s) {
   if (s.osservatore || typeof MutationObserver !== 'function') return;
   s.lettiResponsabile = s.lettiResponsabile || {};
   const controlla = () => {
-    const nuovi = [];
+    const nuovi = [], tolti = [];
     for (const [k, lato] of [[1, 'fronte'], [2, 'retro']]) {
       const input = ctx.inputDocumento(1, lato), f = input && input.files && input.files[0];
       const chiave = chiaveFile(f);
       if (f && s.lettiResponsabile[k] !== chiave) { s.lettiResponsabile[k] = chiave; nuovi.push({ k, file: f }); }
+      if (!f && s.lettiResponsabile[k]) tolti.push(k);     // file tolto (la ✕ del riquadro): via anche quello che se ne era letto
       if (!f) s.lettiResponsabile[k] = '';
     }
+    for (const k of tolti) togliLato(s, k);
     if (nuovi.length) esegui(s, nuovi);
   };
   s.osservatore = new MutationObserver(controlla);
@@ -139,6 +141,7 @@ function disegnaPannello(s) {
   const fotocamera = !!(window.FotocameraDocumento && window.FotocameraDocumento.disponibile());
   const lato = k => `
         <div class="scan-lato" data-lato="${k}">
+          <button type="button" class="scan-lato-togli" data-lato="${k}" hidden>${ICONA_TOGLI}<span class="testo-nascosto" data-i18n="scan.togliFoto">${esc(ctx.t('scan.togliFoto'))}</span></button>
           <div class="scan-lato-testa"><span class="scan-lato-numero">${k}</span><span data-i18n="scan.lato${k}">${esc(ctx.t('scan.lato' + k))}</span></div>
           <div class="scan-lato-azioni">
             ${fotocamera ? `<button type="button" class="scan-btn scan-fotografa" data-lato="${k}" data-i18n="scan.fotografa">${esc(ctx.t('scan.fotografa'))}</button>` : ''}
@@ -162,8 +165,16 @@ function disegnaPannello(s) {
   s.pannello.classList.toggle('scan-responsabile', responsabile);
   s.pannello.querySelectorAll('.scan-input').forEach(inp => inp.addEventListener('change', () => fotoScelta(s, inp)));
   s.pannello.querySelectorAll('.scan-fotografa').forEach(b => b.addEventListener('click', () => fotografa(s, b.getAttribute('data-lato') === '2' ? 2 : 1)));
+  s.pannello.querySelectorAll('.scan-lato-togli').forEach(b => b.addEventListener('click', e => {
+    const k = b.getAttribute('data-lato') === '2' ? 2 : 1;
+    togliLato(s, k);
+    // da tastiera (click con detail 0) la ✕ sparisce: il fuoco passa a «Carica foto o PDF» dello stesso lato
+    if (e.detail === 0) { const campoFile = s.pannello.querySelector('.scan-input[data-lato="' + k + '"]'); if (campoFile) campoFile.focus(); }
+  }));
   s.pannello.querySelector('.scan-interrompi').addEventListener('click', () => interrompi(true));
 }
+// la ✕ in alto a destra di un lato (06/11/2026, richiesta del titolare)
+const ICONA_TOGLI = '<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false"><path d="M2.5 2.5l7 7M9.5 2.5l-7 7"/></svg>';
 
 // Testo di un elemento SENZA aggiungere nodi alla pagina: checkin.js osserva il modulo (MutationObserver sui nodi aggiunti)
 // e a ogni nodo nuovo ripassa i campi data; aggiornare il valore del nodo di testo già presente non fa scattare nulla.
@@ -186,6 +197,9 @@ function fineAvanzamento(s) {
 }
 function statoLato(s, k, chiave, params) {
   s.statoLati[k] = chiave ? { chiave, params } : null;
+  // la ✕ del lato (altri ospiti; il responsabile ha quella del suo riquadro): solo con una foto su quel lato
+  const togli = s.pannello && s.pannello.querySelector('.scan-lato-togli[data-lato="' + k + '"]');
+  if (togli) togli.hidden = !chiave || chiave === 'scan.fotocameraNonDisponibile';
   const el = s.pannello && s.pannello.querySelector('[data-stato-lato="' + k + '"]');
   if (!el) return;
   const prefisso = el.getAttribute('data-prefisso');    // responsabile: «Fronte: …», «Retro: …»
@@ -268,15 +282,19 @@ async function esegui(s, elenco) {
     for (const voce of l.coda) { delete s.letture[voce.k]; statoLato(s, voce.k, 'scan.inAttesa'); }
     while (l.coda.length) {
       const voce = l.coda.shift(), base = fatti;
+      l.corrente = voce;
       statoLato(s, voce.k, 'scan.inLettura');
       try {
-        const lettura = await leggiFile(l, voce.tela || voce.file, q => avanzamento(s, null, (base + q) / (base + 1 + l.coda.length)));
+        // l'avanzamento di una lettura interrotta (✕, «Interrompi») non rimette a schermo la barra
+        const lettura = await leggiFile(l, voce.tela || voce.file, q => { if (!l.annullato) avanzamento(s, null, (base + q) / (base + 1 + l.coda.length)); });
         if (l.annullato) return;
+        if (voce.tolta) continue;                   // lato tolto con la ✕ mentre si leggeva: la lettura si scarta
         s.letture[voce.k] = lettura;
         if (diagnosiAttiva()) (s.diagnosi = s.diagnosi || {})[voce.k] = lettura.diagnosi;
         statoLato(s, voce.k, lettura.vuota ? (lettura.sfocata ? 'scan.latoSfocato' : 'scan.latoNonLetto') : 'scan.latoLetto');
       } catch (e) {
         if (l.annullato) return;
+        if (voce.tolta) continue;
         const codice = (e && e.codice) || 'errore';
         errori.push(codice);
         if (diagnosiAttiva()) (s.diagnosi = s.diagnosi || {})[voce.k] = Object.assign({}, l.diagnosi || {}, { errore: codice });
@@ -291,10 +309,43 @@ async function esegui(s, elenco) {
   } finally {
     chiudiWorker(l);                            // memoria dell'OCR (e dell'immagine) restituita subito
     if (lavoro === l) lavoro = null;
-    fineAvanzamento(s);
+    if (!lavoro || lavoro.n !== s.n) fineAvanzamento(s);     // non la barra di una lettura nuova dello stesso ospite, già partita
   }
   if (l.annullato) return;
+  // un lato tolto con la ✕ durante la lettura e nessuna lettura rimasta: via anche quello che la scansione aveva scritto
+  if (l.tolta && !Object.values(s.letture).some(Boolean)) togliPropriScritti(s);
   concludi(s, errori);
+}
+
+// ---- ✕ di un lato ----
+// 06/11/2026, richiesta del titolare: la ✕ in alto a destra di un lato toglie la foto o il file sbagliati, e con loro quello che se ne
+// era letto. I campi scritti dalla scansione e non più toccati dall'ospite tornano come prima; poi si ricompila con le letture
+// rimaste (l'altro lato). Quello che l'ospite ha scritto o scelto resta. Una lettura in corso di quel lato si ferma; se dopo c'è
+// l'altro lato, si lascia finire e si scarta.
+function togliLato(s, k) {
+  const l = lavoro && lavoro.n === s.n && !lavoro.annullato ? lavoro : null;
+  if (l) {
+    l.tolta = true;
+    for (const voce of l.coda) if (voce.k === k) { if (voce.tela) azzera(voce.tela); voce.file = null; voce.tela = null; }
+    l.coda = l.coda.filter(voce => voce.k !== k);
+    if (l.corrente && l.corrente.k === k) l.corrente.tolta = true;
+    if (l.corrente && l.corrente.tolta && !l.coda.length) interrompi(false);     // nient'altro da leggere: ci si ferma subito
+  }
+  delete s.letture[k];
+  if (s.diagnosi) delete s.diagnosi[k];
+  statoLato(s, k, null);
+  if (l && lavoro === l) return;           // la lettura dell'altro lato continua e alla fine ricompila con quello che resta
+  ricompila(s);
+}
+
+function ricompila(s) {
+  if (Object.values(s.letture).some(Boolean)) { concludi(s, []); return; }
+  // nessuna lettura rimasta: i campi tornano come prima della scansione (salvo quelli toccati dall'ospite), nessun messaggio
+  togliPropriScritti(s);
+  s.istantanea = null;
+  s.esito = null;
+  const box = s.pannello && s.pannello.querySelector('.scan-esito');
+  if (box) { box.hidden = true; box.innerHTML = ''; }
 }
 
 async function leggiFile(l, file, quota, opzioni) {
@@ -477,6 +528,18 @@ async function leggiZonaTesto(l, pagina, zt, scala, resto) {
   return migliore.st;
 }
 
+// Un passaggio dell'OCR su una tela. La tela va all'OCR già in PNG, gli stessi byte che Tesseract.js ricaverebbe da sé (toBlob): la
+// conversione richiede un momento, e una lettura interrotta in quel momento (✕, «Interrompi») non deve mandare nulla al worker già
+// chiuso (Tesseract.js lo segnalerebbe come errore non gestito). Con i byte l'invio al worker parte subito, senza attese.
+async function riconosci(l, tela, parametri, ms) {
+  const png = await conTempo(new Promise(fatto => tela.toBlob(fatto)), ms, 'timeout');
+  if (l.annullato) throw errore('annullato');
+  if (!png) throw errore('errore');
+  const byte = new Uint8Array(await png.arrayBuffer());
+  if (l.annullato || !l.worker) throw errore('annullato');
+  return conTempo(l.worker.recognize(byte, parametri, { text: true, blocks: true }), ms, 'timeout');
+}
+
 // Un passaggio dell'OCR su una matrice di grigi (la tela si azzera subito dopo).
 async function ocr(l, img, w, h, parametri, resto) {
   const c = nuovaTela(w, h), g = c.getContext('2d');
@@ -485,7 +548,7 @@ async function ocr(l, img, w, h, parametri, resto) {
   g.putImageData(dati, 0, 0);
   p.fill(0);
   try {
-    const r = await conTempo(l.worker.recognize(c, parametri, { text: true, blocks: true }), Math.max(MINIMO_PASSAGGIO, resto()), 'timeout');
+    const r = await riconosci(l, c, parametri, Math.max(MINIMO_PASSAGGIO, resto()));
     if (l.annullato) throw errore('annullato');
     return r && r.data;
   } finally {
@@ -569,7 +632,7 @@ async function leggiTela(l, tela, resto) {
   const scala = tela.width / piccola.width || 1;      // per riportare le coordinate della prima lettura sulla tela intera
   let prima;
   try {
-    prima = await conTempo(l.worker.recognize(piccola, {}, { text: true, blocks: true }), Math.max(MINIMO_PASSAGGIO, resto()), 'timeout');
+    prima = await riconosci(l, piccola, {}, Math.max(MINIMO_PASSAGGIO, resto()));
   } finally {
     if (piccola !== tela) azzera(piccola);
   }
@@ -597,7 +660,7 @@ async function leggiTela(l, tela, resto) {
     }
     const fascia = ritagliaMrz(tela, zona);
     try {
-      const seconda = await conTempo(l.worker.recognize(fascia, { tessedit_char_whitelist: MRZ_LETTERE, tessedit_pageseg_mode: '6' }, { text: true, blocks: true }), Math.max(MINIMO_PASSAGGIO, resto()), 'timeout');
+      const seconda = await riconosci(l, fascia, { tessedit_char_whitelist: MRZ_LETTERE, tessedit_pageseg_mode: '6' }, Math.max(MINIMO_PASSAGGIO, resto()));
       if (l.annullato) throw errore('annullato');
       const t2 = righeDaRisultato(seconda && seconda.data).map(r => r.testo);
       const m2 = L.trovaMrz(t2);
@@ -658,6 +721,8 @@ async function avviaWorker(l, quota) {
   creazione.then(w => { if (scaduto || l.annullato) { try { w.terminate(); } catch (e) { /* già chiuso */ } } }, () => {});
   try {
     const w = await conTempo(creazione, TEMPI.preparazione, 'offline');
+    // lettura interrotta mentre il worker si avviava: è già chiuso (qui sopra), non gli si manda più nulla
+    if (l.annullato) throw errore('annullato');
     await w.setParameters({ user_defined_dpi: '300' });
     return w;
   } catch (e) {

@@ -488,6 +488,107 @@ test('PDF: la scansione A4 del responsabile con fronte e retro si legge e resta 
   } finally { await x.chiudi(); }
 });
 
+// 06/11/2026, richiesta del titolare: una piccola ✕ in alto a destra dei file caricati, per toglierli se sono sbagliati
+test('✕ dei file caricati, scansione spenta: solo con un file, piccola in alto a destra; toglie il file (anche da tastiera), riquadro e contatore come prima; senza il file non si va avanti', async () => {
+  const x = await apri({ scansione: 'spenta' });
+  try {
+    await iniziaFlusso(x.page);
+    const X = lato => x.page.locator('#upload-side-1-' + lato + ' .upload-side-togli');
+    const contatore = () => x.page.$eval('#upload-status-1', e => e.textContent.trim());
+    assert.equal(await X('fronte').isVisible(), false, 'senza file nessuna ✕');
+    assert.equal(await X('retro').isVisible(), false);
+    await x.page.setInputFiles('#ospite1_documento_fronte', CIE.fronte);
+    assert.equal(await X('fronte').isVisible(), true, 'con il file la ✕');
+    assert.equal(await X('retro').isVisible(), false, 'il retro è ancora vuoto');
+    assert.match(await contatore(), /^1 /);
+    const riquadro = await x.page.$eval('#upload-side-1-fronte', e => e.getBoundingClientRect().toJSON()), b = await X('fronte').boundingBox();
+    assert.ok(b.width <= 32 && riquadro.right - (b.x + b.width) < 16 && b.y - riquadro.top < 16, 'piccola, in alto a destra del riquadro');
+    await X('fronte').click();
+    assert.equal(await x.page.$eval('#ospite1_documento_fronte', e => e.files.length), 0, 'file tolto');
+    assert.equal((await x.page.locator('label[for="ospite1_documento_fronte"]').innerText()).trim(), '📎 Scegli file');
+    assert.equal(await x.page.$eval('#upload-side-1-fronte', e => e.classList.contains('completo')), false);
+    assert.equal(await X('fronte').isVisible(), false, 'tolto il file, niente ✕');
+    assert.match(await contatore(), /^0 /);
+    // da tastiera: Invio sulla ✕; il fuoco passa al campo file dello stesso lato
+    await x.page.setInputFiles('#ospite1_documento_fronte', CIE.fronte);
+    await X('fronte').focus();
+    await x.page.keyboard.press('Enter');
+    assert.equal(await x.page.$eval('#ospite1_documento_fronte', e => e.files.length), 0);
+    assert.equal(await x.page.evaluate(() => document.activeElement && document.activeElement.id), 'ospite1_documento_fronte');
+    // il file tolto non resta da nessuna parte: senza il fronte non si va avanti; ricaricato, sì
+    await imposta(x.page, 1, RESPONSABILE_A_MANO);
+    await x.page.setInputFiles('#ospite1_documento_retro', CIE.retro);
+    await x.page.click('.step.active .btn-primary');
+    await new Promise(r => setTimeout(r, 300));
+    assert.ok(await x.page.$eval('#step-2', e => e.classList.contains('active')), 'senza il fronte si resta al passo');
+    await x.page.setInputFiles('#ospite1_documento_fronte', CIE.fronte);
+    await avanti(x.page, '#step-3');
+    assert.deepEqual(x.errori, []);
+  } finally { await x.chiudi(); }
+});
+
+test('✕ con la scansione: tolto un lato, via i dati letti solo da quel lato; tolti tutti e due, i campi come prima (resta ciò che l\'ospite ha scritto); ✕ durante la lettura; altri ospiti', async () => {
+  const x = await apri({ scansione: 'attiva' });
+  try {
+    await iniziaFlusso(x.page);
+    await scegliScansione(x.page, 1);
+    const vuoti = Object.fromEntries(Object.keys(RESPONSABILE_A_MANO).map(k => [k, '']));
+    const segni = () => x.page.evaluate(() => document.querySelectorAll('.step.active .scan-letto, .step.active .scan-verifica').length);
+    const statoLato = (n, k) => x.page.$eval('#scan-pannello-' + n + ' [data-stato-lato="' + k + '"]', e => e.textContent.trim());
+    await x.page.setInputFiles('#ospite1_documento_fronte', CIE.fronte);
+    await x.page.setInputFiles('#ospite1_documento_retro', CIE.retro);
+    await attendiFine(x.page, 1, [1, 2]);
+    assert.deepEqual(await valori(x.page, 1), RESPONSABILE_A_MANO);
+    // via il fronte: via luogo di nascita, comune e provincia (si leggono solo lì); il resto resta, dalla MRZ del retro
+    await x.page.click('#upload-side-1-fronte .upload-side-togli');
+    await x.page.waitForFunction(() => !document.querySelector('[name="ospite1_comune"]').value);
+    assert.deepEqual(await valori(x.page, 1), Object.assign({}, RESPONSABILE_A_MANO, { luogo_nascita: '', comune: '', provincia: '' }));
+    assert.equal(await x.page.$eval('#ospite1_documento_fronte', e => e.files.length), 0);
+    assert.equal(await x.page.$eval('#ospite1_documento_retro', e => e.files[0] && e.files[0].name), 'cie-retro.jpg', 'il retro resta allegato');
+    assert.equal(await statoLato(1, 1), '');
+    assert.match(await statoLato(1, 2), /Letto/);
+    // via anche il retro: i campi come prima della scansione (vuoti), senza segni né messaggi
+    await x.page.click('#upload-side-1-retro .upload-side-togli');
+    await x.page.waitForFunction(() => !document.querySelector('[name="ospite1_cognome"]').value);
+    assert.deepEqual(await valori(x.page, 1), vuoti);
+    assert.equal(await segni(), 0);
+    assert.equal(await x.page.$eval('#scan-pannello-1 .scan-esito', e => e.hidden), true);
+    // ✕ mentre il lato si legge: la lettura si ferma, nessun dato, barra nascosta, nessun worker
+    await x.page.setInputFiles('#ospite1_documento_fronte', CIE.fronte);
+    await x.page.waitForFunction(() => /Lettura in corso/.test(document.querySelector('#scan-pannello-1 [data-stato-lato="1"]').textContent));
+    await x.page.click('#upload-side-1-fronte .upload-side-togli');
+    await new Promise(r => setTimeout(r, 2500));
+    assert.deepEqual(await valori(x.page, 1), vuoti);
+    assert.equal(await statoLato(1, 1), '');
+    assert.equal(await x.page.$eval('#scan-pannello-1 .scan-avanzamento', e => e.hidden), true, 'barra di avanzamento nascosta');
+    assert.deepEqual(x.page.workers().map(w => w.url()), [], 'nessun worker attivo');
+    // dopo tutto questo si legge come sempre
+    await x.page.setInputFiles('#ospite1_documento_fronte', CIE.fronte);
+    await x.page.setInputFiles('#ospite1_documento_retro', CIE.retro);
+    await attendiFine(x.page, 1, [1, 2]);
+    assert.deepEqual(await valori(x.page, 1), RESPONSABILE_A_MANO);
+    // altro ospite: la ✕ solo sul lato con una foto; quello che l'ospite ha scritto a mano resta
+    await x.page.evaluate(() => { currentStep = 3; mostraStepCorrente(); });
+    await scegliScansione(x.page, 2);
+    const X2 = k => x.page.locator('#scan-pannello-2 .scan-lato-togli[data-lato="' + k + '"]');
+    assert.equal(await X2(1).isVisible(), false, 'senza foto nessuna ✕');
+    await caricaPerOspite(x.page, 2, file('passaporto-de.jpg'));
+    await attendiFine(x.page, 2, [1]);
+    assert.equal((await valori(x.page, 2)).nome, 'TEODORICO');
+    assert.equal(await X2(1).isVisible(), true, 'lato letto: la ✕');
+    assert.equal(await X2(2).isVisible(), false, 'lato vuoto: niente ✕');
+    await x.page.fill('[name="ospite2_nome"]', 'TEO');
+    await X2(1).click();
+    await x.page.waitForFunction(() => !document.querySelector('[name="ospite2_cognome"]').value);
+    const v2 = await valori(x.page, 2);
+    assert.deepEqual([v2.cognome, v2.nome, v2.genere, v2.nascita, v2.cittadinanza], ['', 'TEO', '', '', ''], 'resta solo il nome scritto a mano');
+    assert.equal(await X2(1).isVisible(), false);
+    assert.equal(await statoLato(2, 1), '');
+    assert.equal(await x.page.$eval('#scan-pannello-2 .scan-esito', e => e.hidden), true);
+    assert.deepEqual(x.errori, []);
+  } finally { await x.chiudi(); }
+});
+
 test('foto come quelle vere: documento piccolo e storto su una tovaglia a disegni, accanto a un portafoglio; letto in pochi secondi', async () => {
   const x = await apri({ scansione: 'attiva' });
   try {

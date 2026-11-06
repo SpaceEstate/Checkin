@@ -106,6 +106,13 @@ salvataggio). Le foto sintetiche per provare sono in `tests/browser/documenti-si
    essere letto male), il testo stampato se coincide (accenti, apostrofi, Ü = UE) o se la MRZ è troncata.
 8. Si compilano **solo i campi vuoti** dell'ospite giusto. Un valore già scritto e diverso diventa una scelta («Usa il documento» /
    «Tieni il mio»). «Annulla la compilazione automatica» rimette tutti i campi come prima.
+   **La ✕ di un lato** (06/11/2026, richiesta del titolare: in alto a destra del riquadro, solo quando su quel lato c'è un file o una
+   foto; per il responsabile è quella del suo riquadro di caricamento, vedi [campi-elenco.md](campi-elenco.md)) toglie il file o la foto
+   **e quello che se ne era letto**: i campi scritti dalla scansione e non più toccati dall'ospite tornano come prima, poi si ricompila con
+   la lettura dell'altro lato, se c'è (tolto il fronte della CIE restano i dati della MRZ del retro, senza luogo di nascita, comune e
+   provincia). Quello che l'ospite ha scritto o scelto resta. Se quel lato si sta leggendo, la lettura si ferma (se dopo c'è l'altro
+   lato, finisce e si scarta). Una lettura interrotta (✕ o «Interrompi») non rimette a schermo la barra di avanzamento e non manda più
+   nulla al worker dell'OCR già chiuso: la tela va all'OCR già in PNG, gli stessi byte che Tesseract.js ricavava da sé.
 9. A fine lettura il worker dell'OCR viene chiuso (con lui la memoria che ha contenuto l'immagine), le tele e le matrici di grigi vengono
    azzerate, le bitmap chiuse, il campo file svuotato. L'ospite conferma i dati con il solito «Avanti».
 

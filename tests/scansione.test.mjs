@@ -20,8 +20,11 @@ const ATTUALI = JSON.parse(read('tests/fixtures/scansione/passi-ospiti-attuali.j
 // mancava (senza, i comuni di quella provincia non potevano avere la provincia compilata dall'elenco dei comuni), e i formati del campo
 // file del documento del responsabile: solo JPG, PNG e PDF (richiesta del titolare; prima «image/*,.pdf»)
 const ACCEPT_NUOVO = 'accept="image/jpeg,image/png,application/pdf,.jpg,.jpeg,.png,.pdf"', ACCEPT_PRIMA = 'accept="image/*,.pdf"';
-const SENZA_SU = html => html.replace('<option value="SU">SU</option>', '').split(ACCEPT_NUOVO).join(ACCEPT_PRIMA);
-test('scansione spenta: i passi degli ospiti sono identici a quelli di prima (1, 2, 3 e 9 ospiti; italiano, inglese, tedesco), salvo la provincia SU', () => {
+// 06/11/2026, richiesta del titolare: in ogni riquadro di caricamento del responsabile una piccola ✕ in alto a destra, che toglie il
+// file (si vede solo con un file): un pulsante in più per lato, su una riga sua; tolto quello, il riquadro è quello di prima
+const X_TOGLI = /\n {14}<button type="button" class="upload-side-togli"[^\n]*<\/button>/g;
+const SENZA_SU = html => html.replace('<option value="SU">SU</option>', '').split(ACCEPT_NUOVO).join(ACCEPT_PRIMA).replace(X_TOGLI, '');
+test('scansione spenta: i passi degli ospiti sono identici a quelli di prima (1, 2, 3 e 9 ospiti; italiano, inglese, tedesco), salvo la provincia SU, i formati del campo file e la ✕ dei riquadri', () => {
   for (const [caso, attesi] of Object.entries(ATTUALI.casi)) {
     const [n, lingua] = caso.split('-');
     const passi = passiOspiti(ROOT, n, { lingua });
@@ -30,6 +33,7 @@ test('scansione spenta: i passi degli ospiti sono identici a quelli di prima (1,
       assert.equal(p.id, attesi[i].id, caso + ': id');
       assert.equal(p.className, attesi[i].className, caso + ': classe');
       assert.equal(p.html.split('<option value="SU">SU</option>').length, 2, caso + ' passo ' + p.id + ': una sola provincia SU');
+      assert.equal((p.html.match(X_TOGLI) || []).length, (p.html.match(/class="upload-side"/g) || []).length, caso + ' passo ' + p.id + ': una ✕ per riquadro');
       const prima = SENZA_SU(p.html);
       assert.equal(prima.length, attesi[i].caratteri, caso + ' passo ' + p.id + ': lunghezza del markup');
       assert.equal(sha(prima), attesi[i].sha256, caso + ' passo ' + p.id + ': markup diverso da quello di prima');
@@ -58,6 +62,9 @@ test('le funzioni del percorso di oggi (documento del responsabile, validazioni,
     if (f === 'bloccoUploadLato') {
       assert.ok(c.includes(ACCEPT_NUOVO), 'bloccoUploadLato: campo file solo JPG, PNG e PDF');
       c = c.split(ACCEPT_NUOVO).join(ACCEPT_PRIMA);
+      // 06/11/2026, richiesta del titolare: la ✕ che toglie il file (una riga in più, vedi X_TOGLI)
+      assert.equal((c.match(X_TOGLI) || []).length, 1, 'bloccoUploadLato: la ✕ del riquadro');
+      c = c.replace(X_TOGLI, '');
     }
     assert.equal(sha(c), ATTUALI.funzioni[f].sha256, f + ': funzione modificata');
   }
@@ -885,6 +892,44 @@ test('formati consentiti: solo JPG, PNG e PDF nei campi file e nei controlli; i 
     assert.ok(/JPG/.test(testo) && /PNG/.test(testo) && /PDF/.test(testo) && !/WebP|HEIC/.test(testo), l + ' ' + k + ': ' + testo);
   }
   for (const l of ['it', 'en', 'de']) assert.equal(ctx.__UI[l]['scan.heic'], undefined, l + ': scan.heic tolto');
+});
+
+// 06/11/2026, richiesta del titolare: una piccola ✕ in alto a destra dei file caricati, per toglierli se sono sbagliati
+test('✕ dei riquadri: una per lato, si vede solo con un file, nome tradotto; toglie il file con le funzioni di sempre (anche con la scansione spenta)', () => {
+  const nomi = { it: 'Togli il file', en: 'Remove file', de: 'Datei entfernen' };
+  for (const lingua of ['it', 'en', 'de']) {
+    const [passo] = passiOspiti(ROOT, 1, { lingua });
+    const x = passo.html.match(/<button type="button" class="upload-side-togli" onclick="togliFileDocumento\(1, '(?:fronte|retro)', event\)">.*?<\/button>/g) || [];
+    assert.equal(x.length, 2, lingua + ': una ✕ per lato');
+    for (const b of x) {
+      assert.ok(b.includes('<span class="testo-nascosto" data-i18n="guest.togliFile">' + nomi[lingua] + '</span>'), lingua + ': nome del pulsante per i lettori di schermo');
+      assert.ok(b.includes('<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false">'), lingua + ': la ✕ disegnata, nascosta ai lettori di schermo');
+    }
+  }
+  // nascosta di regola; si vede con la classe «completo» del riquadro, che aggiornaLabelUpload (invariata) mette solo con un file
+  const css = read('checkin.css');
+  assert.match(css, /\n\.upload-side-togli,\n\.scan-lato-togli \{[^}]*\n  display: none;/);
+  assert.match(css, /\n\.upload-side\.completo \.upload-side-togli,\n\.scan-lato-togli:not\(\[hidden\]\) \{\n  display: inline-flex;\n\}/);
+  assert.match(corpoFunzione(SRC_CHECKIN, 'aggiornaLabelUpload'), /riquadro\?\.classList\.add\('completo'\);[\s\S]*riquadro\?\.classList\.remove\('completo'\);/);
+  // togliFileDocumento: svuota il campo file, poi etichetta e contatore come dopo un caricamento; da tastiera il fuoco al campo file
+  const chiamate = [];
+  const campo = { value: 'C:\\fakepath\\documento.jpg', focus() { chiamate.push('fuoco'); } };
+  const ctx = {
+    window: {}, inputDocumento: (n, l) => { chiamate.push('campo ' + n + ' ' + l); return campo; },
+    aggiornaLabelUpload: (n, l) => chiamate.push('etichetta ' + n + ' ' + l + ' [' + campo.value + ']'),
+    aggiornaStatoDocumenti: n => chiamate.push('contatore ' + n)
+  };
+  vm.createContext(ctx);
+  vm.runInContext(corpoFunzione(SRC_CHECKIN, 'togliFileDocumento'), ctx);
+  ctx.window.togliFileDocumento(1, 'retro', { detail: 1 });
+  assert.deepEqual(chiamate, ['campo 1 retro', 'etichetta 1 retro []', 'contatore 1']);
+  chiamate.length = 0; campo.value = 'C:\\fakepath\\altro.pdf';
+  ctx.window.togliFileDocumento(1, 'fronte', { detail: 0 });
+  assert.deepEqual(chiamate, ['campo 1 fronte', 'etichetta 1 fronte []', 'contatore 1', 'fuoco']);
+  // altri ospiti (pannello della scansione): una ✕ per lato, nascosta finché il lato non ha una foto
+  const ui = read('scansione/scansione-documento.js');
+  assert.ok(ui.includes('<button type="button" class="scan-lato-togli" data-lato="${k}" hidden>${ICONA_TOGLI}<span class="testo-nascosto" data-i18n="scan.togliFoto">'));
+  assert.match(ui, /togli\.hidden = !chiave \|\| chiave === 'scan\.fotocameraNonDisponibile';/);
 });
 
 test('testi della scansione presenti in italiano, inglese e tedesco', () => {
