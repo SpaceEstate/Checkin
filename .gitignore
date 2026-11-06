@@ -1,5 +1,7 @@
 # Copia della scansione dei documenti creata da build.sh durante il build di Vercel (la sorgente è scansione/)
 /public/scansione/
+# Elenco dei comuni copiato da build.sh (la sorgente è elenchi/)
+/public/elenchi/
 
 # Immagini di documenti d'identità: nel repository MAI immagini con dati reali di ospiti o di altre persone.
 # Le prove usano solo documenti SINTETICI con dati di fantasia, generati dalle prove stesse (vedi docs/scansione-documenti.md).

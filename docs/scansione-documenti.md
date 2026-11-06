@@ -1,20 +1,23 @@
 # Scansione facoltativa dei documenti (lettura automatica dei dati)
 
-Funzione aggiunta il 05/11/2026 (branch `claude/scansione-documenti`). **Spenta di default**: con il flag spento il check-in è identico a prima
-(nessun pulsante, nessun file in più, nessuna richiesta in più; le prove lo verificano).
+Funzione aggiunta il 05/11/2026 (branch `claude/scansione-documenti`). **Spenta di default**: con il flag spento la scansione non c'è
+(nessun pulsante, nessun file della scansione, nessuna richiesta in più; le prove lo verificano). Dal 06/11/2026, a richiesta del titolare,
+cambiano per tutti (anche con la scansione spenta) i campi con elenco, il comune con l'elenco dei comuni e la fotocamera del documento:
+vedi [campi-elenco.md](campi-elenco.md).
 
 ## In breve
 
-In cima al passo di ogni ospite compare la scelta **«Compila manualmente» / «Scansiona documento»**. Con la scansione l'ospite fotografa
-o carica il documento; il browser legge la MRZ (le righe `<<<`) e il testo stampato e compila i campi del modulo. I campi restano
-modificabili; quelli letti sono evidenziati (verde = verificato, arancione = da controllare). Tutto avviene **sul dispositivo dell'ospite**:
-nessuna API, nessun servizio esterno, nessun costo.
+In cima al passo di ogni ospite ci sono le foto del documento (fronte e retro): sul telefono **«📷 Fotografa»** apre la fotocamera con il
+riquadro del documento, ovunque **«🖼️ Carica una foto»**. Il browser legge la MRZ (le righe `<<<`) e il testo stampato e compila i campi del
+modulo, che restano sempre lì da scrivere a mano se la lettura non riesce (nessuna scelta «a mano / scansione», nessuna spiegazione: richiesta
+del titolare, 06/11/2026). I campi letti sono evidenziati (verde = verificato, arancione = da controllare). Tutto avviene **sul dispositivo
+dell'ospite**: nessuna API, nessun servizio esterno, nessun costo.
 
 - **Ospiti diversi dal responsabile**: la foto serve solo a leggere i dati. Non viene inviata, salvata, copiata né mostrata in anteprima.
-- **Responsabile**: la foto continua a essere caricata nei riquadri «Documento di identità» e inviata al gestore **esattamente come prima**.
-  Con «Scansiona documento» quel riquadro (lo stesso, non una copia) sale in cima al passo, sotto la scelta: si caricano le foto (file o
-  fotocamera del check-in) e i campi si compilano da soli, lato per lato. La scansione legge quei file (una copia decodificata in memoria)
-  senza toccarli. «Leggi di nuovo i dati dalle foto» rilegge; con «Compila manualmente» il riquadro torna esattamente al suo posto.
+- **Responsabile**: la foto continua a essere caricata nei riquadri «Documento di identità» e inviata al gestore come prima. Con la
+  scansione quel riquadro (lo stesso, non una copia) sale in cima al passo: si caricano le foto (file o fotocamera del check-in, sul telefono
+  quella con il riquadro) e i campi si compilano da soli, lato per lato. La scansione legge quei file (una copia decodificata in memoria)
+  senza toccarli. Se il codice della scansione non si scarica, il riquadro resta al suo posto di sempre e si compila a mano.
 
 ## Accendere, provare, spegnere
 
@@ -27,8 +30,8 @@ const SCANSIONE_DOCUMENTI = 'prova';   // 'spenta' | 'prova' | 'attiva'
 | Valore | Effetto |
 |---|---|
 | `'spenta'` | Il modulo è quello di prima. |
-| `'prova'` | La scelta compare solo aprendo il check-in con `#scansione=prova` in fondo all'indirizzo, per esempio `https://spaceestate.github.io/Checkin/#scansione=prova`. Gli ospiti non la vedono. Serve a provare sui telefoni veri. **È il valore attuale sul branch `claude/scansione-documenti`** (05/11/2026, per le prove del titolare nell'anteprima di Vercel). |
-| `'attiva'` | La scelta compare a tutti. |
+| `'prova'` | La scansione compare solo aprendo il check-in con `#scansione=prova` in fondo all'indirizzo, per esempio `https://spaceestate.github.io/Checkin/#scansione=prova`. Gli ospiti non la vedono. Serve a provare sui telefoni veri. **È il valore attuale sul branch `claude/scansione-documenti`** (05/11/2026, per le prove del titolare nell'anteprima di Vercel). |
+| `'attiva'` | La scansione compare a tutti. |
 
 **Spegnimento d'emergenza (kill switch):** rimettere `'spenta'` (una riga) e aumentare `?v=` di `checkin.js` in `index.html`, copiando i due
 file in `public/`. Su GitHub Pages è online in un paio di minuti. Se i file della scansione non si scaricano (rete, file mancanti), il modulo mostra un
@@ -44,8 +47,10 @@ salvataggio). Le foto sintetiche per provare sono in `tests/browser/documenti-si
 
 ## Come funziona
 
-1. L'ospite sceglie «Scansiona documento»: solo ora il browser scarica `scansione/scansione-documento.js` e, alla prima lettura, le librerie
-   (circa 4,5 MB la prima volta, poi dalla cache del browser). Tutti i file sono **dello stesso sito** (`scansione/vendor/`).
+1. Con la scansione accesa, aprendo il passo di un ospite il browser scarica `scansione/scansione-documento.js` (pochi KB) e, solo alla prima
+   foto da leggere, le librerie dell'OCR (circa 4,5 MB la prima volta, poi dalla cache del browser). Tutti i file sono **dello stesso sito**
+   (`scansione/vendor/`). Le foto degli altri ospiti arrivano dalla fotocamera con il riquadro (una tela in memoria, ritagliata sul documento)
+   o da «Carica una foto».
 2. La foto (lato con i dati o con la MRZ; un secondo lato facoltativo) viene decodificata in memoria: orientamento EXIF, HEIC/HEIF
    (Safari le apre da solo; altrove heic-to in un worker chiuso subito dopo), riduzione a 2000 px, scala di grigi (il canale più chiaro
    di ogni pixel: le scritte nere restano nere, i fondi colorati del documento schiariscono).
@@ -66,6 +71,9 @@ salvataggio). Le foto sintetiche per provare sono in `tests/browser/documenti-si
 6. Se nella foto non si trova nessuna riga ma ci sono lettere (foto piccola o molto sfocata), si legge l'immagine intera come prima,
    con le rotazioni. Se non ci sono lettere in riga (non è un documento) si risponde subito.
 7. `scansione/lettura-documento.js` (modulo puro, provato in CI) interpreta il testo e propone i valori, campo per campo, con un'affidabilità.
+   Il tipo di documento riconosciuto ma non certo (patente, carta d'identità, passaporto) si compila lo stesso, da controllare (prima era una
+   domanda «È giusto? Sì / Scelgo io»). Il comune letto si porta al nome dell'elenco dei comuni (anche con una lettera sbagliata dall'OCR,
+   nella provincia letta); se non è nell'elenco non si compila.
    Fronte e retro dello stesso ospite si uniscono: per i nomi vale la MRZ se il testo stampato è diverso (di solito è il testo stampato a
    essere letto male), il testo stampato se coincide (accenti, apostrofi, Ü = UE) o se la MRZ è troncata.
 8. Si compilano **solo i campi vuoti** dell'ospite giusto. Un valore già scritto e diverso diventa una scelta («Usa il documento» /
@@ -75,9 +83,12 @@ salvataggio). Le foto sintetiche per provare sono in `tests/browser/documenti-si
 
 ## Documenti e regole
 
+Tipo di documento (solo responsabile): «compilato» = verde se confermato (MRZ valida), altrimenti arancione; «suggerito» = dal 06/11/2026
+si compila anch'esso, con il bordo arancione «da controllare» (prima era una domanda con un tocco).
+
 | Documento | Come si legge | Tipo proposto (solo responsabile) |
 |---|---|---|
-| CIE italiana | Retro: MRZ (TD1) con cifre di controllo. Fronte: testo stampato (luogo e data di nascita «ROMA (RM) 19.04.1980», numero «CA…») | «CARTA IDENTITA' ELETTRONICA», compilato (MRZ italiana TD1 e numero nel formato CIE) |
+| CIE italiana | Retro: MRZ (TD1) con cifre di controllo. Fronte: testo stampato (luogo e data di nascita «ROMA (RM) 19.04.1980», numero «CA…») | «CARTA IDENTITA' ELETTRONICA», compilato (MRZ italiana TD1 e numero nel formato CIE; con il numero della MRZ illeggibile, se lo conferma il fronte) |
 | Carta d'identità cartacea italiana | Solo testo stampato (cognome, nome, «nato il», «a COMUNE (PR)», cittadinanza, numero «AX 1234567») | «CARTA DI IDENTITA'» solo suggerito |
 | Carte d'identità straniere | MRZ TD1/TD2 (e carta francese) | «CARTA DI IDENTITA'» solo suggerito |
 | Passaporti | MRZ TD3 | `P<`: «PASSAPORTO ORDINARIO» suggerito; `PD`: diplomatico suggerito; `PS`/`PO`: di servizio suggerito; altri codici (documenti di viaggio, emergenza, rifugiati): nessun tipo, sceglie l'ospite |
@@ -132,7 +143,8 @@ pagamento cancellata appena foglio ed email al gestore sono a posto, al massimo 
 nell'email al gestore **non hanno cancellazione automatica** (cancellazione manuale entro 24 ore dalla registrazione, come dice l'informativa):
 punto aperto già segnalato in `docs/gdpr/checkin-modifiche.md` § 7.
 
-**Informativa:** `privacy.html` del sito (§ 3, «Lettura automatica del documento (facoltativa)») e la nota nel riquadro della scansione.
+**Informativa:** `privacy.html` del sito (§ 3, «Lettura automatica del documento (facoltativa)»). La nota nel riquadro della scansione è
+stata tolta il 06/11/2026, a richiesta del titolare (nessuna spiegazione nel pannello).
 
 ## Librerie (gratuite, open source, ospitate nel sito)
 
@@ -168,7 +180,7 @@ Nessuna API a pagamento, nessun abbonamento, nessun servizio a consumo.
 
 Le prove automatiche usano Chromium. Prima di passare ad `'attiva'` vanno fatte a mano, con `#scansione=prova`:
 
-1. iPhone (Safari) recente e uno datato (iOS 15/16): «Fotografa» apre la fotocamera; foto del passaporto e della CIE (fronte e retro); foto dalla galleria.
+1. iPhone (Safari) recente e uno datato (iOS 15/16): «Fotografa» apre la fotocamera con il riquadro; foto del passaporto e della CIE (fronte e retro); foto dalla galleria.
 2. Android (Chrome) recente e uno datato: stesse prove; una foto HEIC, se il telefono le scatta.
 3. Responsabile: caricare fronte e retro come sempre, «Leggi i dati dalle foto caricate», completare e pagare (o fermarsi al pagamento):
    l'email al gestore deve arrivare come prima, con le stesse immagini.

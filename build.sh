@@ -10,6 +10,11 @@ cp checkin.js public/
 cp i18n.js public/
 cp successo-pagamento.html public/
 cp fonts.css public/
+cp campi-elenco.js public/
+cp fotocamera.js public/
+# Elenco dei comuni per il campo «Comune» (campi-elenco.js): copiato a ogni build, non nel repository dentro public/
+mkdir -p public/elenchi
+cp elenchi/comuni.js elenchi/LICENZA-codice-fiscale-it.txt public/elenchi/
 cp -r fonts/. public/fonts/
 
 # Scansione facoltativa dei documenti: moduli e librerie ospitate nel sito (vedi docs/scansione-documenti.md).

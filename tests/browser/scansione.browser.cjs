@@ -18,16 +18,18 @@ const misure = {};
 let browser;
 let documentiSenzaScansione = null;       // documenti del responsabile inviati nel flusso senza scansione (flussoAMano)
 
-test.before(async () => { browser = await chromium.launch(); fs.mkdirSync(RISULTATI, { recursive: true }); });
+// fotocamera finta di Chromium (un'immagine che si muove): serve alle prove della fotocamera con il riquadro
+test.before(async () => { browser = await chromium.launch({ args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] }); fs.mkdirSync(RISULTATI, { recursive: true }); });
 test.after(async () => {
   if (browser) await browser.close();
   fs.writeFileSync(path.join(RISULTATI, 'tempi.json'), JSON.stringify(misure, null, 1));
 });
 
 // Apre il check-in con la scansione nello stato voluto; registra richieste, console ed errori della pagina.
-async function apri({ scansione = 'attiva', hash = '', mobile = false, initScript = null } = {}) {
+async function apri({ scansione = 'attiva', hash = '', mobile = false, initScript = null, fotocamera = false } = {}) {
   const srv = await avvia({ scansione });
-  const context = await browser.newContext(mobile ? { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1' } : { viewport: { width: 1280, height: 900 } });
+  const context = await browser.newContext(Object.assign(mobile ? { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1' } : { viewport: { width: 1280, height: 900 } },
+    fotocamera ? { permissions: ['camera'] } : {}));
   await context.addInitScript(() => {
     window.__prova = { blobCreati: 0, blobRevocati: 0 };
     const c = URL.createObjectURL, r = URL.revokeObjectURL;
@@ -81,9 +83,10 @@ async function imposta(page, n, dati) {
   }, { n, dati });
 }
 
+// 06/11/2026: il pannello della scansione si apre da solo in cima al passo (prima si sceglieva «Scansiona documento»): qui si
+// aspetta solo che sia disegnato
 async function scegliScansione(page, n) {
-  await page.click('#scan-scansiona-' + n);
-  await page.waitForSelector('#scan-pannello-' + n + ':not([hidden])');
+  await page.waitForSelector('#scan-pannello-' + n + ' .scan-esito', { state: 'attached', timeout: 30000 });
 }
 // L'esito compare togliendo l'attributo hidden; il passo dell'ospite può non essere a schermo (l'ospite è andato avanti).
 async function attendiEsito(page, n, timeout = 120000) {
@@ -200,12 +203,19 @@ test('scansione spenta: nessun pulsante, nessun file della scansione scaricato, 
   assert.deepEqual(r.errori, []);
 });
 
-test('scansione «prova»: il pulsante compare solo con #scansione=prova nell\'indirizzo', async () => {
+test('scansione «prova»: il pannello compare solo con #scansione=prova nell\'indirizzo; il lettore si scarica solo alla prima foto', async () => {
   const senza = await apri({ scansione: 'prova' });
   try { await iniziaFlusso(senza.page); assert.equal(await senza.page.locator('.scan-doc').count(), 0); assert.ok(!senza.rete.some(r => r.url.includes('/scansione/'))); }
   finally { await senza.chiudi(); }
   const con = await apri({ scansione: 'prova', hash: 'scansione=prova' });
-  try { await iniziaFlusso(con.page); assert.equal(await con.page.locator('.scan-doc').count(), 3, 'un blocco per ospite'); assert.ok(!con.rete.some(r => r.url.includes('/scansione/')), 'il codice si scarica solo quando l\'ospite sceglie la scansione'); }
+  try {
+    await iniziaFlusso(con.page);
+    assert.equal(await con.page.locator('.scan-doc').count(), 3, 'un blocco per ospite');
+    await scegliScansione(con.page, 1);
+    assert.equal(await con.page.locator('.scan-scelta-btn, #scan-manuale-1, #scan-scansiona-1').count(), 0, 'nessuna scelta «a mano / scansione»');
+    // 06/11/2026: il pannello si apre da solo, quindi il suo codice (pochi KB) si scarica con il passo; l'OCR (circa 4,5 MB) no
+    assert.ok(!con.rete.some(r => /\/scansione\/vendor\/(tesseract|tesseract-core|tessdata|heic-to)\//.test(r.url)), 'le librerie dell\'OCR si scaricano solo alla prima foto da leggere');
+  }
   finally { await con.chiudi(); }
 });
 
@@ -317,7 +327,7 @@ test('nessuna sovrascrittura: i valori già scritti diventano una scelta dell\'o
     await scegliScansione(x.page, 2);
     await caricaPerOspite(x.page, 2, file('passaporto-de.jpg'));
     const esito = await attendiEsito(x.page, 2);
-    assert.match(esito, /già compilati/);
+    assert.match(esito, /già compilati/i);          // 06/11/2026: testo accorciato («Già compilati con un altro valore:»)
     let v = await valori(x.page, 2);
     assert.equal(v.cognome, 'Rossi', 'il valore scritto dall\'ospite non si tocca');
     assert.equal(v.nome, 'TEODORICO');
@@ -453,16 +463,17 @@ test('foto come quelle vere: documento piccolo e storto su una tovaglia a disegn
   } finally { await x.chiudi(); }
 });
 
-test('responsabile: tipo di documento suggerito (patente) confermato con un tocco; PDF caricato per il gestore non si legge ma resta allegato', async () => {
+test('responsabile: tipo di documento riconosciuto (patente) compilato da controllare; PDF caricato per il gestore non si legge ma resta allegato', async () => {
   const x = await apri({ scansione: 'attiva' });
   try {
     await iniziaFlusso(x.page);
     await scegliScansione(x.page, 1);
     await x.page.setInputFiles('#ospite1_documento_fronte', file('patente-it.jpg'));
     const esito = await attendiFine(x.page, 1, [1]);
-    assert.match(esito, /PATENTE DI GUIDA/);
-    assert.equal((await valori(x.page, 1)).tipo_documento, '', 'solo suggerito: il campo resta vuoto finché l\'ospite non conferma');
-    await x.page.click('#scan-pannello-1 [data-azione="tipo-si"]');
+    assert.match(esito, /Dati letti dal documento/);
+    // 06/11/2026, richiesta del titolare: niente domanda «È giusto? Sì / Scelgo io»; il tipo si compila, segnato da controllare
+    assert.ok(await x.page.$eval('#ospite1_tipo_documento__testo', e => e.classList.contains('scan-verifica') && e.value === 'PATENTE DI GUIDA'), 'tipo compilato, bordo «da controllare»');
+    assert.equal(await x.page.locator('#scan-pannello-1 [data-azione="tipo-si"]').count(), 0);
     const v = await valori(x.page, 1);
     assert.deepEqual([v.tipo_documento, v.luogo_rilascio, v.cognome, v.nome], ['PATENTE DI GUIDA', 'Italia', 'PROVACCIA', 'BERTOLDO']);
     // numero della patente: solo testo stampato, nessuna cifra di controllo (l'OCR può confondere 1 e L): proposto ma da verificare
@@ -476,20 +487,21 @@ test('responsabile: tipo di documento suggerito (patente) confermato con un tocc
   } finally { await x.chiudi(); }
 });
 
-test('responsabile: il riquadro del documento sale in cima e torna al suo posto; una foto della fotocamera del check-in si legge da sola', async () => {
-  const x = await apri({ scansione: 'attiva' });
+test('responsabile: il riquadro del documento è in cima al passo; sul telefono la fotocamera con il riquadro mette la foto nel riquadro e la lettura parte da sola', async () => {
+  const posto = page => page.evaluate(() => {
+    const sez = document.getElementById('upload-side-1-fronte').closest('.document-section'), prima = sez.previousElementSibling;
+    return { nelPannello: !!sez.closest('#scan-pannello-1'), dopoLuogoRilascio: !!(prima && prima.querySelector('#ospite1_luogo_rilascio')) };
+  });
+  // computer: niente fotocamera (si carica il file), riquadro in cima al pannello
+  const pc = await apri({ scansione: 'attiva' });
   try {
-    await iniziaFlusso(x.page);
-    const posto = () => x.page.evaluate(() => {
-      const sez = document.getElementById('upload-side-1-fronte').closest('.document-section'), prima = sez.previousElementSibling;
-      return { nelPannello: !!sez.closest('#scan-pannello-1'), dopoLuogoRilascio: !!(prima && prima.querySelector('#ospite1_luogo_rilascio')) };
-    });
-    assert.deepEqual(await posto(), { nelPannello: false, dopoLuogoRilascio: true }, 'posto di sempre, sotto «Luogo rilascio»');
-    await scegliScansione(x.page, 1);
-    assert.deepEqual(await posto(), { nelPannello: true, dopoLuogoRilascio: false });
-    // foto «scattata» con la fotocamera del check-in: stesso percorso di capturePhoto (file nel campo, riquadro aggiornato), senza fotocamera
+    await iniziaFlusso(pc.page);
+    await scegliScansione(pc.page, 1);
+    assert.deepEqual(await posto(pc.page), { nelPannello: true, dopoLuogoRilascio: false });
+    assert.equal(await pc.page.$eval('#upload-side-1-fronte .camera-group', e => getComputedStyle(e).display), 'none', 'su un computer il pulsante della fotocamera non c\'è');
+    // foto arrivata nel riquadro dal percorso di sempre (file nel campo, riquadro aggiornato): la lettura parte da sola
     const b64 = fs.readFileSync(CIE.retro).toString('base64');
-    await x.page.evaluate(async b64 => {
+    await pc.page.evaluate(async b64 => {
       const blob = await (await fetch('data:image/jpeg;base64,' + b64)).blob();
       const dt = new DataTransfer();
       dt.items.add(new File([blob], 'documento_ospite_1_prova.jpg', { type: 'image/jpeg' }));
@@ -497,13 +509,88 @@ test('responsabile: il riquadro del documento sale in cima e torna al suo posto;
       aggiornaLabelUpload(1, 'fronte');
       aggiornaStatoDocumenti(1);
     }, b64);
-    await attendiFine(x.page, 1, [1]);
-    const v = await valori(x.page, 1);
+    await attendiFine(pc.page, 1, [1]);
+    const v = await valori(pc.page, 1);
     assert.deepEqual([v.cognome, v.nome, v.nascita, v.numero_documento], ['PROVACCIA', 'ERMENEGILDA', '1980-04-19', 'CA12345XY']);
-    // «Compila manualmente»: il riquadro torna esattamente dov'era, con la foto ancora allegata per il gestore
-    await x.page.click('#scan-manuale-1');
-    assert.deepEqual(await posto(), { nelPannello: false, dopoLuogoRilascio: true });
-    assert.equal(await x.page.$eval('#ospite1_documento_fronte', e => e.files[0].name), 'documento_ospite_1_prova.jpg');
+    assert.equal(await pc.page.$eval('#ospite1_documento_fronte', e => e.files[0].name), 'documento_ospite_1_prova.jpg', 'la foto resta allegata per il gestore');
+    assert.deepEqual(pc.errori, []);
+  } finally { await pc.chiudi(); }
+  // telefono: la fotocamera a tutto schermo con il riquadro; lo scatto va nel riquadro del fronte e si apre subito quella del retro
+  const tel = await apri({ scansione: 'attiva', mobile: true, fotocamera: true });
+  try {
+    await iniziaFlusso(tel.page);
+    await scegliScansione(tel.page, 1);
+    await tel.page.click('#upload-side-1-fronte .camera-btn');
+    await tel.page.waitForFunction(() => { const v = document.querySelector('.fotocamera video'); return v && v.videoWidth > 0; }, null, { timeout: 15000 });
+    assert.equal(await tel.page.locator('.fotocamera-riquadro').count(), 1, 'riquadro del documento');
+    await tel.page.screenshot({ path: path.join(RISULTATI, 'fotocamera-riquadro.png') });
+    await tel.page.click('.fotocamera-scatta');
+    await tel.page.waitForFunction(() => { const f = document.getElementById('ospite1_documento_fronte').files[0]; return f && /^documento_ospite_1_.+\.jpg$/.test(f.name); }, null, { timeout: 10000 });
+    const foto = await tel.page.$eval('#ospite1_documento_fronte', e => ({ nome: e.files[0].name, byte: e.files[0].size, tipo: e.files[0].type }));
+    assert.ok(foto.byte < 1024 * 1024 && foto.tipo === 'image/jpeg', 'foto JPEG sotto 1 MB, come prima: ' + JSON.stringify(foto));
+    await tel.page.waitForSelector('.fotocamera video', { timeout: 5000 });       // retro: si fotografa subito anche quello
+    await tel.page.click('.fotocamera-chiudi');
+    assert.equal(await tel.page.locator('.fotocamera').count(), 0, 'fotocamera chiusa');
+    assert.equal(await tel.page.evaluate(() => document.documentElement.classList.contains('fotocamera-aperta')), false);
+    await attendiFine(tel.page, 1, [1]);            // l'immagine finta della fotocamera non è un documento: la lettura finisce lo stesso
+    assert.deepEqual(tel.errori, []);
+  } finally { await tel.chiudi(); }
+  // il codice della scansione non si scarica: il riquadro resta al suo posto di sempre e si compila a mano
+  const senza = await apri({ scansione: 'attiva' });
+  try {
+    await senza.context.route('**/scansione/scansione-documento.js*', r => r.abort());
+    await iniziaFlusso(senza.page);
+    await senza.page.waitForFunction(() => document.getElementById('scan-doc-1') && document.getElementById('scan-doc-1').hidden, null, { timeout: 15000 });
+    assert.deepEqual(await posto(senza.page), { nelPannello: false, dopoLuogoRilascio: true });
+    await imposta(senza.page, 1, RESPONSABILE_A_MANO);
+    await senza.page.setInputFiles('#ospite1_documento_fronte', CIE.fronte);
+    await senza.page.setInputFiles('#ospite1_documento_retro', CIE.retro);
+    await avanti(senza.page, '#step-3');
+  } finally { await senza.chiudi(); }
+});
+
+test('campi con elenco: si scrive o si sceglie, ma vale solo una voce dell\'elenco; il comune compila la provincia (anche con la scansione spenta)', async () => {
+  const x = await apri({ scansione: 'spenta' });
+  try {
+    await iniziaFlusso(x.page);
+    const nativo = (k) => x.page.$eval('[name="ospite1_' + k + '"]', e => e.value), casella = k => '#ospite1_' + k + '__testo';
+    assert.equal(await x.page.locator('#step-2 .combo').count(), 7, 'genere, cittadinanza, luogo di nascita, comune, provincia, tipo e luogo di rilascio del documento');
+    // cittadinanza: «germ» e Invio
+    await x.page.click(casella('cittadinanza')); await x.page.keyboard.type('germ'); await x.page.keyboard.press('Enter');
+    assert.equal(await nativo('cittadinanza'), 'Germania');
+    // Stato inventato: il campo resta vuoto e lo dice
+    await x.page.fill(casella('luogo_rilascio'), 'Atlantide'); await x.page.click('#ospite1_cognome');
+    await x.page.waitForSelector('#ospite1_luogo_rilascio__testo-errore:not([hidden])');
+    assert.equal(await nativo('luogo_rilascio'), '');
+    // luogo di nascita «ita» (una sola voce che inizia così) → Italia: compaiono comune e provincia
+    await x.page.click(casella('luogo_nascita')); await x.page.keyboard.type('ita'); await x.page.keyboard.press('Tab');
+    await x.page.waitForFunction(() => getComputedStyle(document.getElementById('comune-provincia-wrapper-1')).display !== 'none');
+    assert.equal(await nativo('luogo_nascita'), 'Italia');
+    // comune: si scrive e si sceglie dall'elenco; la provincia si compila da sola (e si può cambiare)
+    await x.page.click(casella('comune')); await x.page.keyboard.type('gubb');
+    await x.page.waitForSelector('#ospite1_comune__testo-lista li[role="option"]', { timeout: 15000 });
+    await x.page.click('#ospite1_comune__testo-lista li[role="option"]');
+    assert.deepEqual([await nativo('comune'), await nativo('provincia'), await x.page.$eval(casella('provincia'), e => e.value)], ['GUBBIO', 'PG', 'PG']);
+    // comune inventato: non passa, e «Avanti» si ferma
+    await x.page.fill(casella('comune'), 'Pippolandia'); await x.page.click('#ospite1_cognome');
+    await x.page.waitForSelector('#ospite1_comune__testo-errore:not([hidden])');
+    assert.equal(await nativo('comune'), '');
+    await imposta(x.page, 1, { cognome: 'PROVACCIA', nome: 'ERMENEGILDA', genere: 'F', nascita: '1980-04-19', tipo_documento: "CARTA IDENTITA' ELETTRONICA", numero_documento: 'CA12345XY', luogo_rilascio: 'Italia' });
+    await x.page.setInputFiles('#ospite1_documento_fronte', CIE.fronte);
+    await x.page.setInputFiles('#ospite1_documento_retro', CIE.retro);
+    await x.page.click('.step.active .btn-primary');
+    await x.page.waitForTimeout(500);
+    assert.equal(await x.page.locator('#step-2.active').count(), 1, 'comune non valido: si resta sul passo');
+    // vecchio nome scritto a mano → il comune di oggi; poi si prosegue
+    await x.page.fill(casella('comune'), 'abano bagni'); await x.page.click('#ospite1_cognome');
+    await x.page.waitForFunction(() => document.querySelector('[name="ospite1_comune"]').value === 'ABANO TERME');
+    assert.equal(await nativo('provincia'), 'PD');
+    await avanti(x.page, '#step-3');
+    // valori messi dal codice (come la scansione) e cambio di lingua: la casella si aggiorna
+    await imposta(x.page, 2, { genere: 'M', cittadinanza: 'Germania' });
+    assert.equal(await x.page.$eval('#ospite2_genere__testo', e => e.value), 'Maschio');
+    await x.page.evaluate(() => impostaLingua('en'));
+    assert.deepEqual([await x.page.$eval('#ospite2_genere__testo', e => e.value), await x.page.$eval('#ospite2_cittadinanza__testo', e => e.value)], ['Male', 'Germany']);
     assert.deepEqual(x.errori, []);
   } finally { await x.chiudi(); }
 });
@@ -540,8 +627,8 @@ test('schermo stretto, CPU della pagina rallentata 6 volte (il worker dell\'OCR 
     await cdp.send('Emulation.setCPUThrottlingRate', { rate: 6 });
     await iniziaFlusso(x.page);
     await x.page.evaluate(() => { currentStep = 3; mostraStepCorrente(); });
-    assert.equal((await x.page.locator('#scan-scansiona-2').innerText()).trim(), '📷 Scan document');
     await scegliScansione(x.page, 2);
+    assert.equal((await x.page.locator('#scan-pannello-2 .scan-fotografa[data-lato="1"]').innerText()).trim(), '📷 Take a photo');
     const t0 = Date.now();
     await caricaPerOspite(x.page, 2, file('passaporto-de.jpg'));
     const esito = await attendiEsito(x.page, 2, 180000);

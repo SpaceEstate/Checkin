@@ -50,6 +50,8 @@ export function apri(n, contesto) {
   if (!s.disegnato) disegnaPannello(s);
   s.pannello.hidden = false;
   if (n === 1) portaSuDocumento(s);
+  // elenco dei comuni (campi-elenco.js): serve a portare il comune letto al nome giusto
+  if (window.ElencoComuni) window.ElencoComuni.carica();
 }
 
 export function chiudi(n) {
@@ -60,19 +62,19 @@ export function chiudi(n) {
 }
 
 // ---- Responsabile: riquadro del documento in cima e lettura automatica ----
-// Con «Scansiona documento» il riquadro «Documento di identità» del responsabile (proprio quello, non una copia: stessi campi
-// file, stessi pulsanti della fotocamera, stesse funzioni di checkin.js per caricamento e invio) sale nel pannello, sotto la nota:
-// prima si caricano le foto, poi i campi si compilano. Con «Compila manualmente» torna esattamente al suo posto.
+// Il riquadro «Documento di identità» del responsabile (proprio quello, non una copia: stessi campi file, stessa fotocamera, stesse
+// funzioni di checkin.js per caricamento e invio) sale in cima al passo, nel pannello: prima si caricano le foto, poi i campi si
+// compilano da soli. chiudi() lo rimette esattamente al suo posto.
 function sezioneDocumento() {
   const fronte = document.getElementById('upload-side-1-fronte');
   return fronte && fronte.closest ? fronte.closest('.document-section') : null;
 }
 
 function portaSuDocumento(s) {
-  const sezione = sezioneDocumento(), nota = s.pannello && s.pannello.querySelector('.scan-nota');
-  if (!sezione || !nota) return;
+  const sezione = sezioneDocumento();
+  if (!sezione || !s.pannello) return;
   if (!s.postoDocumento) s.postoDocumento = { padre: sezione.parentNode, dopo: sezione.nextSibling };
-  if (nota.nextSibling !== sezione) nota.parentNode.insertBefore(sezione, nota.nextSibling);
+  if (s.pannello.firstChild !== sezione) s.pannello.insertBefore(sezione, s.pannello.firstChild);
   sezione.classList.add('scan-documento-in-alto');
   osservaCaricamenti(s);
 }
@@ -128,20 +130,20 @@ function statoOspite(n) {
 
 function disegnaPannello(s) {
   const n = s.n, responsabile = n === 1;
+  // sul telefono «Fotografa» apre la fotocamera con il riquadro del documento (fotocamera.js); su un computer si carica un file
+  const fotocamera = !!(window.FotocameraDocumento && window.FotocameraDocumento.disponibile());
   const lato = k => `
         <div class="scan-lato" data-lato="${k}">
           <div class="scan-lato-testa"><span class="scan-lato-numero">${k}</span><span data-i18n="scan.lato${k}">${esc(ctx.t('scan.lato' + k))}</span></div>
           <div class="scan-lato-azioni">
-            <div class="scan-file"><span class="scan-btn" data-i18n="scan.fotografa">${esc(ctx.t('scan.fotografa'))}</span><input type="file" class="scan-input" accept="image/*" capture="environment" data-lato="${k}" aria-label="${esc(ctx.t('scan.fotografa'))}"></div>
-            <div class="scan-file"><span class="scan-btn scan-btn-chiaro" data-i18n="scan.carica">${esc(ctx.t('scan.carica'))}</span><input type="file" class="scan-input" accept="image/*" data-lato="${k}" aria-label="${esc(ctx.t('scan.carica'))}"></div>
+            ${fotocamera ? `<button type="button" class="scan-btn scan-fotografa" data-lato="${k}" data-i18n="scan.fotografa">${esc(ctx.t('scan.fotografa'))}</button>` : ''}
+            <div class="scan-file"><span class="scan-btn${fotocamera ? ' scan-btn-chiaro' : ''}" data-i18n="scan.carica">${esc(ctx.t('scan.carica'))}</span><input type="file" class="scan-input" accept="image/*" data-lato="${k}" aria-label="${esc(ctx.t('scan.carica'))}"></div>
           </div>
           <p class="scan-lato-stato" data-stato-lato="${k}">&nbsp;</p>
         </div>`;
   s.pannello.innerHTML = `
-      <p class="scan-nota" data-i18n="${responsabile ? 'scan.privacyResponsabile' : 'scan.privacyAltri'}">${esc(ctx.t(responsabile ? 'scan.privacyResponsabile' : 'scan.privacyAltri'))}</p>
       ${responsabile
-        ? `<button type="button" class="scan-btn scan-leggi" data-i18n="scan.leggiCaricate">${esc(ctx.t('scan.leggiCaricate'))}</button>
-      <p class="scan-lato-stato" data-stato-lato="1" data-prefisso="guest.latoFronte">&nbsp;</p>
+        ? `<p class="scan-lato-stato" data-stato-lato="1" data-prefisso="guest.latoFronte">&nbsp;</p>
       <p class="scan-lato-stato" data-stato-lato="2" data-prefisso="guest.latoRetro">&nbsp;</p>`
         : `<div class="scan-lati">${lato(1)}${lato(2)}</div>`}
       <div class="scan-avanzamento" hidden>
@@ -151,9 +153,9 @@ function disegnaPannello(s) {
       </div>
       <div class="scan-esito" hidden></div>`;
   s.disegnato = true;
+  s.pannello.classList.toggle('scan-responsabile', responsabile);
   s.pannello.querySelectorAll('.scan-input').forEach(inp => inp.addEventListener('change', () => fotoScelta(s, inp)));
-  const leggi = s.pannello.querySelector('.scan-leggi');
-  if (leggi) leggi.addEventListener('click', () => leggiFotoResponsabile(s));
+  s.pannello.querySelectorAll('.scan-fotografa').forEach(b => b.addEventListener('click', () => fotografa(s, b.getAttribute('data-lato') === '2' ? 2 : 1)));
   s.pannello.querySelector('.scan-interrompi').addEventListener('click', () => interrompi(true));
 }
 
@@ -184,7 +186,7 @@ function statoLato(s, k, chiave, params) {
   scrivi(el, chiave ? (prefisso ? ctx.t(prefisso) + ': ' : '') + ctx.t(chiave, params) : '\u00a0');
 }
 function avvisoPannello(s, chiave, tipo) {
-  s.esito = { messaggio: chiave, tipo: tipo || 'errore', righe: [], conflitti: [], suggerimento: null };
+  s.esito = { messaggio: chiave, tipo: tipo || 'errore', conflitti: [] };
   mostraEsito(s);
 }
 
@@ -200,21 +202,14 @@ function fotoScelta(s, input) {
   esegui(s, [{ k, file }]);
 }
 
-// Responsabile: si leggono i file già allegati per il gestore, senza modificarli né toglierli dai loro campi.
-function leggiFotoResponsabile(s) {
-  const file = [];
-  for (const [k, lato] of [[1, 'fronte'], [2, 'retro']]) {
-    const input = ctx.inputDocumento(1, lato);
-    const f = input && input.files && input.files[0];
-    if (f) { file.push({ k, file: f }); if (s.lettiResponsabile) s.lettiResponsabile[k] = chiaveFile(f); }
-  }
-  if (!file.length) {
-    avvisoPannello(s, 'scan.primaCarica', 'info');
-    const riquadro = document.getElementById('upload-side-1-fronte');
-    if (riquadro && riquadro.scrollIntoView) riquadro.scrollIntoView({ behavior: 'smooth', block: 'center' });   // è già in cima, nel pannello
-    return;
-  }
-  esegui(s, file);
+// Altri ospiti, «Fotografa»: fotocamera con il riquadro. Lo scatto (una tela già ritagliata sul documento) va alla lettura in
+// memoria e si azzera appena letto: nessun file, nessun invio.
+function fotografa(s, k) {
+  window.FotocameraDocumento.apri({
+    titolo: ctx.t(k === 2 ? 'scan.fotoRetro' : 'scan.fotoFronte'),
+    onFoto: tela => esegui(s, [{ k, tela }]),
+    onErrore: () => statoLato(s, k, 'scan.fotocameraNonDisponibile')
+  });
 }
 
 // ---- Lettura (una alla volta) ----
@@ -225,7 +220,7 @@ export function interrompi(avvisa) {
   if (!l) return;
   l.annullato = true;
   lavoro = null;
-  for (const voce of l.coda || []) voce.file = null;      // anche le foto in coda: nessun riferimento resta
+  for (const voce of l.coda || []) { if (voce.tela) azzera(voce.tela); voce.file = null; voce.tela = null; }      // anche le foto in coda
   l.coda = [];
   chiudiWorker(l);
   const s = ospiti.get(l.n);
@@ -269,7 +264,7 @@ async function esegui(s, elenco) {
       const voce = l.coda.shift(), base = fatti;
       statoLato(s, voce.k, 'scan.inLettura');
       try {
-        const lettura = await leggiFile(l, voce.file, q => avanzamento(s, null, (base + q) / (base + 1 + l.coda.length)));
+        const lettura = await leggiFile(l, voce.tela || voce.file, q => avanzamento(s, null, (base + q) / (base + 1 + l.coda.length)));
         if (l.annullato) return;
         s.letture[voce.k] = lettura;
         statoLato(s, voce.k, lettura.vuota ? (lettura.sfocata ? 'scan.latoSfocato' : 'scan.latoNonLetto') : 'scan.latoLetto');
@@ -278,9 +273,10 @@ async function esegui(s, elenco) {
         const codice = (e && e.codice) || 'errore';
         errori.push(codice);
         statoLato(s, voce.k, 'scan.lato.' + (['pdf', 'formato', 'heic', 'timeout', 'offline'].includes(codice) ? codice : 'errore'));
-        if (codice === 'timeout' || codice === 'offline') { for (const resto of l.coda) { resto.file = null; statoLato(s, resto.k, null); } l.coda = []; }
+        if (codice === 'timeout' || codice === 'offline') { for (const resto of l.coda) { if (resto.tela) azzera(resto.tela); resto.file = null; resto.tela = null; statoLato(s, resto.k, null); } l.coda = []; }
       } finally {
-        voce.file = null;                       // nessun riferimento all'immagine dopo la lettura
+        if (voce.tela) azzera(voce.tela);       // nessun riferimento all'immagine dopo la lettura
+        voce.file = null; voce.tela = null;
         fatti++;
       }
     }
@@ -294,7 +290,9 @@ async function esegui(s, elenco) {
 }
 
 async function leggiFile(l, file, quota) {
-  const immagine = await decodifica(file);
+  const immagine = typeof HTMLCanvasElement !== 'undefined' && file instanceof HTMLCanvasElement
+    ? { sorgente: file, w: file.width, h: file.height, rotazione: 0, chiudi() {} }      // dalla fotocamera: già un'immagine
+    : await decodifica(file);
   if (l.annullato) { immagine.chiudi(); throw errore('annullato'); }
   let pagina = null;
   try {
@@ -821,7 +819,7 @@ const ETICHETTE_CAMPI = { cognome: 'field.cognome', nome: 'field.nome', genere: 
 
 const campo = (n, k) => (n === 1 || !['tipoDocumento', 'numeroDocumento', 'luogoRilascio'].includes(k)) ? document.querySelector(SELETTORI[k](n)) : null;
 const testoData = el => { const w = el && el.closest && el.closest('.date-input-wrapper'); return w ? w.querySelector('.date-text-input') : null; };
-const visibile = el => testoData(el) || el;
+const visibile = el => el._combo || testoData(el) || el;      // campi con elenco: la casella di testo (campi-elenco.js)
 
 function valoriAttuali(n) {
   const v = {};
@@ -913,6 +911,19 @@ function concludi(s, errori) {
   const comb = L.combinaLetture(letture, { responsabile, oggi: Date.now(), stati: ctx.stati, province: ctx.province });
   const proposte = {};
   for (const [k, c] of Object.entries(comb.campi)) if (c.valore) proposte[k] = c;
+  // tipo di documento riconosciuto ma non certo (patente, carta d'identità, passaporto): si compila lo stesso, da controllare
+  // (prima era una domanda «È giusto? Sì / Scelgo io»: tolta su richiesta del titolare, 06/11/2026)
+  const tipoDoc = comb.campi.tipoDocumento;
+  if (responsabile && tipoDoc && !tipoDoc.valore && tipoDoc.suggerimento) proposte.tipoDocumento = { valore: tipoDoc.suggerimento, affidabilita: L.DA_VERIFICARE, fonte: 'tipo' };
+  // comune: il nome dell'elenco dei comuni (campi-elenco.js), anche se l'OCR ha sbagliato una lettera; se non è nell'elenco
+  // non si compila (il campo accetta solo comuni dell'elenco)
+  if (proposte.comune && window.ElencoComuni && window.ElencoComuni.pronto()) {
+    const r = window.ElencoComuni.simile(proposte.comune.valore, proposte.provincia && proposte.provincia.valore);
+    if (r && !r.ambiguo) {
+      proposte.comune = Object.assign({}, proposte.comune, { valore: r.nome }, r.approssimato ? { affidabilita: L.DA_VERIFICARE } : {});
+      if (!proposte.provincia) proposte.provincia = { valore: r.prov, affidabilita: L.DA_VERIFICARE, fonte: 'elenco' };
+    } else delete proposte.comune;
+  }
   const { scritti, conflitti } = letture.length ? applica(s, proposte) : { scritti: [], conflitti: [] };
   let messaggio, tipo;
   const sfocate = letture.some(x => x.sfocata && x.vuota);
@@ -928,14 +939,12 @@ function concludi(s, errori) {
     else { messaggio = 'scan.nonLeggibile'; tipo = 'errore'; }
   } else if (comb.esito === 'parziale') { messaggio = 'scan.esitoParziale'; tipo = 'parziale'; }
   else { messaggio = 'scan.esitoOk'; tipo = 'ok'; }
-  const t = comb.campi.tipoDocumento;
-  const suggerimento = responsabile && t && !t.valore && t.suggerimento && !(campo(1, 'tipoDocumento') || {}).value ? t.suggerimento : null;
-  const avvisi = comb.avvisi.slice();
+  const avvisi = comb.avvisi.filter(a => a.codice !== 'tipo_da_scegliere' || !proposte.tipoDocumento);
   // stesso documento usato per due ospiti?
   const totale = ctx.numeroOspiti ? ctx.numeroOspiti() : 0, attuali = valoriAttuali(s.n);
   for (let m = 1; m <= totale; m++) if (m !== s.n && L.stessaPersona(attuali, valoriAttuali(m))) avvisi.push({ codice: 'stesso_ospite', n: m });
   if (errori.includes('timeout') && comb.esito !== 'nessun_dato') avvisi.push({ codice: 'timeout_parziale' });
-  s.esito = { messaggio, tipo, scritti, conflitti, suggerimento, avvisi, daVerificare: scritti.filter(x => x.affidabilita !== L.SICURO).length };
+  s.esito = { messaggio, tipo, scritti, conflitti, avvisi };
   mostraEsito(s);
 }
 
@@ -944,18 +953,8 @@ function mostraEsito(s) {
   const e = s.esito;
   if (!box || !e) return;
   const t = ctx.t;
-  const righe = [];
-  righe.push(`<p class="scan-esito-titolo">${esc(t(e.messaggio))}</p>`);
-  if (e.scritti && e.scritti.length) {
-    righe.push(`<p class="scan-esito-riepilogo">${esc(t('scan.compilati', { n: e.scritti.length }))}${e.daVerificare ? ' ' + esc(t('scan.daVerificare', { n: e.daVerificare })) : ''}</p>`);
-    righe.push(`<p class="scan-legenda"><span class="scan-legenda-letto">${esc(t('scan.legendaLetto'))}</span> · <span class="scan-legenda-verifica">${esc(t('scan.legendaVerifica'))}</span></p>`);
-  }
+  const righe = [`<p class="scan-esito-titolo">${esc(t(e.messaggio))}</p>`];
   for (const a of e.avvisi || []) righe.push(`<p class="scan-avviso">${esc(t('scan.avviso.' + a.codice, { n: a.n }))}</p>`);
-  if (e.suggerimento) {
-    righe.push(`<div class="scan-suggerimento"><span>${esc(t('scan.tipoSuggerito', { tipo: ctx.traduciDocumento ? ctx.traduciDocumento(e.suggerimento) : e.suggerimento }))}</span>
-      <button type="button" class="scan-mini" data-azione="tipo-si">${esc(t('scan.tipoSi'))}</button>
-      <button type="button" class="scan-mini scan-mini-chiaro" data-azione="tipo-no">${esc(t('scan.tipoScelgoIo'))}</button></div>`);
-  }
   if (e.conflitti && e.conflitti.length) {
     righe.push(`<p class="scan-conflitti-titolo">${esc(t('scan.conflittiTitolo'))}</p>`);
     e.conflitti.forEach((c, i) => righe.push(`<div class="scan-conflitto"><span>${esc(t('scan.conflitto', { campo: t(ETICHETTE_CAMPI[c.campo] || c.campo), attuale: mostraValore(c.campo, c.attuale), letto: mostraValore(c.campo, c.letto) }))}</span>
@@ -984,7 +983,7 @@ function azioneEsito(s, azione, indice) {
     s.letture = {};
     s.istantanea = null;
     for (const k of [1, 2]) statoLato(s, k, null);
-    s.esito = { messaggio: 'scan.annullata', tipo: 'info', scritti: [], conflitti: [], suggerimento: null, avvisi: [] };
+    s.esito = { messaggio: 'scan.annullata', tipo: 'info', scritti: [], conflitti: [], avvisi: [] };
   } else if (azione === 'usa' || azione === 'tieni') {
     const c = e.conflitti[indice];
     if (!c) return;
@@ -993,15 +992,6 @@ function azioneEsito(s, azione, indice) {
       if (el && imposta(el, c.letto)) segna(el, c.affidabilita);      // scelta dell'ospite: una nuova lettura non la toglie
     }
     e.conflitti = e.conflitti.filter((_, i) => i !== indice);
-  } else if (azione === 'tipo-si' || azione === 'tipo-no') {
-    if (azione === 'tipo-si') {
-      const el = campo(1, 'tipoDocumento');
-      if (el && !el.value && imposta(el, e.suggerimento)) segna(el, L.DA_VERIFICARE);   // scelta dell'ospite
-    } else {
-      const el = campo(1, 'tipoDocumento');
-      if (el && el.focus) el.focus();
-    }
-    e.suggerimento = null;
   }
   mostraEsito(s);
 }

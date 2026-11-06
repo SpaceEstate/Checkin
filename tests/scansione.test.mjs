@@ -16,7 +16,10 @@ const ATTUALI = JSON.parse(read('tests/fixtures/scansione/passi-ospiti-attuali.j
 
 // ---- Comportamento di prima: con la scansione spenta nulla cambia ----
 
-test('scansione spenta: i passi degli ospiti sono identici a quelli di prima (1, 2, 3 e 9 ospiti; italiano, inglese, tedesco)', () => {
+// 06/11/2026: l'unica differenza voluta rispetto a prima è la provincia «SU» (Sud Sardegna, dal 2016) nell'elenco delle province,
+// che mancava: senza, i comuni di quella provincia non potevano avere la provincia compilata dall'elenco dei comuni.
+const SENZA_SU = html => html.replace('<option value="SU">SU</option>', '');
+test('scansione spenta: i passi degli ospiti sono identici a quelli di prima (1, 2, 3 e 9 ospiti; italiano, inglese, tedesco), salvo la provincia SU', () => {
   for (const [caso, attesi] of Object.entries(ATTUALI.casi)) {
     const [n, lingua] = caso.split('-');
     const passi = passiOspiti(ROOT, n, { lingua });
@@ -24,8 +27,10 @@ test('scansione spenta: i passi degli ospiti sono identici a quelli di prima (1,
     passi.forEach((p, i) => {
       assert.equal(p.id, attesi[i].id, caso + ': id');
       assert.equal(p.className, attesi[i].className, caso + ': classe');
-      assert.equal(p.html.length, attesi[i].caratteri, caso + ' passo ' + p.id + ': lunghezza del markup');
-      assert.equal(sha(p.html), attesi[i].sha256, caso + ' passo ' + p.id + ': markup diverso da quello di prima');
+      assert.equal(p.html.split('<option value="SU">SU</option>').length, 2, caso + ' passo ' + p.id + ': una sola provincia SU');
+      const prima = SENZA_SU(p.html);
+      assert.equal(prima.length, attesi[i].caratteri, caso + ' passo ' + p.id + ': lunghezza del markup');
+      assert.equal(sha(prima), attesi[i].sha256, caso + ' passo ' + p.id + ': markup diverso da quello di prima');
     });
   }
 });
@@ -33,8 +38,15 @@ test('scansione spenta: i passi degli ospiti sono identici a quelli di prima (1,
 test('le funzioni del percorso di oggi (documento del responsabile, validazioni, pagamento) sono quelle di prima', () => {
   const src = read('checkin.js');
   for (const f of FUNZIONI_INVARIATE) {
-    const c = corpoFunzione(src, f);
+    let c = corpoFunzione(src, f);
     assert.ok(c, f + ': funzione non trovata');
+    // 06/11/2026, richiesta del titolare: sul telefono la fotocamera del documento si apre a tutto schermo con il riquadro
+    // (fotocamera.js). È un blocco in più all'inizio di openCamera; tolto quello, la funzione è quella di prima.
+    if (f === 'openCamera') {
+      const blocco = /\n  \/\/ Telefono: fotocamera a tutto schermo[\s\S]*?\n    return;\n  }\n/;
+      assert.match(c, blocco, 'openCamera: blocco della fotocamera con il riquadro');
+      c = c.replace(blocco, '');
+    }
     assert.equal(sha(c), ATTUALI.funzioni[f].sha256, f + ': funzione modificata');
   }
 });
@@ -541,13 +553,101 @@ test('testo stampato delle foto vere: etichette lette male, rumore dopo il nome,
   assert.equal(L.chiaveIcao('MÜLLER'), 'MUELLER');
 });
 
+// ---- Campi con elenco scrivibili, elenco dei comuni, fotocamera con il riquadro (06/11/2026, richiesta del titolare) ----
+
+const RIGHE_COMUNI = read('elenchi/comuni.js').split('`')[1].split('\n');
+function ElencoComuniDiProva() {
+  // campi-elenco.js in un contesto isolato, con l'elenco dei comuni già «scaricato» (window.ELENCO_COMUNI)
+  const ctx = { console, setTimeout, queueMicrotask, Promise, Event: class { constructor(t) { this.type = t; } }, document: { createElement() { return {}; }, head: { appendChild() {} } } };
+  ctx.window = ctx;
+  vm.createContext(ctx);
+  ctx.ELENCO_COMUNI = read('elenchi/comuni.js').split('`')[1];
+  vm.runInContext(read('campi-elenco.js'), ctx, { filename: 'campi-elenco.js' });
+  return ctx.ElencoComuni;
+}
+
+test('CIE con il numero della MRZ illeggibile: resta una CIE (proposta con il fronte, altrimenti suggerita)', () => {
+  const r = td1({ tipo: 'C<', stato: 'ITA', cognome: 'PROVACCIA', nome: 'ERMENEGILDA', numero: 'CA00000AA', nascita: '800419', sesso: 'F', scadenza: '310419' });
+  const consumata = [r[0].slice(0, 6) + '?' + r[0].slice(7), r[1], r[2]];          // un carattere del numero non si legge
+  const m = L.leggiMrz(consumata, OGGI);
+  assert.equal(m.campi.numeroDocumento, undefined);
+  assert.deepEqual(L.classificaDocumento(m, null), { tipo: 'cie', voce: L.TIPI_DOCUMENTO.CIE, modo: 'suggerito' });
+  const fronte = L.leggiTestoStampato(['REPUBBLICA ITALIANA', 'CARTA DI IDENTITA / IDENTITY CARD', 'CA00000AA'], OPZ);
+  assert.deepEqual(L.classificaDocumento(m, fronte), { tipo: 'cie', voce: L.TIPI_DOCUMENTO.CIE, modo: 'proposto' });
+  const c = L.combinaLetture([{ mrz: m, stampato: null }, { mrz: null, stampato: fronte }], Object.assign({ responsabile: true }, OPZ));
+  // MRZ non del tutto valida: il tipo arriva come proposta da controllare (la scansione lo scrive con il bordo arancione)
+  assert.equal(c.campi.tipoDocumento.valore || c.campi.tipoDocumento.suggerimento, "CARTA IDENTITA' ELETTRONICA");
+  assert.equal(c.campi.numeroDocumento.valore, 'CA00000AA', 'il numero dal fronte');
+});
+
+test('elenco dei comuni: comuni di oggi, vecchi nomi e soppressi; province del modulo (con SU); licenza e generatore', () => {
+  const voci = RIGHE_COMUNI.map(r => r.split(';'));
+  const oggi = voci.filter(v => v.length === 2), vecchi = voci.filter(v => v[2] && v[2][0] === '='), soppressi = voci.filter(v => v[2] === '-');
+  assert.equal(oggi.length, 7902, 'comuni di oggi');
+  assert.equal(oggi.length + vecchi.length + soppressi.length, voci.length);
+  assert.ok(vecchi.length > 2000 && soppressi.length > 2000);
+  assert.ok(voci.every(v => /^[A-Z][A-Z0-9 '\-.\/()]*$/.test(v[0]) && /^[A-Z]{2}$/.test(v[1])), 'nomi in maiuscolo e sigle di provincia');
+  assert.equal(new Set(voci.map(v => v[0] + ';' + v[1])).size, voci.length, 'un solo comune per nome e provincia');
+  const nomiOggi = new Set(oggi.map(v => v[0]));
+  assert.ok(vecchi.every(v => nomiOggi.has(v[2].slice(1))), 'ogni vecchio nome rimanda a un comune di oggi');
+  for (const [nome, prov] of [['ROMA', 'RM'], ['GUBBIO', 'PG'], ["REGGIO NELL'EMILIA", 'RE'], ['MILANO', 'MI'], ['CARBONIA', 'SU']]) assert.ok(RIGHE_COMUNI.includes(nome + ';' + prov), nome);
+  // ogni provincia di un comune di oggi è nell'elenco delle province del modulo (che ora ha anche SU, Sud Sardegna)
+  assert.ok(PROVINCE.includes('SU'));
+  assert.deepEqual([...new Set(oggi.map(v => v[1]))].filter(p => !PROVINCE.includes(p)), []);
+  assert.match(read('elenchi/LICENZA-codice-fiscale-it.txt'), /^MIT License/);
+  assert.match(read('elenchi/comuni.js'), /Fonte: archivio dei comuni del pacchetto npm codice-fiscale-it 1\.0\.1 \(licenza MIT/);
+  assert.match(read('elenchi/genera-comuni.cjs'), /writeFileSync\(path\.join\(__dirname, 'comuni\.js'\)/);
+});
+
+test('campo comune: si scrive o si sceglie, ma vale solo un comune dell\'elenco; vecchi nomi, omonimi, lettere sbagliate dall\'OCR', async () => {
+  const E = ElencoComuniDiProva();
+  assert.equal(await E.carica(), true);
+  assert.deepEqual(JSON.parse(JSON.stringify(E.cerca('Gubbio'))).nome, 'GUBBIO');
+  assert.equal(E.cerca('gubbio').prov, 'PG', 'maiuscole o minuscole');
+  assert.equal(E.cerca('Agliè').nome, "AGLIE'", 'accento scritto o con l\'apostrofo');
+  assert.deepEqual([E.cerca('Abano Bagni').nome, E.cerca('Abano Bagni').prov], ['ABANO TERME', 'PD'], 'vecchio nome → nome di oggi');
+  assert.ok(E.cerca('Castro').ambiguo, 'Castro: due comuni (BG e LE)');
+  assert.equal(E.cerca('Castro', 'LE').prov, 'LE', 'con la provincia si sceglie');
+  assert.equal(E.cerca('Pippolandia'), null, 'un comune inventato non c\'è');
+  assert.deepEqual(Array.from(E.trova('gubb'), v => v.nome), ['GUBBIO']);
+  assert.equal(E.trova('san gio', 'NA')[0].nome, 'SAN GIORGIO A CREMANO', 'prima i comuni della provincia scelta');
+  const ocr = E.simile('GUBBLO', 'PG');
+  assert.deepEqual([ocr.nome, ocr.approssimato], ['GUBBIO', true], 'una lettera sbagliata dall\'OCR, nella provincia letta');
+  assert.equal(E.simile('GUBBLO', 'RM'), null, 'non in un\'altra provincia');
+  assert.equal(E.simile('XYZWQ', 'VE'), null);
+});
+
+test('fotocamera con il riquadro e campi con elenco: nessuna archiviazione, nessuna rete (solo l\'elenco dei comuni dal sito), nessuna console', () => {
+  const senzaCommenti = s => s.replace(/^\s*\/\/.*$/gm, '').replace(/\s\/\/\s.*$/gm, '');
+  for (const f of ['fotocamera.js', 'campi-elenco.js']) {
+    const src = senzaCommenti(read(f));
+    for (const [nome, re] of [['fetch', /\bfetch\s*\(/], ['XMLHttpRequest', /XMLHttpRequest/], ['sendBeacon', /sendBeacon/], ['WebSocket', /WebSocket/],
+      ['localStorage', /localStorage/], ['sessionStorage', /sessionStorage/], ['indexedDB', /indexedDB/], ['caches', /\bcaches\./], ['cookie', /document\.cookie/],
+      ['console', /\bconsole\./], ['eval', /\beval\s*\(|new Function\s*\(/], ['URL esterni', /https?:\/\//], ['indirizzi blob', /createObjectURL/]]) assert.ok(!re.test(src), f + ': ' + nome);
+  }
+  const foto = senzaCommenti(read('fotocamera.js'));
+  assert.match(foto, /getTracks\(\)\.forEach\(tr => tr\.stop\(\)\)/, 'la fotocamera si spegne alla chiusura');
+  assert.match(foto, /window\.addEventListener\('pagehide', chiudi\)/);
+  assert.match(senzaCommenti(read('campi-elenco.js')), /s\.src = 'elenchi\/comuni\.js\?v=' \+ VERSIONE_ELENCHI;/, 'l\'elenco dei comuni dallo stesso sito');
+  // pagina e build: i due file si caricano dopo checkin.js e si copiano in public/ (Vercel); l'elenco dei comuni a ogni build
+  const html = read('index.html');
+  assert.ok(html.indexOf('checkin.js?v=') < html.indexOf('campi-elenco.js?v=') && html.indexOf('campi-elenco.js?v=') < html.indexOf('fotocamera.js?v='));
+  for (const f of ['campi-elenco.js', 'fotocamera.js']) assert.equal(read('public/' + f), read(f), 'public/' + f);
+  const build = read('build.sh');
+  for (const r of ['cp campi-elenco.js public/', 'cp fotocamera.js public/', 'cp elenchi/comuni.js elenchi/LICENZA-codice-fiscale-it.txt public/elenchi/']) assert.ok(build.includes(r), 'build.sh: ' + r);
+  assert.ok(read('.gitignore').split('\n').includes('/public/elenchi/'));
+  // generaStepOspiti chiama i campi con elenco e la scansione (che si apre da sola, senza scelta) dopo aver creato il passo
+  assert.match(SRC_CHECKIN, /if \(typeof window\.potenziaCampiElenco === 'function'\) window\.potenziaCampiElenco\(stepDiv\);\n    if \(i === 1\) aggiornaObbligoRetro\(1\);\n    if \(scansioneDisponibile\(\)\) avviaScansione\(i\);/);
+});
+
 test('flag della scansione: «spenta» nel codice pubblicato; «prova» solo con #scansione=prova; «attiva» per tutti', () => {
   // valore deciso dal titolare: 05/11/2026 'prova' sul branch delle prove (gli ospiti non vedono nulla senza #scansione=prova).
   // 'attiva' solo con una sua decisione esplicita: cambiarlo qui va dichiarato nel messaggio di commit.
   assert.match(SRC_CHECKIN, /\nconst SCANSIONE_DOCUMENTI = 'prova';/, 'valore del flag diverso da quello deciso dal titolare');
   const FLAG = /const SCANSIONE_DOCUMENTI = '[a-z]+';/;
   const con = (valore, hash) => passiOspiti(ROOT, 2, { hash, sorgente: SRC_CHECKIN.replace(FLAG, "const SCANSIONE_DOCUMENTI = '" + valore + "';") });
-  const ha = passi => passi.every(p => p.html.includes('class="scan-doc"') && p.html.includes("sceltaCompilazione(") && p.html.includes('data-i18n="scan.scansiona"'));
+  // 06/11/2026: niente scelta «a mano / scansione», il pannello è sempre aperto in cima al passo
+  const ha = passi => passi.every((p, i) => p.html.includes('class="scan-doc"') && p.html.includes('<div class="scan-pannello" id="scan-pannello-' + (i + 1) + '"></div>') && !p.html.includes('sceltaCompilazione('));
   // nel contesto di prova WebAssembly e Worker non ci sono (come in un browser molto vecchio): la scelta non compare
   assert.ok(!con('attiva', '').some(p => p.html.includes('scan-doc')), 'senza WebAssembly e Worker si compila solo a mano');
   const conMotore = (valore, hash) => {
@@ -563,7 +663,7 @@ test('flag della scansione: «spenta» nel codice pubblicato; «prova» solo con
   // con la scansione accesa, togliendo il blocco il markup è quello di prima
   const passi = conMotore('attiva', '');
   passi.forEach((p, i) => {
-    const senza = p.html.replace(/<div class="scan-doc" id="scan-doc-\d+">[\s\S]*?<div class="scan-pannello" id="scan-pannello-\d+" hidden><\/div>\n      <\/div>\n      /, '');
+    const senza = SENZA_SU(p.html.replace(/<div class="scan-doc" id="scan-doc-\d+">\n        <div class="scan-pannello" id="scan-pannello-\d+"><\/div>\n      <\/div>\n      /, ''));
     assert.equal(sha(senza), ATTUALI.casi['2-it'][i].sha256, 'passo ' + p.id + ': il resto del markup non cambia');
   });
 });

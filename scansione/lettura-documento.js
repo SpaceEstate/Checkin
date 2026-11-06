@@ -841,6 +841,9 @@ export function classificaDocumento(mrz, stampato) {
     const numero = mrz.campi.numeroDocumento && mrz.campi.numeroDocumento.valore;
     if (mrz.formato === 'TD1' && em === 'ITA' && /^C[A-Z]\d{5}[A-Z]{2}$/.test(numero || '') && /^[CI]/.test(cod))
       return { tipo: 'cie', voce: TIPI_DOCUMENTO.CIE, modo: 'proposto' };
+    // «C<ITA» a tre righe è la CIE anche se il numero non si legge (consumato, riflesso): proposta se lo conferma il fronte
+    if (mrz.formato === 'TD1' && em === 'ITA' && /^C/.test(cod))
+      return { tipo: 'cie', voce: TIPI_DOCUMENTO.CIE, modo: ind.numeroCie || (ind.carta && ind.italia) ? 'proposto' : 'suggerito' };
     if (mrz.formato === 'TD3' && cod[0] === 'P') {
       if (cod === 'P<' || cod === 'PP') return { tipo: 'passaporto', voce: TIPI_DOCUMENTO.PASSAPORTO, modo: 'suggerito' };
       if (cod === 'PD') return { tipo: 'passaporto', voce: TIPI_DOCUMENTO.PASSAPORTO_DIPLOMATICO, modo: 'suggerito' };

@@ -2320,37 +2320,6 @@ body {
   margin: 0 0 22px;
 }
 
-.scan-scelta {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-
-.scan-scelta-btn {
-  min-height: 52px;
-  padding: 12px 14px;
-  border: 2px solid var(--color-border);
-  border-radius: 12px;
-  background: var(--color-white);
-  color: var(--color-text-muted);
-  font: inherit;
-  font-size: 0.95rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
-}
-
-.scan-scelta-btn:hover {
-  border-color: var(--color-accent-200);
-}
-
-.scan-scelta-btn.attivo {
-  border-color: var(--color-accent-300);
-  background: var(--color-bg-cream);
-  color: var(--color-accent-300-dark);
-}
-
-.scan-scelta-btn:focus-visible,
 .scan-file:focus-within .scan-btn,
 .scan-btn:focus-visible,
 .scan-mini:focus-visible,
@@ -2368,12 +2337,6 @@ body {
   background: var(--color-bg-cream-light);
 }
 
-.scan-nota {
-  margin-bottom: 12px;
-  font-size: 0.88rem;
-  line-height: 1.5;
-  color: var(--color-text-muted);
-}
 
 .scan-lati {
   display: grid;
@@ -2518,34 +2481,6 @@ body {
   font-weight: 700;
 }
 
-.scan-legenda {
-  margin-top: 4px;
-  font-size: 0.82rem;
-  color: var(--color-text-muted);
-}
-
-.scan-legenda-letto,
-.scan-legenda-verifica {
-  white-space: nowrap;
-}
-
-.scan-legenda-letto::before,
-.scan-legenda-verifica::before {
-  content: '';
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  margin-right: 5px;
-  border-radius: 3px;
-  vertical-align: -1px;
-  border: 2px solid #2e7d4f;
-}
-
-.scan-legenda-verifica::before {
-  border-color: #b26a00;
-  background: #fff6e8;
-}
-
 .scan-avviso {
   margin-top: 6px;
   padding-left: 10px;
@@ -2557,7 +2492,6 @@ body {
   font-weight: 600;
 }
 
-.scan-suggerimento,
 .scan-conflitto {
   display: flex;
   flex-wrap: wrap;
@@ -2621,14 +2555,203 @@ body {
 }
 
 @media (max-width: 380px) {
-  .scan-scelta,
   .scan-lato-azioni {
     grid-template-columns: 1fr;
   }
 }
 
-/* Responsabile con la scansione: il riquadro «Documento di identità» (lo stesso di sempre) sale nel pannello, sotto la nota */
+/* Responsabile con la scansione: il riquadro «Documento di identità» (lo stesso di sempre) sale in cima al passo, nel pannello */
 .scan-pannello .document-section.scan-documento-in-alto {
-  margin: 12px 0 14px;
+  margin: 0 0 12px;
   padding: 18px;
+}
+
+/* === Campi con elenco scrivibili (campi-elenco.js) ===
+   La <select> (o il campo comune) di sempre resta nel modulo, invisibile: tiene il valore. Si vede la casella di testo con l'elenco. */
+.combo-nativo {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  opacity: 0 !important;
+  overflow: hidden !important;
+  clip: rect(0 0 0 0);
+  pointer-events: none !important;
+}
+.combo {
+  position: relative;
+}
+.combo .combo-testo {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%231e1917' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 20px;
+  padding-right: 40px;
+  font-size: 16px;
+  min-height: 48px;
+  text-overflow: ellipsis;
+}
+.combo .combo-testo:focus {
+  transform: none;
+}
+.combo-lista {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 60;
+  max-height: min(300px, 45vh);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 0;
+  padding: 6px 0;
+  list-style: none;
+  background: var(--color-white);
+  border: 2px solid var(--color-accent-200);
+  border-radius: 12px;
+  box-shadow: 0 10px 28px rgba(30, 25, 23, 0.16);
+}
+.combo-lista li {
+  padding: 11px 16px;
+  font-size: 16px;
+  line-height: 1.3;
+  color: var(--color-text);
+  cursor: pointer;
+}
+.combo-lista li.attiva,
+.combo-lista li[role="option"]:hover {
+  background: var(--color-bg-cream);
+}
+.combo-lista li.combo-vuota {
+  color: var(--color-text-muted);
+  cursor: default;
+}
+.combo-nota {
+  color: var(--color-text-muted);
+  font-size: 14px;
+}
+.combo-errore {
+  margin: 6px 2px 0;
+  font-size: 14px;
+  color: var(--color-error-text);
+}
+.combo.combo-sbagliato .combo-testo {
+  border-color: var(--color-error);
+}
+
+/* === Fotocamera a tutto schermo con il riquadro del documento (fotocamera.js) === */
+html.fotocamera-aperta,
+html.fotocamera-aperta body {
+  overflow: hidden;
+}
+.fotocamera {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: #000;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.fotocamera-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.fotocamera-maschera {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.fotocamera-riquadro {
+  position: relative;
+  width: min(92vw, 112vh);
+  aspect-ratio: 85.6 / 54;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  border-radius: 16px;
+  box-shadow: 0 0 0 200vmax rgba(0, 0, 0, 0.55);
+}
+.fotocamera-riquadro i {
+  position: absolute;
+  width: 34px;
+  height: 34px;
+  border: 5px solid var(--color-accent-200);
+}
+.fotocamera-riquadro i:nth-child(1) { top: -5px; left: -5px; border-right: 0; border-bottom: 0; border-top-left-radius: 18px; }
+.fotocamera-riquadro i:nth-child(2) { top: -5px; right: -5px; border-left: 0; border-bottom: 0; border-top-right-radius: 18px; }
+.fotocamera-riquadro i:nth-child(3) { bottom: -5px; left: -5px; border-right: 0; border-top: 0; border-bottom-left-radius: 18px; }
+.fotocamera-riquadro i:nth-child(4) { bottom: -5px; right: -5px; border-left: 0; border-top: 0; border-bottom-right-radius: 18px; }
+.fotocamera-titolo {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 18px);
+  left: 64px;
+  right: 64px;
+  margin: 0;
+  text-align: center;
+  color: #fff;
+  font-size: 17px;
+  font-weight: 600;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+.fotocamera-chiudi {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 10px);
+  left: 12px;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  font-size: 22px;
+  line-height: 44px;
+  cursor: pointer;
+}
+.fotocamera-scatta {
+  position: absolute;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 28px);
+  transform: translateX(-50%);
+  width: 78px;
+  height: 78px;
+  padding: 0;
+  border: 4px solid #fff;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  cursor: pointer;
+}
+.fotocamera-scatta span {
+  display: block;
+  width: 60px;
+  height: 60px;
+  margin: 5px auto;
+  border-radius: 50%;
+  background: #fff;
+}
+.fotocamera-scatta:active span {
+  transform: scale(0.92);
+}
+/* su un computer non si fotografa: si carica il file */
+html.dispositivo-pc .camera-group {
+  display: none;
+}
+
+/* Scansione senza spiegazioni (06/11/2026): un solo pulsante per lato su un computer; nel riquadro del documento del
+   responsabile, quando sta in cima al passo, restano titolo, lati e avviso sulla privacy (via i testi di spiegazione) */
+.scan-lato-azioni {
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+}
+.scan-documento-in-alto .document-subtitle:not(.identity-hint),
+.scan-documento-in-alto .upload-side-hint {
+  display: none;
+}
+.scan-pannello.scan-responsabile > .scan-lato-stato:empty {
+  display: none;
 }

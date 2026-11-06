@@ -189,7 +189,7 @@ const stati = ["Afghanistan", "Albania", "Algeria", "Andorra", "Angola", "Antigu
 
 const tipiDocumento = ["PASSAPORTO ORDINARIO", "CARTA DI IDENTITA'", "CARTA IDENTITA' ELETTRONICA", "PATENTE DI GUIDA", "PASSAPORTO DIPLOMATICO", "PASSAPORTO DI SERVIZIO"];
 
-const province = ["AG", "AL", "AN", "AO", "AR", "AP", "AT", "AV", "BA", "BT", "BL", "BN", "BG", "BI", "BO", "BZ", "BS", "BR", "CA", "CL", "CB", "CI", "CE", "CT", "CZ", "CH", "CO", "CS", "CR", "KR", "CN", "EN", "FM", "FE", "FI", "FG", "FC", "FR", "GE", "GO", "GR", "IM", "IS", "SP", "AQ", "LT", "LE", "LC", "LI", "LO", "LU", "MC", "MN", "MS", "MT", "ME", "MI", "MO", "MB", "NA", "NO", "NU", "OT", "OR", "PD", "PA", "PR", "PV", "PG", "PU", "PE", "PC", "PI", "PT", "PN", "PZ", "PO", "RG", "RA", "RC", "RE", "RI", "RN", "RM", "RO", "SA", "VS", "SS", "SV", "SI", "SR", "SO", "TA", "TE", "TR", "TO", "OG", "TP", "TN", "TV", "TS", "UD", "VA", "VE", "VB", "VC", "VR", "VV", "VI", "VT"];
+const province = ["AG", "AL", "AN", "AO", "AR", "AP", "AT", "AV", "BA", "BT", "BL", "BN", "BG", "BI", "BO", "BZ", "BS", "BR", "CA", "CL", "CB", "CI", "CE", "CT", "CZ", "CH", "CO", "CS", "CR", "KR", "CN", "EN", "FM", "FE", "FI", "FG", "FC", "FR", "GE", "GO", "GR", "IM", "IS", "SP", "AQ", "LT", "LE", "LC", "LI", "LO", "LU", "MC", "MN", "MS", "MT", "ME", "MI", "MO", "MB", "NA", "NO", "NU", "OT", "OR", "PD", "PA", "PR", "PV", "PG", "PU", "PE", "PC", "PI", "PT", "PN", "PZ", "PO", "RG", "RA", "RC", "RE", "RI", "RN", "RM", "RO", "SA", "VS", "SS", "SU", "SV", "SI", "SR", "SO", "TA", "TE", "TR", "TO", "OG", "TP", "TN", "TV", "TS", "UD", "VA", "VE", "VB", "VC", "VR", "VV", "VI", "VT"];
 
 function mostraStepCorrente() {
   document.querySelectorAll('.step').forEach(step => step.classList.remove('active'));
@@ -934,9 +934,10 @@ function bloccoUploadLato(ospiteNum, lato) {
 //  'prova'  → compare solo aprendo il check-in con «#scansione=prova» in fondo all'indirizzo (per provarla in produzione
 //             senza che gli ospiti la vedano).
 //  'attiva' → compare a tutti.
-// Spegnimento d'emergenza: rimettere 'spenta'. Il codice della scansione (scansione/) si scarica solo se l'ospite la sceglie.
+// Spegnimento d'emergenza: rimettere 'spenta'. Il codice della scansione (scansione/) si scarica quando si apre il passo di un
+// ospite; le librerie dell'OCR (circa 4,5 MB) solo alla prima foto da leggere.
 const SCANSIONE_DOCUMENTI = 'prova';   // 05/11/2026: 'prova' sul branch claude/scansione-documenti per le prove del titolare
-const SCANSIONE_VERSIONE = '20261106a';
+const SCANSIONE_VERSIONE = '20261106b';
 // letto subito: dopo il caricamento daAreaClienti() toglie il frammento «#…» dall'indirizzo
 const scansioneInProva = /(?:^#|&)scansione=prova(?:&|$)/.test(window.location.hash || '');
 
@@ -948,35 +949,20 @@ function scansioneDisponibile() {
   } catch (e) { return false; }
 }
 
-// Scelta «Compila manualmente» / «Scansiona documento» in cima al passo di ogni ospite. Con la scansione spenta: stringa vuota.
+// Scansione in cima al passo di ogni ospite: le foto del documento (da fotografare o caricare) e, sotto, i campi che si compilano
+// da soli. Nessuna scelta «a mano / scansione»: i campi restano sempre lì da scrivere (richiesta del titolare, 06/11/2026).
+// Con la scansione spenta: stringa vuota, il passo è quello di prima.
 function bloccoScansione(i) {
   if (!scansioneDisponibile()) return '';
   return `<div class="scan-doc" id="scan-doc-${i}">
-        <div class="scan-scelta">
-          <button type="button" class="scan-scelta-btn attivo" id="scan-manuale-${i}" aria-pressed="true" onclick="sceltaCompilazione(${i}, 'manuale')" data-i18n="scan.manuale">${t('scan.manuale')}</button>
-          <button type="button" class="scan-scelta-btn" id="scan-scansiona-${i}" aria-pressed="false" onclick="sceltaCompilazione(${i}, 'scansione')" data-i18n="scan.scansiona">${t('scan.scansiona')}</button>
-        </div>
-        <div class="scan-pannello" id="scan-pannello-${i}" hidden></div>
+        <div class="scan-pannello" id="scan-pannello-${i}"></div>
       </div>
       `;
 }
 
-let moduloScansione = null;
-window.sceltaCompilazione = async function(n, modo) {
-  const manuale = document.getElementById(`scan-manuale-${n}`), scansiona = document.getElementById(`scan-scansiona-${n}`);
-  const pannello = document.getElementById(`scan-pannello-${n}`);
-  if (!manuale || !scansiona || !pannello) return;
-  const premi = attiva => {
-    manuale.classList.toggle('attivo', !attiva); manuale.setAttribute('aria-pressed', String(!attiva));
-    scansiona.classList.toggle('attivo', attiva); scansiona.setAttribute('aria-pressed', String(attiva));
-  };
-  if (modo !== 'scansione') {
-    premi(false);
-    pannello.hidden = true;
-    if (moduloScansione) moduloScansione.chiudi(n);
-    return;
-  }
-  premi(true);
+let moduloScansione = null, scansioneMancante = false;
+async function avviaScansione(n) {
+  if (!document.getElementById(`scan-pannello-${n}`)) return;
   try {
     if (!moduloScansione) moduloScansione = await import(`./scansione/scansione-documento.js?v=${SCANSIONE_VERSIONE}`);
     moduloScansione.apri(n, {
@@ -984,10 +970,10 @@ window.sceltaCompilazione = async function(n, modo) {
       numeroOspiti: () => numeroOspiti
     });
   } catch (e) {
-    // il modulo non si scarica (rete, browser): si resta sulla compilazione manuale, il check-in non si blocca
-    premi(false);
-    pannello.hidden = true;
-    showNotification(t('scan.nonDisponibile'), 'error');
+    // il modulo non si scarica (rete, browser): niente scansione, si compila a mano come prima; il check-in non si blocca
+    const blocco = document.getElementById(`scan-doc-${n}`);
+    if (blocco) blocco.hidden = true;
+    if (!scansioneMancante) { scansioneMancante = true; showNotification(t('scan.nonDisponibile'), 'error'); }
   }
 }
 
@@ -1125,7 +1111,10 @@ ${bloccoUploadLato(1, 'retro')}
     `;
     form.insertBefore(stepDiv, stepFinal);
     applicaTraduzioni(stepDiv);
+    // campi con elenco scrivibili e comune con l'elenco dei comuni (campi-elenco.js): le select restano quelle di sempre
+    if (typeof window.potenziaCampiElenco === 'function') window.potenziaCampiElenco(stepDiv);
     if (i === 1) aggiornaObbligoRetro(1);
+    if (scansioneDisponibile()) avviaScansione(i);
   }
 }
 
@@ -1399,6 +1388,18 @@ window.openCamera = async function(ospiteNum, lato) {
   const latoEffettivo = lato || 'fronte';
   const chiave = chiaveCamera(ospiteNum, latoEffettivo);
 
+  // Telefono: fotocamera a tutto schermo con il riquadro del documento (fotocamera.js). La foto è ritagliata sul documento e
+  // arriva nel riquadro di caricamento come quella di prima (stesso nome, stesso campo file). Altrimenti: anteprima nel riquadro.
+  if (window.FotocameraDocumento && window.FotocameraDocumento.disponibile()) {
+    if (cameraApertaKey) { const [numPrecedente, latoPrecedente] = cameraApertaKey.split('-'); closeCamera(numPrecedente, latoPrecedente); }
+    window.FotocameraDocumento.apri({
+      titolo: t(latoEffettivo === 'fronte' ? 'guest.fotografaFronte' : 'guest.fotografaRetro'),
+      onFoto: tela => fotoDalRiquadro(ospiteNum, latoEffettivo, tela),
+      onErrore: err => showNotification(t('notif.fotocameraErrore', { msg: (err && err.message) || '' }), 'error')
+    });
+    return;
+  }
+
   if (cameraApertaKey && cameraApertaKey !== chiave) {
     const [numPrecedente, latoPrecedente] = cameraApertaKey.split('-');
     closeCamera(numPrecedente, latoPrecedente);
@@ -1428,6 +1429,28 @@ window.openCamera = async function(ospiteNum, lato) {
       showNotification(t('notif.fotocameraErrore', { msg: fallbackErr.message }), 'error');
     }
   }
+}
+
+// Foto della fotocamera con il riquadro: come capturePhoto (stesso nome di file, stesso campo, stessi aggiornamenti), ma dalla tela
+// già ritagliata sul documento; lato lungo 1600 px, JPEG di qualità 0,85 (resta sotto 1 MB come le foto di prima).
+async function fotoDalRiquadro(ospiteNum, lato, tela) {
+  const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+  const file = await window.FotocameraDocumento.inFile(tela, `documento_ospite_${ospiteNum}_${timestamp}.jpg`, 1600);
+  tela.width = 0; tela.height = 0;
+  if (!file) { showNotification(t('notif.erroreCattura'), 'error'); return; }
+  if (file.size > 1 * 1024 * 1024) { showNotification(t('notif.fotoTroppoPesante'), 'error'); return; }
+  const fileInput = inputDocumento(ospiteNum, lato);
+  if (fileInput) {
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    fileInput.files = dt.files;
+    aggiornaLabelUpload(ospiteNum, lato);
+    aggiornaStatoDocumenti(ospiteNum);
+  }
+  notificaLatoCaricato(ospiteNum, lato);
+  // manca ancora un lato: si fotografa subito anche quello (due scatti di fila, come prima)
+  const mancanti = latiMancanti(ospiteNum);
+  if (mancanti.length > 0) setTimeout(() => openCamera(ospiteNum, mancanti[0]), 500);
 }
 
 window.capturePhoto = function(ospiteNum, lato) {
@@ -2231,6 +2254,8 @@ function daAreaClienti() {
 
 // === OTTIMIZZAZIONI MOBILE ===
 const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+// su un computer non si fotografa: si carica un file (checkin.css nasconde il pulsante della fotocamera con «dispositivo-pc»)
+try { document.documentElement.classList.add(isMobile || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent)) ? 'dispositivo-mobile' : 'dispositivo-pc'); } catch (e) { /* pagina senza documento */ }
 const isAndroid = /Android/i.test(navigator.userAgent);
 const isOldAndroid = isAndroid && /Android [0-5]/.test(navigator.userAgent);
 
