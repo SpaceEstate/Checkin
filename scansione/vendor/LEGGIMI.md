@@ -2,7 +2,7 @@
 
 Queste librerie servono **solo** alla scansione facoltativa dei documenti (`scansione/`, vedi `docs/scansione-documenti.md`).
 Sono ospitate qui invece che scaricate da una CDN: durante la scansione il browser dell'ospite non contatta nessun altro dominio.
-Il browser le scarica solo quando l'ospite tocca «Scansiona documento». Con la scansione spenta non vengono mai richieste.
+Il browser le scarica solo alla prima foto da leggere (PDF.js solo al primo PDF). Con la scansione spenta non vengono mai richieste.
 
 Nessuna è un servizio: sono file statici, gratuiti e open source. Nessuna chiave, nessun abbonamento, nessun costo a consumo.
 
@@ -12,13 +12,10 @@ Nessuna è un servizio: sono file statici, gratuiti e open source. Nessuna chiav
 | `tesseract-core/` | `tesseract.js-core` | 7.0.0 | Apache-2.0 (`LICENSE`) | motore Tesseract 5 in WebAssembly, solo LSTM: con SIMD e senza SIMD (iPhone e Android datati) | 3,9 MB ciascuno (1,5 MB compresso) |
 | `tessdata/` | `@tesseract.js-data/eng` | 1.0.0 | modello di `tesseract-ocr/tessdata_best` (Apache-2.0, `LICENSE-Apache-2.0.txt`); il pacchetto npm è MIT | `eng.traineddata.gz` (cartella `4.0.0_best_int` del pacchetto), già compresso | 2,9 MB |
 | `mrz/` | `mrz` (cheminfo) | 5.0.2 | MIT (`LICENSE`) | `lib/` riunita in un solo modulo ES (`mrz.js`) con esbuild 0.25.11, senza minificare: `esbuild lib/index.js --bundle --format=esm --legal-comments=inline --outfile=mrz.js` | 42 KB |
-| `heic-to/` | `heic-to` | 1.6.7 (libheif 1.23.7) | LGPL-3.0 (`LICENSE`, con il testo della GNU GPL v3 in `COPYING-GPL-3.0.txt`) | `dist/csp/heic-to.js` senza modifiche (variante senza `eval`) | 3,2 MB (0,8 MB compresso) |
+| `pdfjs/` | `pdfjs-dist` (Mozilla PDF.js) | 6.4.299 | Apache-2.0 (`LICENSE`); decoder in WebAssembly: OpenJPEG BSD-2 (`wasm/LICENSE_OPENJPEG`), JBIG2 di PDFium BSD-3 (`wasm/LICENSE_JBIG2`), qcms MIT (`wasm/LICENSE_QCMS`), con le note di Mozilla (`wasm/LICENSE_PDFJS_*`) | `legacy/build/pdf.min.mjs` e `legacy/build/pdf.worker.min.mjs` (variante «legacy», con i polyfill per i browser meno recenti) e `wasm/openjpeg.wasm`, `wasm/jbig2.wasm`, `wasm/qcms_bg.wasm` (immagini JPEG 2000, JBIG2 delle scansioni in bianco e nero, profili colore), senza modifiche | 0,5 MB + 1,3 MB + 0,45 MB |
 
-## LGPL di heic-to (libheif)
-
-`heic-to.js` è una libreria LGPL-3.0 usata **così com'è**, in un file separato che il resto del sito carica soltanto quando una foto è in formato HEIC/HEIF
-e il browser non la sa aprire da solo. Il codice del sito non la modifica e non la incorpora: chi vuole può sostituire il file con un'altra versione compatibile.
-Sorgenti: <https://github.com/hoppergee/heic-to> (versione 1.6.7) e <https://github.com/strukturag/libheif> (versione 1.23.7).
+`heic-to` (LGPL-3.0, per le foto HEIC) è stata tolta il 06/11/2026: il check-in accetta solo foto JPG e PNG e PDF (richiesta del titolare),
+e sull'iPhone la galleria consegna le foto già in JPG.
 
 ## Provenienza e integrità
 
@@ -29,7 +26,7 @@ coincide con quella pubblicata dal registro npm (`dist.integrity`, controllata i
 - `tesseract.js-core-7.0.0.tgz` `sha512-WnNH518NzmbSq9zgTPeoF8c+xmilS8rFIl1YKbk/ptuuc7p6cLNELNuPAzcmsYw450ca6bLa8j3t0VAtq435Vw==`
 - `@tesseract.js-data/eng-1.0.0.tgz` `sha512-mbTumm6KQPUHyzTPQaF3ObXYnx0SqqfV2nabqFVQBwD6Kl7PhGSLSzOlfFTWy0P3BjghaSKA2W9GB19Jk+ZcTg==`
 - `mrz-5.0.2.tgz` `sha512-GXZ2eCwXrXHy3aTYLwckAyKy0V2yIEGM1Hgj8SjIbsGwVdZRdwrUSdNdetLZV4avgPUfKslBVvwbN7RVdWiyzw==`
-- `heic-to-1.6.7.tgz` `sha512-GCPYNl86u6eZ7mr2aa+uQB+PrQOVKSBYfH8esovr8kh2c6EYQSDYIJ6uhXSmM2hPC8PdBVJ/Trn0jnfM9H9gvg==`
+- `pdfjs-dist-6.4.299.tgz` `sha512-AVl138zALtfaAPvADulE0PZThbYzCBS79nL4pOSL/6Sm/4AH5A21BD9VHt97OlCuzJuCpmeZtAtkinisF4Vb1g==` (controllata il 06/11/2026)
 
 L'impronta SHA-256 di ogni file di questa cartella è in `impronte.sha256`: le prove (`tests/scansione.test.mjs`) la ricontrollano, così una modifica
 involontaria o non dichiarata di una libreria fa fallire le prove. Per aggiornare una libreria: sostituire i file, aggiornare questa tabella e rigenerare
@@ -40,3 +37,7 @@ involontaria o non dichiarata di una libreria fa fallire le prove. Per aggiornar
 Tesseract.js, se non gli si dicono i percorsi, scarica worker, motore e modello da jsDelivr. `scansione/scansione-documento.js` gli passa sempre i percorsi
 di questa cartella (`workerPath`, `corePath` con il file esatto, `langPath`), `workerBlobURL: false` (nessun indirizzo `blob:`) e `cacheMethod: 'none'`
 (il modello non viene salvato in IndexedDB: resta nella normale cache HTTP del browser, come gli altri file del sito).
+
+PDF.js riceve il PDF già in memoria (`data`: nessuno scaricamento), il percorso del suo worker in questa cartella (`GlobalWorkerOptions.workerSrc`) e
+quello dei decoder (`wasmUrl`). Non gli si danno i percorsi di caratteri standard, CMap e profili ICC: non scarica nulla da altri domini (i caratteri non
+inclusi nel PDF si sostituiscono con quelli del sistema). Il documento si chiude subito dopo la lettura (`destroy`: anche il worker si chiude).

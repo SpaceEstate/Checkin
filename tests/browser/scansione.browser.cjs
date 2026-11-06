@@ -9,6 +9,7 @@ const fs = require('fs');
 const path = require('path');
 const { chromium } = require('playwright');
 const { avvia, API } = require('./server-prova.cjs');
+const { pdfUnaFotoPerPagina, pdfA4FronteRetro } = require('./pdf-di-prova.cjs');
 
 const DOC = path.join(__dirname, 'documenti-sintetici');
 const RISULTATI = path.join(__dirname, 'risultati');
@@ -106,10 +107,10 @@ async function attendiFine(page, n, lati, timeout = 120000) {
 // Esito della lettura dalla classe del riquadro (ok, parziale, errore, info). 06/11/2026, richiesta del titolare: a lettura riuscita
 // non c'è più il messaggio «Dati letti dal documento: controllali.»; le prove controllano l'esito e che quel messaggio non ci sia.
 const esitoTipo = (page, n) => page.$eval('#scan-pannello-' + n + ' .scan-esito', e => [...e.classList].filter(c => c !== 'scan-esito' && c !== 'senza-testo').join(' '));
-async function caricaPerOspite(page, n, percorso, lato = 1, buffer = null) {
+async function caricaPerOspite(page, n, percorso, lato = 1, buffer = null, nome = 'foto.jpg') {
   await page.evaluate(n => { const e = document.querySelector('#scan-pannello-' + n + ' .scan-esito'); if (e) e.hidden = true; }, n);
   const sel = '#scan-pannello-' + n + ' .scan-input[data-lato="' + lato + '"]:not([capture])';
-  await page.setInputFiles(sel, buffer ? { name: 'foto.jpg', mimeType: 'image/jpeg', buffer } : percorso);
+  await page.setInputFiles(sel, buffer ? { name: nome, mimeType: nome.endsWith('.pdf') ? 'application/pdf' : 'image/jpeg', buffer } : percorso);
 }
 async function avanti(page, passoAtteso) {
   await page.click('.step.active .btn-primary');
@@ -230,7 +231,7 @@ test('scansione «prova»: il pannello compare solo con #scansione=prova nell\'i
     await scegliScansione(con.page, 1);
     assert.equal(await con.page.locator('.scan-scelta-btn, #scan-manuale-1, #scan-scansiona-1').count(), 0, 'nessuna scelta «a mano / scansione»');
     // 06/11/2026: il pannello si apre da solo, quindi il suo codice (pochi KB) si scarica con il passo; l'OCR (circa 4,5 MB) no
-    assert.ok(!con.rete.some(r => /\/scansione\/vendor\/(tesseract|tesseract-core|tessdata|heic-to)\//.test(r.url)), 'le librerie dell\'OCR si scaricano solo alla prima foto da leggere');
+    assert.ok(!con.rete.some(r => /\/scansione\/vendor\/(tesseract|tesseract-core|tessdata|pdfjs)\//.test(r.url)), 'le librerie dell\'OCR (e PDF.js) si scaricano solo alla prima foto (o al primo PDF) da leggere');
   }
   finally { await con.chiudi(); }
 });
@@ -313,8 +314,10 @@ test('archiviazione nel browser: nessun IndexedDB, localStorage solo la lingua, 
     await iniziaFlusso(x.page);
     await x.page.evaluate(() => { currentStep = 3; mostraStepCorrente(); });
     await scegliScansione(x.page, 2);
-    for (const f of ['passaporto-de.jpg', 'passaporto-de.heic', 'cie-retro.jpg']) {
-      await caricaPerOspite(x.page, 2, file(f));
+    // 06/11/2026: un PDF al posto della foto HEIC (le HEIC non sono più consentite): anche PDF.js non lascia nulla nel browser
+    const pdf = pdfUnaFotoPerPagina([fs.readFileSync(file('passaporto-de.jpg'))]);
+    for (const f of ['passaporto-de.jpg', 'documento.pdf', 'cie-retro.jpg']) {
+      if (f.endsWith('.pdf')) await caricaPerOspite(x.page, 2, null, 1, pdf, f); else await caricaPerOspite(x.page, 2, file(f));
       await attendiEsito(x.page, 2);
     }
     const stato = await x.page.evaluate(async () => ({
@@ -326,7 +329,7 @@ test('archiviazione nel browser: nessun IndexedDB, localStorage solo la lingua, 
     assert.equal(stato.session, 0);
     assert.deepEqual(stato.cache, []);
     assert.equal(stato.blob.blobCreati, stato.blob.blobRevocati, 'indirizzi blob: creati ' + stato.blob.blobCreati + ', revocati ' + stato.blob.blobRevocati);
-    // finita la lettura non resta nessun worker (OCR e HEIC chiusi: la loro memoria, con quella delle immagini, torna al sistema)
+    // finita la lettura non resta nessun worker (OCR e PDF.js chiusi: la loro memoria, con quella delle immagini, torna al sistema)
     await x.page.waitForFunction(() => true);
     await new Promise(r => setTimeout(r, 300));
     assert.deepEqual(x.page.workers().map(w => w.url()), [], 'worker ancora attivi');
@@ -403,7 +406,7 @@ test('stesso ospite, due lati scelti uno dopo l\'altro: il secondo aspetta il pr
   } finally { await x.chiudi(); }
 });
 
-test('documenti e foto difficili (ospite diverso dal responsabile): rotazioni, sfocatura, MRZ coperta, HEIC, EXIF, PDF, foto che non è un documento', async () => {
+test('documenti e foto difficili (ospite diverso dal responsabile): rotazioni, sfocatura, MRZ coperta, EXIF, PDF letto e PDF danneggiato, HEIC non consentita, foto che non è un documento', async () => {
   const x = await apri({ scansione: 'attiva' });
   try {
     await iniziaFlusso(x.page);
@@ -420,15 +423,18 @@ test('documenti e foto difficili (ospite diverso dal responsabile): rotazioni, s
       { nome: 'sfocata (molto)', op: { sfoca: 8 }, attesi: { cognome: '' }, messaggio: /sfocata/ },
       { nome: 'carta d\'identità spagnola', f: 'carta-estera-es.jpg', attesi: { cognome: 'ESEMPIO', nome: 'LUCIA', genere: 'F', nascita: '1992-07-21', cittadinanza: 'Spagna' } },
       { nome: 'patente', f: 'patente-it.jpg', attesi: { cognome: 'PROVACCIA', nome: 'BERTOLDO', nascita: '1975-03-05', genere: '', cittadinanza: '', luogo_nascita: 'Italia', comune: 'MILANO', provincia: 'MI' } },
-      { nome: 'HEIC', f: 'passaporto-de.heic', attesi: { nome: 'TEODORICO', nascita: '2010-11-10' } },
+      // 06/11/2026, richiesta del titolare: si caricano solo foto JPG e PNG e PDF (prima la HEIC si leggeva con heic-to)
+      { nome: 'HEIC (non consentita)', f: 'passaporto-de.heic', attesi: { nome: '' }, messaggio: /non consentito/ },
+      { nome: 'PDF con il passaporto', pdf: ['passaporto-de.jpg'], attesi: { cognome: 'PROVACCIA', nome: 'TEODORICO', nascita: '2010-11-10', cittadinanza: 'Germania' } },
       { nome: 'EXIF ruotata (foto del telefono)', f: 'passaporto-de-exif6.jpg', attesi: { nome: 'TEODORICO', nascita: '2010-11-10' } },
-      { nome: 'PDF', f: 'non-immagine.pdf', attesi: { cognome: '' }, messaggio: /PDF/ },
+      { nome: 'PDF danneggiato', f: 'non-immagine.pdf', attesi: { cognome: '' }, messaggio: /PDF/ },
       { nome: 'foto che non è un documento', f: path.join(__dirname, '..', '..', 'public', 'images', 'cassetta', '2_cassetta_sicurezza.jpg'), attesi: { cognome: '', nome: '' }, messaggio: /Non riesco a leggere|Non riconosco/ }
     ];
     for (const c of casi) {
       await svuota();
       const t0 = Date.now();
-      if (c.f) {
+      if (c.pdf) await caricaPerOspite(x.page, 2, null, 1, pdfUnaFotoPerPagina(c.pdf.map(f => fs.readFileSync(file(f)))), 'documento.pdf');
+      else if (c.f) {
         const p = path.isAbsolute(c.f) ? c.f : file(c.f);
         const mime = p.endsWith('.heic') ? 'image/heic' : p.endsWith('.pdf') ? 'application/pdf' : 'image/jpeg';
         await x.page.evaluate(() => { const e = document.querySelector('#scan-pannello-2 .scan-esito'); if (e) e.hidden = true; });
@@ -440,6 +446,44 @@ test('documenti e foto difficili (ospite diverso dal responsabile): rotazioni, s
       for (const [k, atteso] of Object.entries(c.attesi)) assert.equal(v[k], atteso, c.nome + ': ' + k);
       if (c.messaggio) assert.match(esito, c.messaggio, c.nome);
     }
+    assert.deepEqual(x.errori, []);
+  } finally { await x.chiudi(); }
+});
+
+// 06/11/2026, richiesta del titolare: si caricano solo foto JPG e PNG e PDF, e i PDF si leggono (PDF.js, ospitato nel sito)
+test('PDF: la scansione A4 del responsabile con fronte e retro si legge e resta allegata; il PDF di un altro ospite si legge; foto HEIC e WebP non consentite', async () => {
+  const x = await apri({ scansione: 'attiva' });
+  try {
+    const ACCEPT = 'image/jpeg,image/png,application/pdf,.jpg,.jpeg,.png,.pdf';
+    await iniziaFlusso(x.page);
+    await scegliScansione(x.page, 1);
+    assert.equal(await x.page.$eval('#ospite1_documento_fronte', e => e.accept), ACCEPT, 'riquadro del responsabile: solo JPG, PNG e PDF');
+    // responsabile: fronte e retro sullo stesso foglio A4 (come una scansione), nel riquadro del fronte
+    const t0 = Date.now();
+    await x.page.setInputFiles('#ospite1_documento_fronte', { name: 'documento.pdf', mimeType: 'application/pdf', buffer: pdfA4FronteRetro(fs.readFileSync(CIE.fronte), fs.readFileSync(CIE.retro)) });
+    await attendiFine(x.page, 1, [1]);
+    misure['PDF: A4 con fronte e retro'] = Date.now() - t0;
+    assert.deepEqual(await valori(x.page, 1), RESPONSABILE_A_MANO);
+    assert.equal(await x.page.$eval('#ospite1_documento_fronte', e => e.files[0] && e.files[0].name), 'documento.pdf', 'il PDF resta allegato per il gestore');
+    // responsabile: foto HEIC o WebP non consentite (messaggio, riquadro vuoto)
+    for (const [nome, mimeType] of [['foto.heic', 'image/heic'], ['foto.webp', 'image/webp']]) {
+      await x.page.setInputFiles('#ospite1_documento_retro', { name: nome, mimeType, buffer: fs.readFileSync(file('passaporto-de.heic')) });
+      assert.equal(await x.page.$eval('#ospite1_documento_retro', e => e.files.length), 0, nome + ' rifiutata');
+      assert.match(await x.page.locator('.notification.error').innerText(), /JPG, PNG o PDF/);
+    }
+    // altro ospite: un PDF si legge
+    await x.page.evaluate(() => { currentStep = 3; mostraStepCorrente(); });
+    await scegliScansione(x.page, 2);
+    assert.equal(await x.page.$eval('#scan-pannello-2 .scan-input[data-lato="1"]', e => e.accept), ACCEPT, 'scansione: solo JPG, PNG e PDF');
+    await caricaPerOspite(x.page, 2, null, 1, pdfUnaFotoPerPagina([fs.readFileSync(file('passaporto-de.jpg'))]), 'passaporto.pdf');
+    await attendiEsito(x.page, 2);
+    const v2 = await valori(x.page, 2);
+    assert.deepEqual([v2.cognome, v2.nome, v2.nascita, v2.cittadinanza], ['PROVACCIA', 'TEODORICO', '2010-11-10', 'Germania']);
+    // altro ospite: una WebP non consentita, riconosciuta dai primi byte anche con il nome .jpg
+    const webp = await x.page.evaluate(async () => { const c = document.createElement('canvas'); c.width = 64; c.height = 64; const b = await new Promise(r => c.toBlob(r, 'image/webp', 0.8)); return Array.from(new Uint8Array(await b.arrayBuffer())); });
+    await caricaPerOspite(x.page, 2, null, 2, Buffer.from(webp), 'foto.jpg');
+    await attendiFine(x.page, 2, [2]);
+    assert.match(await x.page.locator('#scan-pannello-2 [data-stato-lato="2"]').innerText(), /non consentito/);
     assert.deepEqual(x.errori, []);
   } finally { await x.chiudi(); }
 });
@@ -538,7 +582,7 @@ test('diagnosi: solo con «diagnosi» nell\'indirizzo, sotto le foto misure, tem
   } finally { await senza.chiudi(); }
 });
 
-test('responsabile: tipo di documento riconosciuto (patente) compilato, verde; PDF caricato per il gestore non si legge ma resta allegato', async () => {
+test('responsabile: tipo di documento riconosciuto (patente) compilato, verde; PDF danneggiato caricato per il gestore non si apre ma resta allegato', async () => {
   const x = await apri({ scansione: 'attiva' });
   try {
     await iniziaFlusso(x.page);
@@ -556,7 +600,7 @@ test('responsabile: tipo di documento riconosciuto (patente) compilato, verde; P
     // numero della patente: solo testo stampato, nessuna cifra di controllo (l'OCR può confondere 1 e L): proposto ma da verificare
     assert.match(v.numero_documento, /^U[1IL]A23B456C$/);
     assert.ok(await x.page.$eval('[name="ospite1_numero_documento"]', e => e.classList.contains('scan-verifica')), 'numero segnato da controllare');
-    // un PDF nel riquadro del gestore: la scansione lo dice e non lo tocca
+    // un PDF danneggiato nel riquadro del gestore: la scansione dice che non si apre e lo lascia allegato (06/11/2026: i PDF si leggono)
     await x.page.setInputFiles('#ospite1_documento_retro', file('non-immagine.pdf'));
     await attendiFine(x.page, 1, [2]);
     assert.match(await x.page.locator('#scan-pannello-1 [data-stato-lato="2"]').innerText(), /PDF/);

@@ -16,9 +16,11 @@ const ATTUALI = JSON.parse(read('tests/fixtures/scansione/passi-ospiti-attuali.j
 
 // ---- Comportamento di prima: con la scansione spenta nulla cambia ----
 
-// 06/11/2026: l'unica differenza voluta rispetto a prima è la provincia «SU» (Sud Sardegna, dal 2016) nell'elenco delle province,
-// che mancava: senza, i comuni di quella provincia non potevano avere la provincia compilata dall'elenco dei comuni.
-const SENZA_SU = html => html.replace('<option value="SU">SU</option>', '');
+// 06/11/2026: le differenze volute rispetto a prima sono la provincia «SU» (Sud Sardegna, dal 2016) nell'elenco delle province, che
+// mancava (senza, i comuni di quella provincia non potevano avere la provincia compilata dall'elenco dei comuni), e i formati del campo
+// file del documento del responsabile: solo JPG, PNG e PDF (richiesta del titolare; prima «image/*,.pdf»)
+const ACCEPT_NUOVO = 'accept="image/jpeg,image/png,application/pdf,.jpg,.jpeg,.png,.pdf"', ACCEPT_PRIMA = 'accept="image/*,.pdf"';
+const SENZA_SU = html => html.replace('<option value="SU">SU</option>', '').split(ACCEPT_NUOVO).join(ACCEPT_PRIMA);
 test('scansione spenta: i passi degli ospiti sono identici a quelli di prima (1, 2, 3 e 9 ospiti; italiano, inglese, tedesco), salvo la provincia SU', () => {
   for (const [caso, attesi] of Object.entries(ATTUALI.casi)) {
     const [n, lingua] = caso.split('-');
@@ -47,6 +49,16 @@ test('le funzioni del percorso di oggi (documento del responsabile, validazioni,
       assert.match(c, blocco, 'openCamera: blocco della fotocamera con il riquadro');
       c = c.replace(blocco, '');
     }
+    // 06/11/2026, richiesta del titolare: si caricano solo foto JPG e PNG e PDF (prima anche WebP, e nel campo «image/*,.pdf»)
+    if (f === 'handleFileUpload') {
+      const nuovo = "    // solo foto JPG e PNG e PDF (06/11/2026, richiesta del titolare; prima anche WebP). Sull'iPhone la galleria consegna le foto in JPG.\n    const allowedTypes = ['image/jpeg', 'image/png', 'application/pdf'];\n";
+      assert.ok(c.includes(nuovo), 'handleFileUpload: solo JPG, PNG e PDF');
+      c = c.replace(nuovo, "    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];\n");
+    }
+    if (f === 'bloccoUploadLato') {
+      assert.ok(c.includes(ACCEPT_NUOVO), 'bloccoUploadLato: campo file solo JPG, PNG e PDF');
+      c = c.split(ACCEPT_NUOVO).join(ACCEPT_PRIMA);
+    }
     assert.equal(sha(c), ATTUALI.funzioni[f].sha256, f + ': funzione modificata');
   }
 });
@@ -64,9 +76,15 @@ test('librerie della scansione: file identici a quelli registrati (impronte SHA-
     assert.equal(crypto.createHash('sha256').update(fs.readFileSync(path.join(dir, f))).digest('hex'), attesi.get(f), 'file modificato: ' + f);
   }
   for (const f of attesi.keys()) assert.ok(presenti.includes(f), 'file mancante: ' + f);
-  for (const f of ['tesseract/LICENSE.md', 'tesseract-core/LICENSE', 'tessdata/LICENSE-Apache-2.0.txt', 'mrz/LICENSE', 'heic-to/LICENSE', 'heic-to/COPYING-GPL-3.0.txt']) assert.ok(attesi.has(f), 'licenza mancante: ' + f);
-  assert.match(read('scansione/vendor/heic-to/LICENSE'), /GNU LESSER GENERAL PUBLIC LICENSE\s+Version 3/);
-  assert.match(read('scansione/vendor/heic-to/COPYING-GPL-3.0.txt'), /GNU GENERAL PUBLIC LICENSE\s+Version 3/);
+  // 06/11/2026: PDF.js (Apache-2.0; decoder OpenJPEG BSD-2, JBIG2 di PDFium BSD-3, qcms MIT) al posto di heic-to (LGPL-3.0): le foto HEIC
+  // non sono più consentite, i PDF sì
+  for (const f of ['tesseract/LICENSE.md', 'tesseract-core/LICENSE', 'tessdata/LICENSE-Apache-2.0.txt', 'mrz/LICENSE', 'pdfjs/LICENSE', 'pdfjs/wasm/LICENSE_OPENJPEG',
+    'pdfjs/wasm/LICENSE_JBIG2', 'pdfjs/wasm/LICENSE_QCMS', 'pdfjs/wasm/LICENSE_PDFJS_OPENJPEG', 'pdfjs/wasm/LICENSE_PDFJS_JBIG2', 'pdfjs/wasm/LICENSE_PDFJS_QCMS']) assert.ok(attesi.has(f), 'licenza mancante: ' + f);
+  assert.match(read('scansione/vendor/pdfjs/LICENSE'), /Apache License\s+Version 2\.0/);
+  assert.match(read('scansione/vendor/pdfjs/wasm/LICENSE_OPENJPEG'), /2-clauses[\s*]+BSD License/);
+  assert.match(read('scansione/vendor/pdfjs/wasm/LICENSE_JBIG2'), /Redistribution and use in source and binary forms/);
+  assert.match(read('scansione/vendor/pdfjs/wasm/LICENSE_QCMS'), /Permission is hereby granted, free of charge/);
+  assert.ok(!presenti.some(f => f.startsWith('heic-to')), 'heic-to tolta');
   assert.match(read('scansione/vendor/tesseract/LICENSE.md'), /Apache License/);
   // il modello è compresso (gzip): Tesseract.js lo scarica come eng.traineddata.gz
   const gz = fs.readFileSync(path.join(dir, 'tessdata', 'eng.traineddata.gz'));
@@ -819,7 +837,7 @@ test('flag della scansione: «spenta» nel codice pubblicato; «prova» solo con
 });
 
 test('codice della scansione: nessuna rete, nessuna archiviazione, nessuna console; Tesseract solo con i file del sito', () => {
-  const moduli = ['scansione/scansione-documento.js', 'scansione/lettura-documento.js', 'scansione/immagine.js', 'scansione/decodifica-heic.js'].map(f => [f, read(f)]);
+  const moduli = ['scansione/scansione-documento.js', 'scansione/lettura-documento.js', 'scansione/immagine.js'].map(f => [f, read(f)]);     // (decodifica-heic.js tolto il 06/11/2026)
   // via i commenti di riga; i brevi commenti /* … */ restano (non c'è nulla di vietato) e «image/*» nei campi file non è un commento
   const senzaCommenti = s => s.replace(/^\s*\/\/.*$/gm, '').replace(/\s\/\/\s.*$/gm, '');
   for (const [f, src] of moduli) {
@@ -844,6 +862,31 @@ test('codice della scansione: nessuna rete, nessuna archiviazione, nessuna conso
   assert.ok(!/<script[^>]+scansione/.test(read('index.html')), 'index.html non carica la scansione');
 });
 
+// 06/11/2026, richiesta del titolare: si caricano solo foto JPG e PNG e PDF, e i PDF si leggono (PDF.js, ospitato nel sito)
+test('formati consentiti: solo JPG, PNG e PDF nei campi file e nei controlli; i PDF si leggono con PDF.js dal sito', () => {
+  const ui = read('scansione/scansione-documento.js');
+  assert.ok(SRC_CHECKIN.includes(ACCEPT_NUOVO) && !SRC_CHECKIN.includes('accept="image/*'), 'campo file del responsabile');
+  assert.match(SRC_CHECKIN, /const allowedTypes = \['image\/jpeg', 'image\/png', 'application\/pdf'\];/, 'controllo del tipo del responsabile');
+  assert.ok(ui.includes('class="scan-input" ' + ACCEPT_NUOVO), 'campo file degli altri ospiti');
+  assert.match(ui, /if \(tipo !== 'jpeg' && tipo !== 'png'\) throw errore\('formato'\);/, 'foto: solo JPG e PNG, riconosciute dai primi byte del file');
+  // PDF.js dalla cartella del sito; nessun percorso di caratteri, CMap o profili colore (niente da altri domini); documento chiuso dopo
+  assert.match(ui, /import\(new URL\('pdfjs\/pdf\.min\.mjs', VENDOR\)\.href\)/);
+  assert.match(ui, /GlobalWorkerOptions\.workerSrc = new URL\('pdfjs\/pdf\.worker\.min\.mjs', VENDOR\)\.href/);
+  assert.match(ui, /wasmUrl: new URL\('pdfjs\/wasm\/', VENDOR\)\.href/);
+  assert.ok(!/cMapUrl|standardFontDataUrl|iccUrl/.test(ui), 'nessun percorso di caratteri, CMap o profili');
+  assert.match(ui, /await compito\.destroy\(\)/, 'documento e worker di PDF.js chiusi dopo la lettura');
+  assert.ok(!fs.existsSync(path.join(ROOT, 'scansione', 'decodifica-heic.js')), 'niente più HEIC');
+  // i messaggi dicono i formati giusti, in tutte le lingue
+  const ctx = { window: {}, document: { querySelectorAll: () => [], documentElement: {}, addEventListener() {} }, console };
+  vm.createContext(ctx);
+  vm.runInContext(read('i18n.js') + '\n;this.__UI = I18N_UI;', ctx);
+  for (const l of ['it', 'en', 'de']) for (const k of ['notif.formatoNonSupportato', 'scan.formato', 'scan.lato.formato']) {
+    const testo = ctx.__UI[l][k];
+    assert.ok(/JPG/.test(testo) && /PNG/.test(testo) && /PDF/.test(testo) && !/WebP|HEIC/.test(testo), l + ' ' + k + ': ' + testo);
+  }
+  for (const l of ['it', 'en', 'de']) assert.equal(ctx.__UI[l]['scan.heic'], undefined, l + ': scan.heic tolto');
+});
+
 test('testi della scansione presenti in italiano, inglese e tedesco', () => {
   const ctx = { window: {}, document: { querySelectorAll: () => [], documentElement: {}, addEventListener() {} }, console };
   vm.createContext(ctx);
@@ -852,8 +895,8 @@ test('testi della scansione presenti in italiano, inglese e tedesco', () => {
   for (const f of ['scansione/scansione-documento.js', 'checkin.js']) for (const m of read(f).matchAll(/['"`](scan\.[A-Za-z0-9_.]+)['"`]/g)) chiavi.add(m[1]);
   for (const m of read('scansione/lettura-documento.js').matchAll(/avviso\('([a-z_]+)'/g)) chiavi.add('scan.avviso.' + m[1]);
   for (const c of ['numero_corretto', 'nome_troncato', 'cittadinanza_non_in_elenco', 'emittente_non_in_elenco', 'stesso_ospite', 'timeout_parziale']) chiavi.add('scan.avviso.' + c);
-  for (const c of ['pdf', 'formato', 'heic', 'timeout', 'offline', 'errore']) chiavi.add('scan.lato.' + c);
+  for (const c of ['pdf', 'formato', 'timeout', 'offline', 'errore']) chiavi.add('scan.lato.' + c);
   chiavi.delete('scan.lato'); chiavi.delete('scan.avviso.');
   for (const l of ['it', 'en', 'de']) for (const k of chiavi) if (!k.endsWith('.')) assert.ok(typeof ctx.__UI[l][k] === 'string' && ctx.__UI[l][k].length > 1, l + ': ' + k);
-  assert.ok(chiavi.size > 50);
+  assert.ok(chiavi.size >= 50, 'chiavi trovate: ' + chiavi.size);     // 52 fino al 06/11/2026, tolte le due delle foto HEIC
 });

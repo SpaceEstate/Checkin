@@ -8,7 +8,7 @@ vedi [campi-elenco.md](campi-elenco.md).
 ## In breve
 
 In cima al passo di ogni ospite ci sono le foto del documento (fronte e retro): sul telefono **«📷 Fotografa»** apre la fotocamera con il
-riquadro del documento, ovunque **«🖼️ Carica una foto»**. Il browser legge la MRZ (le righe `<<<`) e il testo stampato e compila i campi del
+riquadro del documento, ovunque **«🖼️ Carica foto o PDF»** (solo foto JPG e PNG e PDF). Il browser legge la MRZ (le righe `<<<`) e il testo stampato e compila i campi del
 modulo, che restano sempre lì da scrivere a mano se la lettura non riesce (nessuna scelta «a mano / scansione», nessuna spiegazione: richiesta
 del titolare, 06/11/2026). Sopra i lati c'è solo il titolo «📄 Documento di identità»; a lettura riuscita nessun messaggio (restano errori,
 avvisi, valori diversi da quelli già scritti e «↩︎ Annulla»). I campi letti sono evidenziati: **verde** = verificato, **arancione** = da
@@ -62,10 +62,16 @@ salvataggio). Le foto sintetiche per provare sono in `tests/browser/documenti-si
 1. Con la scansione accesa, aprendo il passo di un ospite il browser scarica `scansione/scansione-documento.js` (pochi KB) e, solo alla prima
    foto da leggere, le librerie dell'OCR (circa 4,5 MB la prima volta, poi dalla cache del browser). Tutti i file sono **dello stesso sito**
    (`scansione/vendor/`). Le foto degli altri ospiti arrivano dalla fotocamera con il riquadro (una tela in memoria, ritagliata sul documento)
-   o da «Carica una foto».
-2. La foto (lato con i dati o con la MRZ; un secondo lato facoltativo) viene decodificata in memoria: orientamento EXIF, HEIC/HEIF
-   (Safari le apre da solo; altrove heic-to in un worker chiuso subito dopo), riduzione a 2000 px (le foto grandi a metà per volta: in un
-   passo solo Safari seghetta le scritte sottili come le parentesi), scala di grigi (il canale più chiaro
+   o da «Carica foto o PDF».
+2. Si caricano solo **foto JPG e PNG e PDF** (06/11/2026, richiesta del titolare; prima anche HEIC e WebP), anche nei riquadri del
+   responsabile: il tipo si riconosce dai primi byte del file, non dal nome, e gli altri formati danno «Formato non consentito».
+   Sull'iPhone la galleria consegna le foto in JPG. Un **PDF** si apre con PDF.js (`scansione/vendor/pdfjs/`, dal sito, nel suo worker,
+   chiuso subito dopo): le prime due pagine si disegnano in memoria, 3000 px sul lato lungo (al più 12 milioni di pixel), e ognuna si
+   legge come una foto, sempre anche nella zona del testo stampato (su un foglio A4 la carta è piccola); le letture delle pagine si
+   uniscono (fronte e retro su due pagine o sulla stessa, come la scansione di un A4). Il testo del PDF, se c'è, non si usa: si legge
+   l'immagine della pagina. Un PDF protetto da password o danneggiato non si apre: messaggio, si continua a mano.
+   La foto (lato con i dati o con la MRZ; un secondo lato facoltativo) viene decodificata in memoria: orientamento EXIF, riduzione a
+   2000 px (le foto grandi a metà per volta: in un passo solo Safari seghetta le scritte sottili come le parentesi), scala di grigi (il canale più chiaro
    di ogni pixel: le scritte nere restano nere, i fondi colorati del documento schiariscono). Le foto più piccole di 1600 px si
    **ingrandiscono** fino a 1600 (al più 3 volte): con la carta larga 500-800 px, come negli scatti dal riquadro di una fotocamera a
    bassa risoluzione, si perdevano luogo di nascita, comune, provincia e numero (06/11/2026, prove locali con le foto vere ridotte e con
@@ -152,7 +158,7 @@ Il modulo non raccoglie scadenza, data e autorità di rilascio: la scansione li 
 | Domanda | Risposta (verificata dalle prove) |
 |---|---|
 | Le foto degli altri ospiti vanno al server? | No. Nessuna richiesta contiene i loro byte; il salvataggio contiene solo fronte e retro del responsabile (`tests/browser/scansione.browser.cjs`, registro in `tests/browser/risultati/rete-flusso-completo.json`). |
-| A servizi AI o CDN esterne? | No. Nessuna richiesta a domini diversi dal sito; Tesseract.js riceve sempre i percorsi locali (`workerPath`, `corePath`, `langPath`). |
+| A servizi AI o CDN esterne? | No. Nessuna richiesta a domini diversi dal sito; Tesseract.js riceve sempre i percorsi locali (`workerPath`, `corePath`, `langPath`), e così PDF.js (`workerSrc`, `wasmUrl`; i caratteri che un PDF non contiene sono quelli del sistema, nessun file di caratteri da fuori). |
 | Restano nel browser? | No IndexedDB (`cacheMethod: 'none'`), niente localStorage (solo la lingua, come prima), niente sessionStorage, niente Cache Storage, nessun service worker, nessun indirizzo `blob:` lasciato aperto, nessun worker attivo dopo la lettura. |
 | Finiscono nei log? | Nessun `console.*` nei moduli della scansione; le prove controllano che in console non compaiano i dati di prova. Nessuno strumento di tracciamento nel sito. |
 | La foto del responsabile cambia percorso? | No: stesse funzioni di prima (impronte controllate da `tests/scansione.test.mjs`), stessi byte inviati (stessa prova nel browser con e senza scansione). |
@@ -177,7 +183,9 @@ Dettagli, provenienza e impronte in `scansione/vendor/LEGGIMI.md`.
 | Tesseract.js 7.0.0 + tesseract.js-core 7.0.0 | Apache-2.0 | OCR in WebAssembly (con e senza SIMD) |
 | Modello `eng` (tessdata_best, 4.0.0_best_int) | Apache-2.0 | riconoscimento dei caratteri |
 | mrz 5.0.2 | MIT | MRZ e cifre di controllo ICAO 9303 |
-| heic-to 1.6.7 (libheif 1.23.7) | LGPL-3.0 | foto HEIC/HEIF nei browser che non le aprono |
+| PDF.js (pdfjs-dist 6.4.299, build legacy) con i decoder OpenJPEG, JBIG2 (PDFium) e qcms in WebAssembly | Apache-2.0 (decoder: BSD-2-Clause, BSD-3-Clause, MIT) | PDF: pagine disegnate in memoria e lette come foto |
+
+heic-to (LGPL-3.0, foto HEIC) è stata tolta il 06/11/2026: le foto HEIC non si caricano più.
 
 Nessuna API a pagamento, nessun abbonamento, nessun servizio a consumo.
 
@@ -189,8 +197,9 @@ Nessuna API a pagamento, nessun abbonamento, nessun servizio a consumo.
   `scansione/immagine.js` su disegni fatti nella prova (forma del «<», griglia della MRZ con una casella sbiadita, MRZ tra il disordine,
   storta, in verticale e capovolta, ritagli, nitidezza) e l'unione delle letture con le cifre di controllo, con dati di fantasia.
 - `tests/browser/scansione.browser.cjs` (Chromium + Playwright; su GitHub nel job «scansione»): flusso completo da ospite con API finte,
-  verifica di rete, archiviazione, annullamento, isolamento tra ospiti, documenti difficili (rotazioni, sfocatura, MRZ coperta, HEIC, EXIF, PDF,
-  foto qualsiasi), due lati scelti uno dopo l'altro, tempo scaduto, lettore non scaricabile, motore senza SIMD, schermo stretto, inglese, e
+  verifica di rete, archiviazione, annullamento, isolamento tra ospiti, documenti difficili (rotazioni, sfocatura, MRZ coperta, EXIF, PDF letto
+  e PDF danneggiato, HEIC e WebP non consentite, foto qualsiasi), PDF (scansione A4 del responsabile con fronte e retro, che resta allegata;
+  passaporto in PDF di un altro ospite), due lati scelti uno dopo l'altro, tempo scaduto, lettore non scaricabile, motore senza SIMD, schermo stretto, inglese, e
   «foto come quelle vere»: documento sintetico piccolo e storto su una tovaglia a disegni accanto a un portafoglio (CIE fronte girato in
   verticale e retro, passaporto storto, carta capovolta), con un limite di tempo.
 - Messa a punto sulle foto vere (06/11/2026): sette foto di documenti veri mandate dal titolare (permesso di soggiorno tedesco, due CIE,
@@ -202,8 +211,8 @@ Nessuna API a pagamento, nessun abbonamento, nessun servizio a consumo.
 
 Le prove automatiche usano Chromium. Prima di passare ad `'attiva'` vanno fatte a mano, con `#scansione=prova`:
 
-1. iPhone (Safari) recente e uno datato (iOS 15/16): «Fotografa» apre la fotocamera con il riquadro; foto del passaporto e della CIE (fronte e retro); foto dalla galleria.
-2. Android (Chrome) recente e uno datato: stesse prove; una foto HEIC, se il telefono le scatta.
+1. iPhone (Safari) recente e uno datato (iOS 15/16): «Fotografa» apre la fotocamera con il riquadro; foto del passaporto e della CIE (fronte e retro); foto dalla galleria; un PDF dall'app File (per esempio «Scansiona documenti» di Note).
+2. Android (Chrome) recente e uno datato: stesse prove; una foto HEIC, se il telefono le scatta, deve dire «Formato non consentito».
 3. Responsabile: caricare fronte e retro come sempre, «Leggi i dati dalle foto caricate», completare e pagare (o fermarsi al pagamento):
    l'email al gestore deve arrivare come prima, con le stesse immagini.
 4. Connessione lenta (4G debole): il primo download (~4,5 MB) e i tempi; «Interrompi» deve fermare tutto.
@@ -220,7 +229,10 @@ Le prove automatiche usano Chromium. Prima di passare ad `'attiva'` vanno fatte 
   torna; altrimenti il numero resta vuoto e si scrive a mano.
 - Lo Stato di nascita degli stranieri: dalla CIE italiana si legge la sigla tra parentesi (per esempio «(BRA)»); dagli altri documenti
   quasi sempre va scelto a mano (non è nella MRZ).
-- Testo stampato in alfabeti non latini: non letto (la MRZ sì). PDF: non letti (il PDF del responsabile si invia come prima).
+- Testo stampato in alfabeti non latini: non letto (la MRZ sì).
+- PDF: si leggono le prime due pagine, come immagini; un PDF protetto da password o danneggiato non si apre. Il PDF del responsabile si
+  invia al gestore come prima. Una scansione A4 con fronte e retro della CIE sintetica: tutti gli 11 campi in circa 2 secondi su un
+  computer.
 - Tempi: su un computer recente 1–4 secondi per foto (meno di un secondo per una foto che non è un documento). **Su un telefono datato non sono stati
   misurati**: il rallentamento della CPU simulato nelle prove vale per la pagina, non per il worker dell'OCR, quindi non dice quanto ci vorrà.
   Vanno misurati con le prove sui telefoni veri. Tempo massimo per foto 45 s, per la preparazione 60 s: oltre, messaggio e si continua a mano.

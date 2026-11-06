@@ -911,7 +911,7 @@ function bloccoUploadLato(ospiteNum, lato) {
               <div class="upload-group">
                 <label for="${inputId}" class="upload-label" data-i18n="guest.scegliFile">${t('guest.scegliFile')}</label>
                 <input type="file" id="${inputId}" name="${inputId}"
-                       class="upload-input" accept="image/*,.pdf"
+                       class="upload-input" accept="image/jpeg,image/png,application/pdf,.jpg,.jpeg,.png,.pdf"
                        onchange="handleFileUpload(this, ${ospiteNum}, '${lato}')">
               </div>
               <div class="camera-group">
@@ -937,7 +937,7 @@ function bloccoUploadLato(ospiteNum, lato) {
 // Spegnimento d'emergenza: rimettere 'spenta'. Il codice della scansione (scansione/) si scarica quando si apre il passo di un
 // ospite; le librerie dell'OCR (circa 4,5 MB) solo alla prima foto da leggere.
 const SCANSIONE_DOCUMENTI = 'prova';   // 05/11/2026: 'prova' sul branch claude/scansione-documenti per le prove del titolare
-const SCANSIONE_VERSIONE = '20261106g';
+const SCANSIONE_VERSIONE = '20261106h';
 // letto subito: dopo il caricamento daAreaClienti() toglie il frammento «#…» dall'indirizzo
 const scansioneInProva = /(?:^#|&)scansione=prova(?:&|$)/.test(window.location.hash || '');
 // diagnosi per le prove sul telefono («#scansione=prova&diagnosi»): letta subito, perché daAreaClienti toglie il «#» dall'indirizzo
@@ -1356,7 +1356,8 @@ window.handleFileUpload = function(input, ospiteNum, lato) {
       return;
     }
 
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+    // solo foto JPG e PNG e PDF (06/11/2026, richiesta del titolare; prima anche WebP). Sull'iPhone la galleria consegna le foto in JPG.
+    const allowedTypes = ['image/jpeg', 'image/png', 'application/pdf'];
     if (!allowedTypes.includes(file.type)) {
       showNotification(t('notif.formatoNonSupportato'), 'error');
       input.value = '';

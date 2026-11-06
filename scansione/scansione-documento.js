@@ -142,7 +142,7 @@ function disegnaPannello(s) {
           <div class="scan-lato-testa"><span class="scan-lato-numero">${k}</span><span data-i18n="scan.lato${k}">${esc(ctx.t('scan.lato' + k))}</span></div>
           <div class="scan-lato-azioni">
             ${fotocamera ? `<button type="button" class="scan-btn scan-fotografa" data-lato="${k}" data-i18n="scan.fotografa">${esc(ctx.t('scan.fotografa'))}</button>` : ''}
-            <div class="scan-file"><span class="scan-btn${fotocamera ? ' scan-btn-chiaro' : ''}" data-i18n="scan.carica">${esc(ctx.t('scan.carica'))}</span><input type="file" class="scan-input" accept="image/*" data-lato="${k}" aria-label="${esc(ctx.t('scan.carica'))}"></div>
+            <div class="scan-file"><span class="scan-btn${fotocamera ? ' scan-btn-chiaro' : ''}" data-i18n="scan.carica">${esc(ctx.t('scan.carica'))}</span><input type="file" class="scan-input" accept="image/jpeg,image/png,application/pdf,.jpg,.jpeg,.png,.pdf" data-lato="${k}" aria-label="${esc(ctx.t('scan.carica'))}"></div>
           </div>
           <p class="scan-lato-stato" data-stato-lato="${k}">&nbsp;</p>
         </div>`;
@@ -280,7 +280,7 @@ async function esegui(s, elenco) {
         const codice = (e && e.codice) || 'errore';
         errori.push(codice);
         if (diagnosiAttiva()) (s.diagnosi = s.diagnosi || {})[voce.k] = Object.assign({}, l.diagnosi || {}, { errore: codice });
-        statoLato(s, voce.k, 'scan.lato.' + (['pdf', 'formato', 'heic', 'timeout', 'offline'].includes(codice) ? codice : 'errore'));
+        statoLato(s, voce.k, 'scan.lato.' + (['pdf', 'formato', 'timeout', 'offline'].includes(codice) ? codice : 'errore'));
         if (codice === 'timeout' || codice === 'offline') { for (const resto of l.coda) { if (resto.tela) azzera(resto.tela); resto.file = null; resto.tela = null; statoLato(s, resto.k, null); } l.coda = []; }
       } finally {
         if (voce.tela) azzera(voce.tela);       // nessun riferimento all'immagine dopo la lettura
@@ -297,16 +297,21 @@ async function esegui(s, elenco) {
   concludi(s, errori);
 }
 
-async function leggiFile(l, file, quota) {
-  const immagine = typeof HTMLCanvasElement !== 'undefined' && file instanceof HTMLCanvasElement
-    ? { sorgente: file, w: file.width, h: file.height, rotazione: 0, chiudi() {} }      // dalla fotocamera: già un'immagine
+async function leggiFile(l, file, quota, opzioni) {
+  const tela = typeof HTMLCanvasElement !== 'undefined' && file instanceof HTMLCanvasElement;
+  if (!tela && tipoDaByte(new Uint8Array(await file.slice(0, 16).arrayBuffer())) === 'pdf') {
+    l.diagnosi = diagnosiAttiva() ? {} : null;      // (diagnosi: un errore del PDF non riporta i dati della foto precedente)
+    return leggiPdf(l, file, quota);
+  }
+  const immagine = tela
+    ? { sorgente: file, w: file.width, h: file.height, rotazione: 0, chiudi() {} }      // dalla fotocamera o da un PDF: già un'immagine
     : await decodifica(file);
   if (l.annullato) { immagine.chiudi(); throw errore('annullato'); }
   const diagnosi = diagnosiAttiva() ? { w: immagine.w, h: immagine.h, rotazione: immagine.rotazione, passi: [] } : null;
   l.diagnosi = diagnosi;
   let pagina = null;
   try {
-    pagina = preparaPagina(immagine);
+    pagina = preparaPagina(immagine, opzioni && opzioni.latoMax);
   } finally {
     immagine.chiudi();
   }
@@ -332,7 +337,8 @@ async function leggiFile(l, file, quota) {
     if (l.annullato) throw errore('annullato');
     quota(0.6);
     // 2) testo stampato: serve se non c'è una MRZ buona, e sul passaporto per il luogo di nascita (la MRZ non lo contiene)
-    if (an.testo && (!mrz || mrz.formato === 'TD3' || mrz.verificate < 2) && resto() > MINIMO_PASSAGGIO) {
+    //    In un PDF fronte e retro possono stare sulla stessa pagina (la scansione di un A4): lì il testo si legge anche con la MRZ
+    if (an.testo && (!mrz || mrz.formato === 'TD3' || mrz.verificate < 2 || (opzioni && opzioni.pdf)) && resto() > MINIMO_PASSAGGIO) {
       stampato = await leggiZonaTesto(l, pagina, an.testo, scala, resto);
       if (l.annullato) throw errore('annullato');
       // patente: numero (campo 5) e ufficio di rilascio (4c) possono stare in un gruppo di righe più in basso, staccato dal resto da
@@ -706,14 +712,9 @@ export function infoJpeg(b) {
 async function decodifica(file) {
   const testa = new Uint8Array(await file.slice(0, 256 * 1024).arrayBuffer());
   const tipo = tipoDaByte(testa);
-  if (tipo === 'pdf') throw errore('pdf');
-  if (!tipo || tipo === 'gif') throw errore('formato');
-  if (tipo === 'heic') {
-    let bmp = null;
-    try { bmp = await createImageBitmap(file); } catch (e) { bmp = null; }      // Safari apre le HEIC da solo
-    if (!bmp) bmp = await decodificaHeic(file);
-    return { sorgente: bmp, w: bmp.width, h: bmp.height, rotazione: 0, chiudi: () => { try { bmp.close(); } catch (e) { /* già chiusa */ } } };
-  }
+  if (tipo === 'pdf') throw errore('pdf');                        // i PDF li legge leggiPdf
+  // solo foto JPG e PNG (06/11/2026, richiesta del titolare: si caricano solo JPG, PNG e PDF); HEIC, WebP, GIF, BMP no
+  if (tipo !== 'jpeg' && tipo !== 'png') throw errore('formato');
   const info = tipo === 'jpeg' ? infoJpeg(testa) : { orientamento: 1 };
   let sorgente = null, w = 0, h = 0, chiudi = () => {};
   if (typeof createImageBitmap === 'function') {
@@ -740,19 +741,75 @@ async function decodifica(file) {
   return { sorgente, w, h, rotazione, chiudi };
 }
 
-// Foto HEIC che il browser non sa aprire (Chrome, Firefox): heic-to in un worker dedicato, chiuso subito dopo.
-async function decodificaHeic(file) {
-  let w;
-  try { w = new Worker(new URL('./decodifica-heic.js?v=20261105a', import.meta.url), { type: 'module' }); } catch (e) { throw errore('heic'); }
+// ---- PDF ----
+// Un PDF (06/11/2026, richiesta del titolare): le prime PAGINE_PDF pagine si disegnano in memoria con PDF.js (vendor/pdfjs, nel sito) e si
+// leggono come le foto; le letture delle pagine si uniscono (fronte e retro su due pagine, o sulla stessa: la scansione di un A4). Il PDF
+// resta in memoria: nessun indirizzo blob:, nessuna archiviazione; il documento e il worker di PDF.js si chiudono subito dopo.
+const PAGINE_PDF = 2;
+const LATO_PDF = 3000;           // lato lungo della pagina disegnata e dell'immagine di lavoro (px): su un A4 la carta resta larga ~1200 px
+const PIXEL_PDF = 12e6;          // al più 12 milioni di pixel per pagina (memoria dei telefoni)
+let pdfjs = null;
+async function caricaPdfjs() {
+  if (pdfjs) return pdfjs;
+  let m;
+  try { m = await import(new URL('pdfjs/pdf.min.mjs', VENDOR).href); } catch (e) { throw errore(navigator.onLine === false ? 'offline' : 'pdf'); }
+  m.GlobalWorkerOptions.workerSrc = new URL('pdfjs/pdf.worker.min.mjs', VENDOR).href;
+  pdfjs = m;
+  return m;
+}
+
+async function paginePdf(l, file) {
+  const lib = await caricaPdfjs();
+  if (l.annullato) throw errore('annullato');
+  // il PDF già in memoria (nessuno scaricamento); i decoder delle immagini (JPEG 2000, JBIG2) dal sito; caratteri non inclusi nel
+  // PDF sostituiti con quelli del sistema (nessun file di caratteri da altri domini)
+  const compito = lib.getDocument({ data: new Uint8Array(await file.arrayBuffer()), wasmUrl: new URL('pdfjs/wasm/', VENDOR).href, useSystemFonts: true, enableXfa: false });
+  const tele = [];
   try {
-    return await conTempo(new Promise((ok, ko) => {
-      w.onmessage = e => (e.data && e.data.ok && e.data.bitmap ? ok(e.data.bitmap) : ko(errore('heic')));
-      w.onerror = () => ko(errore('heic'));
-      w.postMessage(file);
-    }), TEMPI.lettura, 'timeout');
+    const doc = await conTempo(compito.promise, TEMPI.lettura, 'timeout');
+    for (let i = 1; i <= Math.min(doc.numPages, PAGINE_PDF) && !l.annullato; i++) {
+      const pagina = await doc.getPage(i);
+      const base = pagina.getViewport({ scale: 1 });
+      let scala = LATO_PDF / Math.max(base.width, base.height);
+      if (base.width * base.height * scala * scala > PIXEL_PDF) scala = Math.sqrt(PIXEL_PDF / (base.width * base.height));
+      const vista = pagina.getViewport({ scale: scala });
+      const tela = nuovaTela(vista.width, vista.height);
+      tele.push(tela);
+      await conTempo(pagina.render({ canvas: tela, viewport: vista, background: '#ffffff' }).promise, TEMPI.lettura, 'timeout');
+      pagina.cleanup();
+    }
+  } catch (e) {
+    for (const t of tele) azzera(t);
+    throw e && e.codice ? e : errore('pdf');          // danneggiato o protetto da password
   } finally {
-    w.terminate();
+    try { await compito.destroy(); } catch (e) { /* già chiuso */ }      // chiude il documento e il worker di PDF.js
   }
+  if (l.annullato) { for (const t of tele) azzera(t); throw errore('annullato'); }
+  if (!tele.length) throw errore('pdf');
+  return tele;
+}
+
+async function leggiPdf(l, file, quota) {
+  const tele = await paginePdf(l, file);
+  const letture = [];
+  try {
+    for (let i = 0; i < tele.length; i++) {
+      letture.push(await leggiFile(l, tele[i], q => quota((i + q) / tele.length), { latoMax: LATO_PDF, pdf: true }));
+      azzera(tele[i]);
+    }
+  } finally {
+    for (const t of tele) azzera(t);
+  }
+  return unisciLetture(letture);
+}
+
+// Letture delle pagine di un PDF: la MRZ migliore, il testo stampato unito (ogni campo dalla prima pagina che lo ha)
+function unisciLetture(letture) {
+  const mrz = letture.map(x => x.mrz).filter(Boolean).sort((a, b) => b.verificate - a.verificate)[0] || null;
+  let stampato = null;
+  for (const x of letture) if (x.stampato) { if (!stampato) stampato = x.stampato; else completaStampato(stampato, x.stampato); }
+  const diagnosi = letture[0] && letture[0].diagnosi ? Object.assign({}, letture[0].diagnosi, { pdf: letture.map(x => x.diagnosi) }) : null;
+  return { mrz, stampato, sfocata: letture.every(x => x.sfocata), vuota: letture.every(x => x.vuota), diagnosi };
 }
 
 function nuovaTela(w, h) {
@@ -764,12 +821,13 @@ function azzera(c) { if (c && c.width) { c.width = 0; c.height = 0; } }
 
 // Immagine di lavoro: ridotta (lato lungo al massimo LATO_MAX), girata se serve, come matrice di grigi (il canale più chiaro
 // di ogni pixel: scritte nere, fondi colorati chiari). La tela usata per disegnarla si azzera subito.
-function preparaPagina(img) {
+function preparaPagina(img, latoMax) {
   // Le foto grandi si riducono a LATO_MAX. Quelle piccole (lo scatto dal riquadro della fotocamera nella pagina, foto già ridotte)
   // si ingrandiscono fino a LATO_MIN: la ricerca delle righe e l'OCR sono tarati sulle foto del telefono, e con la carta larga
   // 500-800 px si perdevano luogo di nascita e numero (prove locali con foto vere ridotte, 06/11/2026).
   const lungo = Math.max(img.w, img.h);
-  const f = lungo > LATO_MAX ? LATO_MAX / lungo : lungo < LATO_MIN ? Math.min(3, LATO_MIN / lungo) : 1;
+  const massimo = latoMax || LATO_MAX;
+  const f = lungo > massimo ? massimo / lungo : lungo < LATO_MIN ? Math.min(3, LATO_MIN / lungo) : 1;
   const w = img.w * f, h = img.h * f, gira = img.rotazione === 90 || img.rotazione === 270;
   const c = nuovaTela(gira ? h : w, gira ? w : h), g = c.getContext('2d', { willReadFrequently: true });
   // le foto grandi (4032 px del telefono) si riducono a metà per volta: in un passo solo Safari le riduce seghettando le scritte
@@ -1000,7 +1058,6 @@ function concludi(s, errori) {
     if (errori.includes('timeout')) { messaggio = 'scan.timeout'; tipo = 'errore'; }
     else if (errori.includes('offline')) { messaggio = 'scan.offline'; tipo = 'errore'; }
     else if (errori.includes('pdf')) { messaggio = 'scan.pdf'; tipo = 'errore'; }
-    else if (errori.includes('heic')) { messaggio = 'scan.heic'; tipo = 'errore'; }
     else if (errori.includes('formato')) { messaggio = 'scan.formato'; tipo = 'errore'; }
     else if (errori.length) { messaggio = 'scan.errore'; tipo = 'errore'; }
     else if (sfocate) { messaggio = 'scan.sfocata'; tipo = 'errore'; }
@@ -1048,17 +1105,22 @@ function testoDiagnosi(diag) {
   for (const k of [1, 2]) {
     const d = diag[k];
     if (!d) continue;
-    const parti = [(k === 1 ? 'Fronte' : 'Retro') + ': ' + (d.w ? d.w + '×' + d.h + (d.rotazione ? ' (ruotata ' + d.rotazione + '°)' : '') + ' → ' + d.pw + '×' + d.ph : '?')];
-    if (d.errore) parti.push('errore: ' + d.errore);
-    if (d.ms != null) parti.push(sec(d.ms) + (d.ocrPronto != null ? ' (OCR pronto ' + sec(d.ocrPronto) + ')' : ''));
-    if (d.nitidezza != null) parti.push('nitidezza ' + d.nitidezza + (d.sfocata ? ' (sfocata)' : ''));
-    if (d.zone) parti.push('zone: ' + (d.zone.join(', ') || 'nessuna') + (d.zonaAllargata ? ' (+ allargata)' : ''));
-    for (const p of d.passi || []) parti.push('testo ' + p.giro + '°/' + p.psm + ' fiducia ' + p.fiducia + ', ' + p.righe + ' righe: ' + (p.campi.join(' ') || '-'));
-    if (d.mrz !== undefined) parti.push('MRZ: ' + (d.mrz ? d.mrz.formato + ' cifre ' + d.mrz.cifre + '/3, complessiva ' + (d.mrz.complessiva === true ? 'sì' : d.mrz.complessiva === false ? 'no' : '-') : 'no'));
-    if (d.campi) parti.push('stampato: ' + (d.campi.join(' ') || '-'));
-    righe.push(parti.join(' · '));
+    // PDF: una riga per pagina
+    if (d.pdf) { d.pdf.forEach((p, i) => { if (p) righe.push(rigaDiagnosi((k === 1 ? 'Fronte' : 'Retro') + ', PDF pag. ' + (i + 1) + '/' + d.pdf.length, p, sec)); }); continue; }
+    righe.push(rigaDiagnosi(k === 1 ? 'Fronte' : 'Retro', d, sec));
   }
   return righe.join('\n');
+}
+function rigaDiagnosi(nome, d, sec) {
+  const parti = [nome + ': ' + (d.w ? d.w + '×' + d.h + (d.rotazione ? ' (ruotata ' + d.rotazione + '°)' : '') + ' → ' + d.pw + '×' + d.ph : '?')];
+  if (d.errore) parti.push('errore: ' + d.errore);
+  if (d.ms != null) parti.push(sec(d.ms) + (d.ocrPronto != null ? ' (OCR pronto ' + sec(d.ocrPronto) + ')' : ''));
+  if (d.nitidezza != null) parti.push('nitidezza ' + d.nitidezza + (d.sfocata ? ' (sfocata)' : ''));
+  if (d.zone) parti.push('zone: ' + (d.zone.join(', ') || 'nessuna') + (d.zonaAllargata ? ' (+ allargata)' : ''));
+  for (const p of d.passi || []) parti.push('testo ' + p.giro + '°/' + p.psm + ' fiducia ' + p.fiducia + ', ' + p.righe + ' righe: ' + (p.campi.join(' ') || '-'));
+  if (d.mrz !== undefined) parti.push('MRZ: ' + (d.mrz ? d.mrz.formato + ' cifre ' + d.mrz.cifre + '/3, complessiva ' + (d.mrz.complessiva === true ? 'sì' : d.mrz.complessiva === false ? 'no' : '-') : 'no'));
+  if (d.campi) parti.push('stampato: ' + (d.campi.join(' ') || '-'));
+  return parti.join(' · ');
 }
 
 function mostraValore(k, v) {
