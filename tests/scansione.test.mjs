@@ -643,6 +643,30 @@ test('numero della CIE nella MRZ con la O lettera letta zero: il formato della C
   assert.equal(L.leggiMrz(fa.righe, OGGI, fa).campi.numeroDocumento, undefined);
 });
 
+// 06/11/2026, prova del titolare sul telefono: luogo di nascita vuoto (sul computer, con le stesse foto, si leggeva). La riga
+// «COMUNE (PR) GG.MM.AAAA» si leggeva con poca fiducia e l'etichetta italiana no: una parentesi letta male bastava a perderla.
+test('luogo di nascita: parentesi lette male o etichetta illeggibile; il risultato «incerto» lo deve confermare l\'elenco dei comuni', () => {
+  const o = OPZ;
+  // la forma esatta resta quella di prima
+  assert.deepEqual(L.leggiLuogo('ROMA (RM) 19.04.1980', o), { stato: 'Italia', comune: 'ROMA', provincia: 'RM' });
+  assert.deepEqual(L.leggiLuogo('BERLINO (GERMANIA)', o), { stato: 'Germania', comune: undefined, provincia: undefined });
+  // parentesi lette male, o una sola, o nessuna con la data subito dopo: incerto
+  for (const t of ['ROMA [RM] 19.04.1980', 'ROMA {RM) 19.04.1980', 'ROMA (RM| 19.04.1980', 'ROMA (RMJ 19.04.1980', 'ROMA RM 19.04.1980', 'ROMA RM) 19.04.1980'])
+    assert.deepEqual(L.leggiLuogo(t, o), { stato: 'Italia', comune: 'ROMA', provincia: 'RM', incerto: true }, t);
+  assert.equal(L.leggiLuogo('ROMA XX 19.04.1980', o), null, 'sigla che non è una provincia');
+  assert.equal(L.leggiLuogo('EMISSIONE / ISSUING 19.04.2021', o), null);
+  assert.equal(L.leggiLuogo('VIA ROMA 3 ROMA (RM)', o, { soloConData: true }), null, 'senza data (l\'indirizzo di residenza) no');
+  assert.deepEqual(L.leggiLuogo('PLACE AND DATE OF BIRTH ROMA RM 19.04.1980', o), { stato: 'Italia', comune: 'ROMA', provincia: 'RM', incerto: true }, 'etichetta sulla stessa riga');
+  // etichetta illeggibile: la riga del luogo e della data si riconosce da sola
+  const fronte = ['REPUBBLICA ITALIANA', 'CARTA DI IDENTITA', 'COGNOME / SURNAME', 'PROVACCIA', 'NOME / NAME', 'ERMENEGILDA', 'LU0G0 E DAT4 D1 NASC1TA', 'ROMA [RM] 19.04.1980'];
+  const st = L.leggiTestoStampato(fronte, o);
+  assert.deepEqual(st.luogo, { stato: 'Italia', comune: 'ROMA', provincia: 'RM', incerto: true });
+  const c = L.combinaLetture([{ mrz: L.leggiMrz(CIE_RETRO, OGGI), stampato: null }, { mrz: null, stampato: st }], Object.assign({ responsabile: true }, o));
+  assert.deepEqual([c.campi.luogoNascita.valore, c.campi.comune.valore, c.campi.provincia.valore], ['Italia', 'ROMA', 'RM']);
+  assert.ok(c.campi.comune.incerto && c.campi.provincia.incerto && c.campi.luogoNascita.incerto, 'incerto: lo conferma l\'elenco dei comuni nella pagina');
+  assert.equal(L.combinaLetture([{ mrz: null, stampato: L.leggiTestoStampato(CIE_FRONTE, o) }], o).campi.comune.incerto, undefined, 'la forma esatta non è incerta');
+});
+
 test('elenco dei comuni: comuni di oggi, vecchi nomi e soppressi; province del modulo (con SU); licenza e generatore', () => {
   const voci = RIGHE_COMUNI.map(r => r.split(';'));
   const oggi = voci.filter(v => v.length === 2), vecchi = voci.filter(v => v[2] && v[2][0] === '='), soppressi = voci.filter(v => v[2] === '-');

@@ -786,10 +786,36 @@ function valoreDopoEtichetta(U, re, O, G, escludi, accettabile) {
 }
 
 // Luogo di nascita: «ROMA (RM)» (comune italiano con la sigla della provincia) oppure «BERLINO (GERMANIA)» (Stato del modulo).
-export function leggiLuogo(testo, { province, stati }) {
+export function leggiLuogo(testo, { province, stati }, opzioni) {
   const s = String(testo || '').toUpperCase();
   const m = /([A-ZÀ-ÖØ-Ý][A-ZÀ-ÖØ-Ý' .\-]{1,40}?)\s*\(\s*([A-ZÀ-ÖØ-Ý' .\-]{2,40}?)\s*\)/.exec(s);
-  if (!m) return null;
+  const esatto = m && !(opzioni && opzioni.soloConData) ? leggiLuogoEsatto(m, province, stati) : null;
+  return esatto || leggiLuogoIncerto(s, province, opzioni);
+}
+
+// Comune con la provincia tra parentesi lette male dall'OCR («ROMA [RM]», «ROMA {RM)», «ROMA (RM|», «ROMA RM 19.04.1980»): solo
+// con la sigla di una provincia vera e, se manca una parentesi, con la data subito dopo (la riga «luogo e data di nascita» della CIE).
+// Il risultato è «incerto»: vale solo se il comune c'è nell'elenco dei comuni di quella provincia (scansione-documento.js, concludi).
+// 06/11/2026: sulla CIE del titolare la riga si leggeva con poca fiducia e, sul telefono, il luogo non veniva compilato.
+function leggiLuogoIncerto(s, province, opzioni) {
+  const data = '\\s+\\d{1,2}\\s?[.\\/\\-]\\s?\\d{1,2}\\s?[.\\/\\-]\\s?\\d{2,4}';
+  const forme = [
+    new RegExp("([A-ZÀ-ÖØ-Ý][A-ZÀ-ÖØ-Ý' .\\-]{1,40}?)\\s*[(\\[{<|]\\s*([A-Z]{2})\\s*[)\\]}>|1lIJ](?![A-Z])"),
+    new RegExp("([A-ZÀ-ÖØ-Ý][A-ZÀ-ÖØ-Ý' .\\-]{1,40}?)\\s*[(\\[{<|]?\\s*([A-Z]{2})\\s*[)\\]}>|1lIJ]?(?=" + data + ')'),
+  ];
+  for (const [i, re] of forme.entries()) {
+    if (opzioni && opzioni.soloConData && i === 0) continue;
+    const m = re.exec(s);
+    if (!m || !(province || []).includes(m[2])) continue;
+    // un'etichetta sulla stessa riga («PLACE AND DATE OF BIRTH ROMA RM …»): il comune è dopo
+    const dopoEtichetta = m[1].replace(new RegExp('^.*(?:' + ETICHETTA_QUALSIASI.source + ')\\W*'), '');
+    const nome = dopoEtichetta.replace(/^(?:[A-Z]\s+)+/, '').replace(/^(A|DI|IN)\s+/, '').replace(/[\s.\-]+$/, '').trim();
+    if (nome.length >= 2 && !ETICHETTA_QUALSIASI.test(nome)) return { stato: 'Italia', comune: nome, provincia: m[2], incerto: true };
+  }
+  return null;
+}
+
+function leggiLuogoEsatto(m, province, stati) {
   const nome = m[1].replace(/^(?:[A-Z]\s+)+/, '').replace(/^(A|DI|IN)\s+/, '').trim(), tra = m[2].trim();
   if (/^[A-Z]{2}$/.test(tra) && (province || []).includes(tra)) return { stato: 'Italia', comune: nome, provincia: tra };
   const stato = (stati || []).find(x => chiaveVoce(x) === chiaveVoce(tra));
@@ -888,6 +914,8 @@ export function leggiTestoStampato(righe, opzioni) {
     const ld = dopo(ETICHETTE.luogoData);
     const luogoTesto = ld ? ld.valore : (dopo(ETICHETTE.luogo) || {}).valore;
     if (luogoTesto) { const l = leggiLuogo(luogoTesto, o); if (l) v.luogo = l; }
+    // etichetta letta male: la riga «COMUNE (PR) GG.MM.AAAA» della CIE si riconosce anche da sola (incerta: la conferma l'elenco dei comuni)
+    if (!v.luogo) for (const r of U) { const l = leggiLuogo(r, o, { soloConData: true }); if (l) { v.luogo = l; break; } }
     const dt = ld ? null : dopo(ETICHETTE.data);
     const dataTesto = ld ? ld.valore : (dt || {}).valore;
     // carta cartacea: «nato il …», poi (atto n. …), poi «a COMUNE (PR)» nelle due righe sotto
@@ -1043,11 +1071,13 @@ export function combinaLetture(letture, opzioni) {
   } else if (st.cittadinanza) campi.cittadinanza = { valore: st.cittadinanza, affidabilita: DA_VERIFICARE, fonte: 'stampato' };
 
   // luogo di nascita: solo dal testo stampato (la MRZ non lo contiene)
+  // (incerto: parentesi lette male o senza etichetta; vale solo se l'elenco dei comuni conferma il comune, nella pagina)
   if (st.luogo && st.luogo.stato) {
-    campi.luogoNascita = { valore: st.luogo.stato, affidabilita: DA_VERIFICARE, fonte: 'stampato' };
+    const incerto = st.luogo.incerto ? { incerto: true } : {};
+    campi.luogoNascita = Object.assign({ valore: st.luogo.stato, affidabilita: DA_VERIFICARE, fonte: 'stampato' }, incerto);
     if (st.luogo.stato === 'Italia' && st.luogo.comune && st.luogo.provincia) {
-      campi.comune = { valore: st.luogo.comune, affidabilita: DA_VERIFICARE, fonte: 'stampato' };
-      campi.provincia = { valore: st.luogo.provincia, affidabilita: DA_VERIFICARE, fonte: 'stampato' };
+      campi.comune = Object.assign({ valore: st.luogo.comune, affidabilita: DA_VERIFICARE, fonte: 'stampato' }, incerto);
+      campi.provincia = Object.assign({ valore: st.luogo.provincia, affidabilita: DA_VERIFICARE, fonte: 'stampato' }, incerto);
     }
   }
 

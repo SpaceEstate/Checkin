@@ -937,9 +937,11 @@ function bloccoUploadLato(ospiteNum, lato) {
 // Spegnimento d'emergenza: rimettere 'spenta'. Il codice della scansione (scansione/) si scarica quando si apre il passo di un
 // ospite; le librerie dell'OCR (circa 4,5 MB) solo alla prima foto da leggere.
 const SCANSIONE_DOCUMENTI = 'prova';   // 05/11/2026: 'prova' sul branch claude/scansione-documenti per le prove del titolare
-const SCANSIONE_VERSIONE = '20261106e';
+const SCANSIONE_VERSIONE = '20261106f';
 // letto subito: dopo il caricamento daAreaClienti() toglie il frammento «#…» dall'indirizzo
 const scansioneInProva = /(?:^#|&)scansione=prova(?:&|$)/.test(window.location.hash || '');
+// diagnosi per le prove sul telefono («#scansione=prova&diagnosi»): letta subito, perché daAreaClienti toglie il «#» dall'indirizzo
+const scansioneDiagnosi = /(?:^#|&)diagnosi(?:=1)?(?:&|$)/.test(window.location.hash || '');
 
 function scansioneDisponibile() {
   if (!(SCANSIONE_DOCUMENTI === 'attiva' || (SCANSIONE_DOCUMENTI === 'prova' && scansioneInProva))) return false;
@@ -967,7 +969,7 @@ async function avviaScansione(n) {
     if (!moduloScansione) moduloScansione = await import(`./scansione/scansione-documento.js?v=${SCANSIONE_VERSIONE}`);
     moduloScansione.apri(n, {
       t, applicaTraduzioni, onCambioLingua, traduciPaese, traduciDocumento, stati, province, inputDocumento,
-      numeroOspiti: () => numeroOspiti
+      numeroOspiti: () => numeroOspiti, diagnosi: scansioneDiagnosi
     });
   } catch (e) {
     // il modulo non si scarica (rete, browser): niente scansione, si compila a mano come prima; il check-in non si blocca

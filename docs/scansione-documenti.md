@@ -40,6 +40,11 @@ const SCANSIONE_DOCUMENTI = 'prova';   // 'spenta' | 'prova' | 'attiva'
 | `'prova'` | La scansione compare solo aprendo il check-in con `#scansione=prova` in fondo all'indirizzo, per esempio `https://spaceestate.github.io/Checkin/#scansione=prova`. Gli ospiti non la vedono. Serve a provare sui telefoni veri. **È il valore attuale sul branch `claude/scansione-documenti`** (05/11/2026, per le prove del titolare nell'anteprima di Vercel). |
 | `'attiva'` | La scansione compare a tutti. |
 
+**Diagnosi per le prove sul telefono:** con `#scansione=prova&diagnosi` in fondo all'indirizzo, sotto le foto compare per ogni lato
+una riga con dispositivo e browser, misure della foto, tempi, nitidezza, zone trovate, passaggi dell'OCR con la fiducia, controlli della
+MRZ e i **nomi** dei campi letti (mai i valori). Serve a capire cosa succede su un telefono che non si può provare in locale (06/11/2026:
+sull'iPhone del titolare il luogo di nascita restava vuoto, sul computer con le stesse foto no). Senza quella parola non cambia nulla.
+
 **Spegnimento d'emergenza (kill switch):** rimettere `'spenta'` (una riga) e aumentare `?v=` di `checkin.js` in `index.html`, copiando i due
 file in `public/`. Su GitHub Pages è online in un paio di minuti. Se i file della scansione non si scaricano (rete, file mancanti), il modulo mostra un
 messaggio e si continua a mano: non serve altro.
@@ -59,7 +64,8 @@ salvataggio). Le foto sintetiche per provare sono in `tests/browser/documenti-si
    (`scansione/vendor/`). Le foto degli altri ospiti arrivano dalla fotocamera con il riquadro (una tela in memoria, ritagliata sul documento)
    o da «Carica una foto».
 2. La foto (lato con i dati o con la MRZ; un secondo lato facoltativo) viene decodificata in memoria: orientamento EXIF, HEIC/HEIF
-   (Safari le apre da solo; altrove heic-to in un worker chiuso subito dopo), riduzione a 2000 px, scala di grigi (il canale più chiaro
+   (Safari le apre da solo; altrove heic-to in un worker chiuso subito dopo), riduzione a 2000 px (le foto grandi a metà per volta: in un
+   passo solo Safari seghetta le scritte sottili come le parentesi), scala di grigi (il canale più chiaro
    di ogni pixel: le scritte nere restano nere, i fondi colorati del documento schiariscono). Le foto più piccole di 1600 px si
    **ingrandiscono** fino a 1600 (al più 3 volte): con la carta larga 500-800 px, come negli scatti dal riquadro di una fotocamera a
    bassa risoluzione, si perdevano luogo di nascita, comune, provincia e numero (06/11/2026, prove locali con le foto vere ridotte e con
@@ -77,7 +83,12 @@ salvataggio). Le foto sintetiche per provare sono in `tests/browser/documenti-si
    (`fondiMrz`): in una casella di sole cifre una O diventa 0, tra più letture vale quella che fa tornare la cifra del campo, un codice
    di Stato deve esistere. Un campo che non si può decidere resta vuoto (mai «corretto» a caso: vedi Limiti).
 5. **Testo stampato**: la zona ritagliata si legge in uno o due versi (dritta, capovolta) e, se mancano dati, una seconda volta con
-   un'altra impostazione. Le etichette trovano il loro valore anche in colonna (riquadri dell'OCR: sulla CIE «CITTADINANZA» ha il valore
+   un'altra impostazione. Il verso capovolto non si prova se la prima lettura ha già tre dati (cognome, nome, data…), anche con poca
+   fiducia dell'OCR; la seconda lettura si fa anche con poca fiducia se ci sono già tre dati (06/11/2026: sulla CIE del titolare la
+   fiducia era 43, sotto la soglia di 45, e sul telefono il luogo di nascita restava vuoto). Il luogo di nascita si riconosce anche con
+   le parentesi lette male («ROMA [RM]», «ROMA (RM|», «ROMA RM 19.04.1980») o con l'etichetta illeggibile (la riga «COMUNE (PR)
+   GG.MM.AAAA» della CIE): solo con la sigla di una provincia vera, e vale solo se l'elenco dei comuni conferma il comune; se no non si
+   compilano né lo Stato né comune e provincia. Le etichette trovano il loro valore anche in colonna (riquadri dell'OCR: sulla CIE «CITTADINANZA» ha il valore
    sotto di sé, non sulla riga di «SESSO»), saltano le traduzioni lette male («SURAT» per SURNAME) e il rumore dopo il nome.
 6. Se nella foto non si trova nessuna riga ma ci sono lettere (foto piccola o molto sfocata), si legge l'immagine intera come prima,
    con le rotazioni. Se non ci sono lettere in riga (non è un documento) si risponde subito.

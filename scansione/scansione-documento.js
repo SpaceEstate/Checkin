@@ -10,12 +10,16 @@
 //    loro campi e partono per il gestore come prima (raccogliDatiPrenotazioneConCompressione in checkin.js, invariata).
 //  - si compilano solo i campi vuoti dell'ospite giusto; ogni ospite ha il suo stato; «Annulla la compilazione» ripristina
 //    esattamente i valori di prima. La conferma finale resta dell'ospite. Se qualcosa non va, si continua a mano.
-import * as L from './lettura-documento.js?v=20261106e';
+import * as L from './lettura-documento.js?v=20261106f';
 import * as I from './immagine.js?v=20261106a';
 
 const VENDOR = new URL('./vendor/', import.meta.url);
 const TEMPI = Object.assign({ preparazione: 60000, lettura: 45000 }, (typeof window !== 'undefined' && window.__scansioneTempi) || {});
 const LATO_MAX = 2000;            // lato lungo dell'immagine di lavoro (px)
+// Diagnosi per le prove sul telefono (06/11/2026): con «diagnosi» nell'indirizzo (#scansione=prova&diagnosi; checkin.js la legge
+// all'apertura e la passa in ctx) sotto le foto compaiono, per ogni lato, misure, tempi, zone trovate e i NOMI dei campi letti, mai i
+// valori. Serve a capire cosa succede su un telefono che qui non si può provare (Safari su iPhone). Senza, non cambia nulla.
+const diagnosiAttiva = () => !!(ctx && ctx.diagnosi);
 const LATO_MIN = 1600;            // le foto più piccole si ingrandiscono fino a questo lato lungo (al più 3 volte): vedi preparaPagina
 const LATO_PRIMA_LETTURA = 1600;  // lato lungo per la prima lettura (testo e posizione della MRZ)
 const MRZ_LETTERE = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<';
@@ -269,11 +273,13 @@ async function esegui(s, elenco) {
         const lettura = await leggiFile(l, voce.tela || voce.file, q => avanzamento(s, null, (base + q) / (base + 1 + l.coda.length)));
         if (l.annullato) return;
         s.letture[voce.k] = lettura;
+        if (diagnosiAttiva()) (s.diagnosi = s.diagnosi || {})[voce.k] = lettura.diagnosi;
         statoLato(s, voce.k, lettura.vuota ? (lettura.sfocata ? 'scan.latoSfocato' : 'scan.latoNonLetto') : 'scan.latoLetto');
       } catch (e) {
         if (l.annullato) return;
         const codice = (e && e.codice) || 'errore';
         errori.push(codice);
+        if (diagnosiAttiva()) (s.diagnosi = s.diagnosi || {})[voce.k] = Object.assign({}, l.diagnosi || {}, { errore: codice });
         statoLato(s, voce.k, 'scan.lato.' + (['pdf', 'formato', 'heic', 'timeout', 'offline'].includes(codice) ? codice : 'errore'));
         if (codice === 'timeout' || codice === 'offline') { for (const resto of l.coda) { if (resto.tela) azzera(resto.tela); resto.file = null; resto.tela = null; statoLato(s, resto.k, null); } l.coda = []; }
       } finally {
@@ -296,6 +302,8 @@ async function leggiFile(l, file, quota) {
     ? { sorgente: file, w: file.width, h: file.height, rotazione: 0, chiudi() {} }      // dalla fotocamera: già un'immagine
     : await decodifica(file);
   if (l.annullato) { immagine.chiudi(); throw errore('annullato'); }
+  const diagnosi = diagnosiAttiva() ? { w: immagine.w, h: immagine.h, rotazione: immagine.rotazione, passi: [] } : null;
+  l.diagnosi = diagnosi;
   let pagina = null;
   try {
     pagina = preparaPagina(immagine);
@@ -303,10 +311,12 @@ async function leggiFile(l, file, quota) {
     immagine.chiudi();
   }
   const inizio = Date.now();
+  if (diagnosi) { diagnosi.pw = pagina.w; diagnosi.ph = pagina.h; }
   const resto = () => TEMPI.lettura - (Date.now() - inizio);
   try {
     const sfocata = I.nitidezza(pagina.g, pagina.w, pagina.h) < 18;
     if (!l.worker) l.worker = await avviaWorker(l, q => quota(0.05 + 0.25 * q));
+    if (diagnosi) diagnosi.ocrPronto = Date.now() - inizio;
     if (l.annullato) throw errore('annullato');
     quota(0.35);
     // 1) righe di testo e MRZ cercate su una copia piccola, senza OCR (pochi decimi di secondo): l'OCR leggerà solo quelle
@@ -335,13 +345,19 @@ async function leggiFile(l, file, quota) {
       if (punteggioStampato(intera.stampato) > punteggioStampato(stampato)) stampato = intera.stampato;
     }
     const vuota = punteggioLettura({ mrz, stampato }) === 0;
-    return { mrz, stampato, sfocata, vuota };
+    if (diagnosi) Object.assign(diagnosi, { ms: Date.now() - inizio, zone: [an.mrz ? 'MRZ' : null, an.testo ? 'testo' : null].filter(Boolean),
+      mrz: mrz ? { formato: mrz.formato, cifre: mrz.verificate, complessiva: mrz.controlli.complessiva } : null,
+      campi: campiDiagnosi(stampato), sfocata, nitidezza: Math.round(I.nitidezza(pagina.g, pagina.w, pagina.h)) });
+    return { mrz, stampato, sfocata, vuota, diagnosi };
   } finally {
     pagina.g.fill(0);
   }
 }
 
 const punteggioStampato = st => st ? ['cognome', 'nome', 'nascita', 'numero', 'luogo'].filter(k => st[k]).length : 0;
+// solo i nomi dei campi trovati nel testo stampato (diagnosi): nessun valore
+const campiDiagnosi = st => st ? ['cognome', 'nome', 'nascita', 'luogo', 'sesso', 'cittadinanza', 'numero', 'numeriCie'].filter(k => st[k] && (!Array.isArray(st[k]) || st[k].length))
+  .map(k => k === 'luogo' && st.luogo.incerto ? 'luogo(incerto)' : k) : [];
 
 // MRZ: fascia ritagliata dritta e in bianco e nero; i «<» si riconoscono dalla forma, le altre lettere le legge l'OCR (tre
 // letture della stessa fascia preparata in modo diverso, unite con le cifre di controllo: lettura-documento.js, fondiMrz).
@@ -401,6 +417,7 @@ async function leggiZonaTesto(l, pagina, zt, scala, resto) {
       const d = await ocr(l, img, crop.w, crop.h, { tessedit_pageseg_mode: psm }, resto);
       const { segmenti, fiducia } = segmentiDa(d);
       const st = L.leggiTestoStampato(segmenti, opz);
+      if (l.diagnosi) l.diagnosi.passi.push({ giro, psm, fiducia: Math.round(fiducia), righe: segmenti.length, campi: campiDiagnosi(st) });
       return { st, fiducia, giro, punti: punteggioStampato(st) + fiducia / 100 };
     } finally {
       img.fill(0);
@@ -412,11 +429,14 @@ async function leggiZonaTesto(l, pagina, zt, scala, resto) {
     const r = await leggi(giro, '11', ALTEZZA_TESTO);
     if (r && (!migliore || r.punti > migliore.punti)) migliore = r;
     if (r && r.fiducia >= 45 && punteggioStampato(r.st) >= 1) break;         // verso giusto: il capovolto non serve
+    // anche con poca fiducia, se ci sono già tre dati (cognome, nome, data…) il verso è giusto: il tempo serve alla seconda lettura
+    // (06/11/2026: CIE del titolare, fiducia 43; sul telefono il luogo di nascita restava vuoto)
+    if (r && punteggioStampato(r.st) >= 3) break;
   }
   if (!migliore) return null;
   const dubbi = new Set(migliore.st.dubbi || []);
   const mancano = ['cognome', 'nome', 'nascita', 'luogo'].filter(k => !migliore.st[k] || dubbi.has(k)).length;
-  if (mancano && migliore.fiducia >= 45 && resto() > 2 * MINIMO_PASSAGGIO) {
+  if (mancano && (migliore.fiducia >= 45 || punteggioStampato(migliore.st) >= 3) && resto() > 2 * MINIMO_PASSAGGIO) {
     const r2 = await leggi(migliore.giro, '3', ALTEZZA_TESTO - 2);
     if (r2) {
       const st = migliore.st, dubbi2 = new Set(r2.st.dubbi || []);
@@ -732,12 +752,22 @@ function preparaPagina(img) {
   const f = lungo > LATO_MAX ? LATO_MAX / lungo : lungo < LATO_MIN ? Math.min(3, LATO_MIN / lungo) : 1;
   const w = img.w * f, h = img.h * f, gira = img.rotazione === 90 || img.rotazione === 270;
   const c = nuovaTela(gira ? h : w, gira ? w : h), g = c.getContext('2d', { willReadFrequently: true });
+  // le foto grandi (4032 px del telefono) si riducono a metà per volta: in un passo solo Safari le riduce seghettando le scritte
+  // sottili (parentesi, punti); a metà ogni pixel è la media di quattro, su qualunque browser
+  const meta = [];
+  let sorgente = img.sorgente, sw = img.w, sh = img.h;
+  while (sw / 2 >= w && sh / 2 >= h) {
+    const t = nuovaTela(sw / 2, sh / 2), tg = t.getContext('2d');
+    tg.imageSmoothingQuality = 'high';
+    tg.drawImage(sorgente, 0, 0, t.width, t.height);
+    meta.push(t); sorgente = t; sw = t.width; sh = t.height;
+  }
   try {
     g.imageSmoothingQuality = 'high';
     g.save();
     g.translate(c.width / 2, c.height / 2);
     g.rotate(img.rotazione * Math.PI / 180);
-    g.drawImage(img.sorgente, -w / 2, -h / 2, w, h);
+    g.drawImage(sorgente, -w / 2, -h / 2, w, h);
     g.restore();
     const dati = g.getImageData(0, 0, c.width, c.height);
     const grigio = I.grigioMassimo(dati.data, c.width, c.height);
@@ -745,6 +775,7 @@ function preparaPagina(img) {
     return { g: grigio, w: c.width, h: c.height };
   } finally {
     azzera(c);
+    for (const t of meta) azzera(t);
   }
 }
 
@@ -923,6 +954,10 @@ function concludi(s, errori) {
   if (responsabile && tipoDoc && !tipoDoc.valore && tipoDoc.suggerimento) proposte.tipoDocumento = { valore: tipoDoc.suggerimento, affidabilita: L.DA_VERIFICARE, fonte: 'tipo' };
   // comune: il nome dell'elenco dei comuni (campi-elenco.js), anche se l'OCR ha sbagliato una lettera; se non è nell'elenco
   // non si compila (il campo accetta solo comuni dell'elenco)
+  // luogo letto «incerto» (parentesi lette male, riga senza etichetta): vale solo se l'elenco dei comuni conferma il comune
+  const luogoIncerto = !!(proposte.comune && proposte.comune.incerto);
+  const togliLuogo = () => { delete proposte.comune; delete proposte.provincia; delete proposte.luogoNascita; };
+  if (luogoIncerto && !(window.ElencoComuni && window.ElencoComuni.pronto())) togliLuogo();
   if (proposte.comune && window.ElencoComuni && window.ElencoComuni.pronto()) {
     const r = window.ElencoComuni.simile(proposte.comune.valore, proposte.provincia && proposte.provincia.valore);
     if (r && !r.ambiguo) {
@@ -935,7 +970,8 @@ function concludi(s, errori) {
       if (confermato) {
         for (const k of ['comune', 'provincia', 'luogoNascita']) if (proposte[k]) proposte[k] = Object.assign({}, proposte[k], { affidabilita: L.SICURO });
       }
-    } else delete proposte.comune;
+    } else if (luogoIncerto) togliLuogo();
+    else delete proposte.comune;
   }
   const { scritti, conflitti } = letture.length ? applica(s, proposte) : { scritti: [], conflitti: [] };
   let messaggio, tipo;
@@ -977,10 +1013,32 @@ function mostraEsito(s) {
       <button type="button" class="scan-mini scan-mini-chiaro" data-azione="tieni" data-indice="${i}">${esc(t('scan.tieniMio'))}</button></div>`));
   }
   if (s.istantanea && ((e.scritti && e.scritti.length) || s.scritti.size)) righe.push(`<button type="button" class="scan-annulla" data-azione="annulla">${esc(t('scan.annulla'))}</button>`);
+  if (diagnosiAttiva() && s.diagnosi) righe.push(`<pre class="scan-diagnosi">${esc(testoDiagnosi(s.diagnosi))}</pre>`);
   box.className = 'scan-esito ' + (e.tipo || '') + (righe.every(r => r.startsWith('<button')) ? ' senza-testo' : '');      // solo «Annulla»: senza cornice
   box.innerHTML = righe.join('');
   box.hidden = false;
   box.querySelectorAll('[data-azione]').forEach(b => b.addEventListener('click', () => azioneEsito(s, b.getAttribute('data-azione'), parseInt(b.getAttribute('data-indice'), 10))));
+}
+
+// Diagnosi (vedi diagnosiAttiva): una riga per lato; misure, tempi, zone, passaggi dell'OCR e nomi dei campi, mai i valori
+function testoDiagnosi(diag) {
+  const sec = ms => (ms / 1000).toFixed(1).replace('.', ',') + ' s';
+  const ua = typeof navigator !== 'undefined' ? String(navigator.userAgent || '') : '';
+  const righe = [(/iPhone|iPad/.test(ua) ? 'iOS' : /Android/.test(ua) ? 'Android' : 'computer') + (/Version\/([\d.]+).*Safari/.exec(ua) ? ' Safari ' + /Version\/([\d.]+)/.exec(ua)[1] : /Chrome\/(\d+)/.exec(ua) ? ' Chrome ' + /Chrome\/(\d+)/.exec(ua)[1] : '')];
+  for (const k of [1, 2]) {
+    const d = diag[k];
+    if (!d) continue;
+    const parti = [(k === 1 ? 'Fronte' : 'Retro') + ': ' + (d.w ? d.w + '×' + d.h + (d.rotazione ? ' (ruotata ' + d.rotazione + '°)' : '') + ' → ' + d.pw + '×' + d.ph : '?')];
+    if (d.errore) parti.push('errore: ' + d.errore);
+    if (d.ms != null) parti.push(sec(d.ms) + (d.ocrPronto != null ? ' (OCR pronto ' + sec(d.ocrPronto) + ')' : ''));
+    if (d.nitidezza != null) parti.push('nitidezza ' + d.nitidezza + (d.sfocata ? ' (sfocata)' : ''));
+    if (d.zone) parti.push('zone: ' + (d.zone.join(', ') || 'nessuna'));
+    for (const p of d.passi || []) parti.push('testo ' + p.giro + '°/' + p.psm + ' fiducia ' + p.fiducia + ', ' + p.righe + ' righe: ' + (p.campi.join(' ') || '-'));
+    if (d.mrz !== undefined) parti.push('MRZ: ' + (d.mrz ? d.mrz.formato + ' cifre ' + d.mrz.cifre + '/3, complessiva ' + (d.mrz.complessiva === true ? 'sì' : d.mrz.complessiva === false ? 'no' : '-') : 'no'));
+    if (d.campi) parti.push('stampato: ' + (d.campi.join(' ') || '-'));
+    righe.push(parti.join(' · '));
+  }
+  return righe.join('\n');
 }
 
 function mostraValore(k, v) {
