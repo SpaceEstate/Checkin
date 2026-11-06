@@ -511,7 +511,9 @@ test('letture unite: le cifre di controllo scelgono tra le letture; un campo che
   // il numero non si può leggere: niente numero. (Cambiare la L finale in I farebbe tornare la cifra di controllo, e anche
   // quella complessiva: C100000KI. Si correggono solo le caselle incerte, cioè quella sbiadita.)
   assert.equal(m.campi.numeroDocumento, undefined);
-  assert.equal(L.leggiMrz(f.righe, OGGI).campi.numeroDocumento.valore, 'C100000KI', 'senza le caselle incerte la correzione sbaglierebbe');
+  // 06/11/2026: per la CIE la correzione resta nel formato del numero (C, lettera, 5 cifre, 2 lettere); senza le caselle incerte
+  // sbaglia lo stesso, con CL00000KI invece di C100000KI (che ha una cifra al posto della lettera)
+  assert.equal(L.leggiMrz(f.righe, OGGI).campi.numeroDocumento.valore, 'CL00000KI', 'senza le caselle incerte la correzione sbaglierebbe');
   // due letture su tre coincidono e tornano: si tiene quella
   const buona = L.fondiMrz([td1v, td1v, v[0]]);
   assert.deepEqual(buona.righe, td1v);
@@ -580,6 +582,49 @@ test('CIE con il numero della MRZ illeggibile: resta una CIE (proposta con il fr
   // MRZ non del tutto valida: il tipo arriva come proposta da controllare (la scansione lo scrive con il bordo arancione)
   assert.equal(c.campi.tipoDocumento.valore || c.campi.tipoDocumento.suggerimento, "CARTA IDENTITA' ELETTRONICA");
   assert.equal(c.campi.numeroDocumento.valore, 'CA00000AA', 'il numero dal fronte');
+});
+
+// 06/11/2026, prova del titolare: numero vuoto, sesso e tipo arancioni. Sulle foto vere il numero nella MRZ aveva un carattere
+// consumato (cifra di controllo che non torna) e il fronte, a bassa risoluzione, una lettera letta «1».
+test('numero della CIE: dal fronte, confermato dalla MRZ anche con un carattere consumato; letture alternative solo se la MRZ le conferma; sesso e tipo certi con la riga di nascita e scadenza esatta', () => {
+  const r = td1({ tipo: 'C<', stato: 'ITA', cognome: 'PROVACCIA', nome: 'ERMENEGILDA', numero: 'CA12345XL', nascita: '800419', sesso: 'F', scadenza: '310419' });
+  const consumata = [r[0].slice(0, 6) + '5' + r[0].slice(7), r[1], r[2]];      // la seconda lettera del numero letta «5»
+  const m = L.leggiMrz(consumata, OGGI);
+  assert.equal(m.campi.numeroDocumento, undefined, 'dalla sola MRZ niente numero');
+  assert.deepEqual([m.controlli.numero, m.controlli.nascita, m.controlli.scadenza], [false, true, true]);
+  assert.equal(m.campi.genere.affidabilita, L.SICURO, 'sesso tra nascita e scadenza, che tornano');
+  assert.equal(m.verificaNumero('CA12345XL').conferme, 2, 'il numero vero fa tornare la cifra del numero e la complessiva');
+  assert.equal(m.verificaNumero('CA12345XI'), null, 'una lettera diversa no');
+  assert.equal(m.verificaNumero('CB99999XL'), null, 'troppo diverso dal numero della MRZ');
+  const resp = Object.assign({ responsabile: true }, OPZ);
+  const conFronte = righeFronte => L.combinaLetture([{ mrz: m, stampato: null }, { mrz: null, stampato: L.leggiTestoStampato(['REPUBBLICA ITALIANA', 'CARTA DI IDENTITA', ...righeFronte], OPZ) }], resp);
+  const esatto = conFronte(['CA12345XL']);
+  assert.deepEqual([esatto.campi.numeroDocumento.valore, esatto.campi.numeroDocumento.affidabilita], ['CA12345XL', L.SICURO], 'fronte esatto, confermato dalla MRZ');
+  assert.deepEqual([esatto.campi.tipoDocumento.valore, esatto.campi.tipoDocumento.affidabilita], ["CARTA IDENTITA' ELETTRONICA", L.SICURO]);
+  // fronte con l'ultima lettera letta «1»: delle letture possibili (XI, XL) vale quella confermata dalla MRZ
+  const st = L.leggiTestoStampato(['CA12345X1'], OPZ);
+  assert.equal(st.numero, undefined);
+  assert.ok(st.numeriCie.includes('CA12345XI') && st.numeriCie.includes('CA12345XL'));
+  const alternativa = conFronte(['CA12345X1']);
+  assert.deepEqual([alternativa.campi.numeroDocumento.valore, alternativa.campi.numeroDocumento.affidabilita], ['CA12345XL', L.SICURO]);
+  // senza la MRZ le letture alternative non si usano; un numero esatto del solo fronte resta da controllare
+  const soloFronte = t => L.combinaLetture([{ mrz: null, stampato: L.leggiTestoStampato(['REPUBBLICA ITALIANA', 'CARTA DI IDENTITA', t], OPZ) }], resp).campi.numeroDocumento;
+  assert.equal(soloFronte('CA12345X1'), undefined);
+  assert.equal(soloFronte('CA12345XL').affidabilita, L.DA_VERIFICARE);
+  // anche la cifra del numero illeggibile («E»): basta la complessiva, ma il numero della MRZ deve differire di un solo carattere
+  const senzaCifra = [consumata[0].slice(0, 14) + 'E' + consumata[0].slice(15), consumata[1], consumata[2]];
+  const m2 = L.leggiMrz(senzaCifra, OGGI);
+  const v2 = m2.verificaNumero('CA12345XL');
+  assert.deepEqual([v2.conferme, v2.cifraLetta, v2.distanza], [1, false, 1]);
+  const con2 = L.combinaLetture([{ mrz: m2, stampato: null }, { mrz: null, stampato: L.leggiTestoStampato(['CA12345X1'], OPZ) }], resp);
+  assert.deepEqual([con2.campi.numeroDocumento.valore, con2.campi.numeroDocumento.affidabilita], ['CA12345XL', L.SICURO]);
+  // riga di nascita e scadenza letta male: sesso e tipo restano da controllare
+  const rotta = [r[0], r[1].slice(0, 6) + (r[1][6] === '0' ? '1' : '0') + r[1].slice(7), r[2]];
+  const m3 = L.leggiMrz(rotta, OGGI);
+  assert.equal(m3.controlli.nascita, false);
+  if (m3.campi.genere) assert.equal(m3.campi.genere.affidabilita, L.DA_VERIFICARE);
+  const t3 = L.combinaLetture([{ mrz: m3, stampato: null }], resp).campi.tipoDocumento;
+  assert.equal(t3.affidabilita, L.DA_VERIFICARE);
 });
 
 test('elenco dei comuni: comuni di oggi, vecchi nomi e soppressi; province del modulo (con SU); licenza e generatore', () => {

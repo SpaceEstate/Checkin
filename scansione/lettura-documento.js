@@ -563,7 +563,11 @@ export function leggiMrz(righe, oggi, fusione) {
     // cifra di controllo, da sola, torna anche cambiando un carattere giusto che compensa quello sbagliato, e quella
     // complessiva non aiuta (contiene il numero con gli stessi pesi)
     const incerte = fusione && fusione.incerte ? new Set(fusione.incerte.filter(x => x[0] === rng.line && x[1] >= rng.start && x[1] < rng.end).map(x => x[1] - rng.start)) : null;
+    // CIE italiana (TD1, «C», ITA): la correzione deve restare nel formato del numero della CIE (06/11/2026: cambiando due
+    // caratteri si trovava anche un numero con una lettera tra le cifre che faceva tornare entrambe le cifre di controllo)
+    const cieItaliana = r.format === 'TD1' && /^C/.test(out.codiceDocumento) && grezzo('issuingState').replace(/</g, '') === 'ITA';
     const corretto = correggiNumeroDocumento(numeroGrezzo, cifraNumero, s => {
+      if (cieItaliana && !RE_FORMATO_CIE.test(s)) return false;
       const prova = righe.slice();
       prova[rng.line] = prova[rng.line].slice(0, rng.start) + s + prova[rng.line].slice(rng.end);
       try { const x = parseMrzLibreria(prova, { autocorrect: true }); const c = x.details.find(d => d.field === 'compositeCheckDigit'); return !c || c.valid; } catch { return false; }
@@ -584,8 +588,11 @@ export function leggiMrz(righe, oggi, fusione) {
   if (f.expirationDate && /^\d{6}$/.test(f.expirationDate) && ok('expirationDate') && ok('expirationDateCheckDigit')) {
     out.scadenza = dataDocumentoDaAnnoBreve(f.expirationDate.slice(0, 2), f.expirationDate.slice(2, 4), f.expirationDate.slice(4, 6), oggi);
   }
-  // sesso: nessuna cifra di controllo
-  if (f.sex === 'male' || f.sex === 'female') out.campi.genere = { valore: f.sex === 'male' ? 'M' : 'F', affidabilita: DA_VERIFICARE, fonte: 'mrz' };
+  // sesso: nessuna cifra di controllo, ma sta tra la data di nascita e la scadenza, sulla stessa riga: se le loro cifre di controllo
+  // tornano la riga è letta bene e il sesso (M o F, lettere che nella MRZ non si confondono) è sicuro (06/11/2026, il titolare:
+  // «sesso giallo» anche quando giusto); se no resta da controllare, a meno che lo confermi il testo stampato
+  const rigaBuona = ok('birthDateCheckDigit') && ok('expirationDateCheckDigit');
+  if (f.sex === 'male' || f.sex === 'female') out.campi.genere = { valore: f.sex === 'male' ? 'M' : 'F', affidabilita: rigaBuona ? SICURO : DA_VERIFICARE, fonte: 'mrz' };
 
   // nomi: struttura COGNOME<<NOMI; nessuna cifra di controllo
   const campoNomi = { TD3: (righe[0] || '').slice(5), TD2: (righe[0] || '').slice(5), TD1: righe[2] || '' }[r.format];
@@ -616,6 +623,41 @@ export function leggiMrz(righe, oggi, fusione) {
   const verificate = ['documentNumberCheckDigit', 'birthDateCheckDigit', 'expirationDateCheckDigit'].filter(ok).length;
   out.valida = verificate === 3 && out.controlli.complessiva !== false;
   out.verificate = verificate;
+  out.controlli.numero = ok('documentNumberCheckDigit');
+  out.controlli.nascita = ok('birthDateCheckDigit');
+  out.controlli.scadenza = ok('expirationDateCheckDigit');
+
+  // Un numero letto altrove (il fronte della CIE) si verifica con la MRZ, quando il numero nella MRZ è consumato o letto male: deve
+  // essere quasi uguale a quello letto nella MRZ (al più 2 caratteri diversi: sono due letture indipendenti) e, messo al suo posto,
+  // far tornare la cifra di controllo del numero (se si legge) e la complessiva (se nascita e scadenza tornano, altrimenti non dice
+  // niente). Restituisce { distanza, conferme, cifraLetta } o null. Usata da combinaLetture.
+  const rngN = det.documentNumber, rngC = det.documentNumberCheckDigit;
+  if (rngN && rngC && rngN.line != null && rngC.line === rngN.line && righe[rngN.line] && rngN.end - rngN.start === 9) {
+    const grezzoN = grezzo('documentNumber'), cifraGrezza = grezzo('documentNumberCheckDigit');
+    const cifraLetta = /^[0-9]$/.test(cifraGrezza);
+    const conComplessiva = !!(det.compositeCheckDigit && out.controlli.nascita && out.controlli.scadenza);
+    out.verificaNumero = candidato => {
+      const n = String(candidato || '').toUpperCase();
+      if (n.length !== 9 || !/^[A-Z0-9]+$/.test(n)) return null;
+      let distanza = 0;
+      for (let i = 0; i < 9; i++) if (n[i] !== grezzoN[i]) distanza++;
+      if (distanza > 2) return null;
+      let riga = righe[rngN.line];
+      riga = riga.slice(0, rngN.start) + n + riga.slice(rngN.end);
+      if (!cifraLetta) riga = riga.slice(0, rngC.start) + cifraControllo(n) + riga.slice(rngC.end);   // cifra illeggibile: la calcola
+      const prova = righe.slice();
+      prova[rngN.line] = riga;
+      let x;
+      try { x = parseMrzLibreria(prova, { autocorrect: true }); } catch { return null; }
+      const d = {};
+      for (const e of x.details) if (e.field) d[e.field] = e;
+      const cifraOk = cifraLetta && !!(d.documentNumberCheckDigit && d.documentNumberCheckDigit.valid);
+      const complessivaOk = conComplessiva ? !!(d.compositeCheckDigit && d.compositeCheckDigit.valid) : null;
+      if ((cifraLetta && !cifraOk) || complessivaOk === false) return null;
+      const conferme = (cifraOk ? 1 : 0) + (complessivaOk ? 1 : 0);
+      return conferme ? { distanza, conferme, cifraLetta } : null;
+    };
+  }
   return out;
 }
 
@@ -733,6 +775,35 @@ export function leggiLuogo(testo, { province, stati }) {
 }
 
 const RE_NUMERO_CIE = /\b(C[A-Z])\s?(\d{5})\s?([A-Z]{2})\b/;
+const RE_FORMATO_CIE = /^C[A-Z]\d{5}[A-Z]{2}$/;
+// Numero della CIE sul fronte con qualche carattere confuso dall'OCR (una lettera letta 1, una cifra letta O…): le letture possibili
+// nel formato della CIE (C, una lettera, 5 cifre, 2 lettere), al più due caratteri cambiati (AMBIGUI). Non si usano da sole: vale
+// solo quella che la MRZ del retro conferma (combinaLetture → verificaNumero). 06/11/2026: sulle foto vere ridotte l'OCR leggeva
+// il numero con un solo carattere sbagliato e il numero restava vuoto.
+export function numeriCieIncerti(righe) {
+  const out = new Set();
+  const lettera = c => /[A-Z]/.test(c), cifra = c => /[0-9]/.test(c);
+  for (const riga of righe || []) {
+    const t = senzaAccenti(String(riga || '')).toUpperCase().replace(/\s+/g, '');
+    for (let i = 0; i + 9 <= t.length; i++) {
+      if (t[i] !== 'C') continue;
+      const w = t.slice(i, i + 9), opzioni = [['C']];
+      let cambiati = 0;
+      for (let k = 1; k < 9; k++) {
+        const c = w[k], vuole = k === 1 || k >= 7 ? lettera : cifra;
+        if (vuole(c)) { opzioni.push([c]); continue; }
+        const alt = (AMBIGUI[c] || []).filter(vuole);
+        if (!alt.length) { cambiati = 99; break; }
+        opzioni.push(alt); cambiati++;
+      }
+      if (cambiati > 2) continue;
+      let comb = [''];
+      for (const o of opzioni) comb = comb.flatMap(x => o.map(y => x + y));
+      for (const n of comb) out.add(n);
+    }
+  }
+  return [...out].slice(0, 24);
+}
 const RE_NUMERO_CARTA_CARTACEA = /\b([A-Z]{2})\s?(\d{7})\b/;
 
 // Lettura del testo stampato. `righe`: righe lette dall'OCR, nell'ordine. Restituisce i valori trovati e gli indizi sul tipo.
@@ -819,6 +890,8 @@ export function leggiTestoStampato(righe, opzioni) {
     // numero del documento (solo i formati riconoscibili: CIE «CA00000AA», carta cartacea «AX 1234567»)
     const cie = RE_NUMERO_CIE.exec(tutto);
     if (cie) { v.numero = cie[1] + cie[2] + cie[3]; indizi.numeroCie = true; }
+    const incerti = numeriCieIncerti(U).filter(n => n !== v.numero && !codiceFiscaleValido(n));
+    if (incerti.length) v.numeriCie = incerti;
     else if (indizi.carta && indizi.italia && !indizi.passaporto) { const cc = RE_NUMERO_CARTA_CARTACEA.exec(tutto); if (cc) v.numero = cc[1] + cc[2]; }
   }
   if (v.cognome && !nomeCredibile(v.cognome)) delete v.cognome;
@@ -893,6 +966,7 @@ export function combinaLetture(letture, opzioni) {
     if (!mrz && s.credibile === false) continue;       // testo senza segni di documento e senza MRZ: non si usa
     for (const [k, val] of Object.entries(s.indizi || {})) st.indizi[k] = st.indizi[k] || val;
     for (const k of ['cognome', 'nome', 'nascita', 'nascitaIncerta', 'luogo', 'sesso', 'cittadinanza', 'numero', 'scadenza', 'rilascio', 'codiceFiscale']) if (st[k] == null && s[k] != null) st[k] = s[k];
+    if (s.numeriCie) st.numeriCie = (st.numeriCie || []).concat(s.numeriCie);
   }
   const campi = {}, avvisi = [];
   const avviso = (codice, campo) => { if (!avvisi.some(a => a.codice === codice && a.campo === campo)) avvisi.push(campo ? { codice, campo } : { codice }); };
@@ -966,17 +1040,39 @@ export function combinaLetture(letture, opzioni) {
   // dati del documento: solo per il responsabile (il modulo non li chiede agli altri ospiti)
   const tipo = classificaDocumento(mrz, st);
   if (o.responsabile) {
-    // CIE con la MRZ valida (tutte le cifre di controllo) e il numero nel formato della CIE: il tipo è certo (verde; il titolare,
-    // 06/11/2026: «giusta ma in giallo»). Gli altri tipi riconosciuti restano da controllare (arancione).
-    const numeroMrz = (mrz && mrz.campi.numeroDocumento && mrz.campi.numeroDocumento.valore) || '';
-    const cieCerta = !!(tipo && tipo.tipo === 'cie' && mrz && mrz.valida && /^C[A-Z]\d{5}[A-Z]{2}$/.test(numeroMrz));
-    if (tipo && tipo.voce && tipo.modo === 'proposto' && mrz && mrz.valida) campi.tipoDocumento = { valore: tipo.voce, affidabilita: cieCerta ? SICURO : DA_VERIFICARE, fonte: 'mrz' };
+    // Numero del documento: dalla MRZ (cifra di controllo). Se nella MRZ non torna (consumato, letto male), dal fronte della CIE:
+    // verde se la MRZ lo conferma (verificaNumero), arancione se si legge solo sul fronte. Le letture alternative del fronte
+    // (numeriCieIncerti) valgono solo confermate: con due conferme (cifra del numero e complessiva), o con la sola complessiva se la
+    // cifra del numero nella MRZ non si legge e il numero della MRZ differisce di un solo carattere. Tra più numeri confermati vale
+    // quello più vicino al numero della MRZ, se è uno solo (06/11/2026: numero vuoto nella prova del titolare).
+    const confermati = [];
+    if (mrz && mrz.verificaNumero) {
+      const prova = (n, esatto) => {
+        if (!n || confermati.some(c => c.n === n)) return;
+        const r = mrz.verificaNumero(n);
+        if (r && (esatto || r.conferme >= 2 || (!r.cifraLetta && r.distanza <= 1))) confermati.push({ n, distanza: r.distanza, conferme: r.conferme });
+      };
+      prova(st.numero, true);
+      for (const n of st.numeriCie || []) prova(n, false);
+      confermati.sort((a, b) => a.distanza - b.distanza || b.conferme - a.conferme);
+    }
+    const [c0, c1] = confermati;
+    const confermato = c0 && (!c1 || c0.distanza < c1.distanza || c0.conferme > c1.conferme) ? c0.n : null;
+    // un numero «corretto» dalla sola MRZ (caratteri cambiati finché le cifre di controllo tornano) è un'ipotesi: se il fronte ne dà
+    // uno confermato dalla MRZ, vale quello
+    const dallaMrz = mrz && mrz.campi.numeroDocumento, ipotesi = !!(dallaMrz && dallaMrz.nota === 'corretto');
+    if (dallaMrz && !(ipotesi && confermato && confermato !== dallaMrz.valore)) {
+      campi.numeroDocumento = Object.assign({}, dallaMrz);
+      if ((st.numero && st.numero === campi.numeroDocumento.valore) || confermato === campi.numeroDocumento.valore) campi.numeroDocumento.affidabilita = SICURO;
+    } else if (confermato) campi.numeroDocumento = { valore: confermato, affidabilita: SICURO, fonte: 'stampato+mrz' };
+    else if (st.numero) campi.numeroDocumento = { valore: st.numero, affidabilita: DA_VERIFICARE, fonte: 'stampato' };
+    // Tipo: la CIE è certa (verde) se la MRZ è quella di una CIE (TD1, ITA, «C») e la riga di nascita e scadenza è letta bene (cifre
+    // di controllo esatte): il tipo non dipende dal numero. 06/11/2026, il titolare: «giusta ma in giallo». Gli altri tipi
+    // riconosciuti restano da controllare (arancione).
+    const cieCerta = !!(tipo && tipo.tipo === 'cie' && mrz && mrz.controlli && mrz.controlli.nascita && mrz.controlli.scadenza);
+    if (tipo && tipo.voce && (cieCerta || (tipo.modo === 'proposto' && mrz && mrz.valida))) campi.tipoDocumento = { valore: tipo.voce, affidabilita: cieCerta ? SICURO : DA_VERIFICARE, fonte: 'mrz' };
     else if (tipo && tipo.voce) campi.tipoDocumento = { valore: null, suggerimento: tipo.voce, affidabilita: DA_VERIFICARE, fonte: mrz ? 'mrz' : 'stampato' };
     else avviso('tipo_da_scegliere', 'tipoDocumento');
-    if (mrz && mrz.campi.numeroDocumento) {
-      campi.numeroDocumento = Object.assign({}, mrz.campi.numeroDocumento);
-      if (st.numero && st.numero === campi.numeroDocumento.valore) campi.numeroDocumento.affidabilita = SICURO;
-    } else if (st.numero) campi.numeroDocumento = { valore: st.numero, affidabilita: DA_VERIFICARE, fonte: 'stampato' };
     if (mrz && mrz.campi.luogoRilascio) campi.luogoRilascio = Object.assign({}, mrz.campi.luogoRilascio);
     else if (!mrz && st.indizi.italia && (st.indizi.patente || st.indizi.carta)) campi.luogoRilascio = { valore: 'Italia', affidabilita: DA_VERIFICARE, fonte: 'stampato' };
   }

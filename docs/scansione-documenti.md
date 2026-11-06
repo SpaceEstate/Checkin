@@ -11,10 +11,11 @@ In cima al passo di ogni ospite ci sono le foto del documento (fronte e retro): 
 riquadro del documento, ovunque **«🖼️ Carica una foto»**. Il browser legge la MRZ (le righe `<<<`) e il testo stampato e compila i campi del
 modulo, che restano sempre lì da scrivere a mano se la lettura non riesce (nessuna scelta «a mano / scansione», nessuna spiegazione: richiesta
 del titolare, 06/11/2026). Sopra i lati c'è solo il titolo «📄 Documento di identità»; a lettura riuscita nessun messaggio (restano errori,
-avvisi, valori diversi da quelli già scritti e «↩︎ Annulla»). I campi letti sono evidenziati: **verde** = verificato (MRZ con le cifre di
-controllo; CIE con la MRZ valida per il tipo; comune letto esatto e confermato dall'elenco dei comuni con la provincia letta, con provincia
-e Stato di nascita), **arancione** = da controllare. Tutto avviene **sul dispositivo dell'ospite**: nessuna API, nessun servizio esterno,
-nessun costo.
+avvisi, valori diversi da quelli già scritti e «↩︎ Annulla»). I campi letti sono evidenziati: **verde** = verificato, **arancione** = da
+controllare. Verde: dati della MRZ con le cifre di controllo; sesso della MRZ quando le cifre di nascita e scadenza, sulla stessa riga,
+tornano; tipo «CARTA IDENTITA' ELETTRONICA» quando la MRZ è quella di una CIE con nascita e scadenza esatte; numero letto sul fronte e
+confermato dalla MRZ; comune letto esatto e confermato dall'elenco dei comuni con la provincia letta, con provincia e Stato di nascita.
+Tutto avviene **sul dispositivo dell'ospite**: nessuna API, nessun servizio esterno, nessun costo.
 
 - **Ospiti diversi dal responsabile**: la foto serve solo a leggere i dati. Non viene inviata, salvata, copiata né mostrata in anteprima.
 - **Responsabile**: la foto continua a essere caricata nei riquadri «Documento di identità» e inviata al gestore come prima. Con la
@@ -98,7 +99,7 @@ si compila anch'esso, con il bordo arancione «da controllare» (prima era una d
 
 | Documento | Come si legge | Tipo proposto (solo responsabile) |
 |---|---|---|
-| CIE italiana | Retro: MRZ (TD1) con cifre di controllo. Fronte: testo stampato (luogo e data di nascita «ROMA (RM) 19.04.1980», numero «CA…») | «CARTA IDENTITA' ELETTRONICA», compilato (MRZ italiana TD1 e numero nel formato CIE; con il numero della MRZ illeggibile, se lo conferma il fronte) |
+| CIE italiana | Retro: MRZ (TD1) con cifre di controllo. Fronte: testo stampato (luogo e data di nascita «ROMA (RM) 19.04.1980», numero «CA…»). Numero: se nella MRZ non torna (carattere consumato, foto piccola) vale quello del fronte, anche letto con un carattere confuso (1/I/L, 0/O…), purché la MRZ lo confermi: quasi uguale al suo e con la cifra di controllo, la complessiva o entrambe che tornano. Le correzioni della sola MRZ restano nel formato della CIE e cedono al numero del fronte confermato | «CARTA IDENTITA' ELETTRONICA», compilato; verde se nascita e scadenza della MRZ tornano (con il numero della MRZ illeggibile, se lo conferma il fronte) |
 | Carta d'identità cartacea italiana | Solo testo stampato (cognome, nome, «nato il», «a COMUNE (PR)», cittadinanza, numero «AX 1234567») | «CARTA DI IDENTITA'» solo suggerito |
 | Carte d'identità straniere | MRZ TD1/TD2 (e carta francese) | «CARTA DI IDENTITA'» solo suggerito |
 | Passaporti | MRZ TD3 | `P<`: «PASSAPORTO ORDINARIO» suggerito; `PD`: diplomatico suggerito; `PS`/`PO`: di servizio suggerito; altri codici (documenti di viaggio, emergenza, rifugiati): nessun tipo, sceglie l'ospite |
