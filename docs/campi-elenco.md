@@ -64,6 +64,15 @@ tipo e numero):
   06/11/2026) il fotogramma ritagliato a 1600 px sotto 1 MB.
 - Altri ospiti: lo scatto (una tela in memoria) va solo alla lettura e si azzera subito; nessun file, nessun invio.
 - Se il browser non dà la fotocamera (permesso negato, browser vecchio) compare un messaggio e si usa «Carica una foto».
+- Tasto **«indietro»** del telefono (07/11/2026, prova con Android simulato): con la fotocamera aperta chiude solo la fotocamera, che si
+  spegne; il check-in resta com'era, con i dati scritti e le foto già fatte. Prima faceva uscire dal check-in e i dati scritti si
+  perdevano. Come: al tocco su «Fotografa» si aggiunge una voce alla cronologia della pagina (stesso indirizzo, nessun dato) e «indietro»
+  toglie quella. Dopo lo scatto del fronte la voce resta alla fotocamera del retro, che si apre da sola; chiusa la fotocamera con la ✕, o
+  dopo l'ultimo scatto, la voce si toglie, quindi un altro «indietro» porta alla pagina di prima, come sempre. Ogni voce nasce da un tocco
+  dell'ospite: Chrome può saltare con «indietro» le pagine che aggiungono voci senza un tocco. Dopo l'ultimo scatto la voce si toglie un
+  secondo più tardi: se intanto l'ospite ha fatto scorrere la pagina, la pagina resta lì (finché c'è la voce della fotocamera il browser
+  non rimette lo scorrimento che la pagina aveva all'apertura: `history.scrollRestoration` «manual», poi di nuovo com'era). Vale anche per
+  lo scorrimento indietro di Safari sull'iPhone.
 - Su un **computer** il pulsante della fotocamera non c'è: si carica un file.
 
 ## La ✕ dei file caricati (`togliFileDocumento` in `checkin.js`)
@@ -89,4 +98,8 @@ di Chromium: riquadro, scatto nel riquadro del responsabile sotto 1 MB, fotocame
 limiti del browser, zona dello scatto vero, nitidezza dei fotogrammi (`tests/scansione.test.mjs`); foto piccola (CIE sintetica a 520 px)
 letta per intero, con i dati confermati in verde e solo il titolo sopra i lati (`tests/browser/scansione.browser.cjs`). La ✕ dei file
 caricati: markup (una per riquadro, nome tradotto), CSS e `togliFileDocumento` in `tests/scansione.test.mjs`; nel browser, con la
-scansione spenta, si vede solo con un file, piccola in alto a destra, toglie il file anche da tastiera e senza il file «Avanti» si ferma.
+scansione spenta, si vede solo con un file, piccola in alto a destra, toglie il file anche da tastiera e senza il file «Avanti» si ferma. Il tasto «indietro»
+(dal 07/11/2026, nel browser con il profilo Android «Pixel 7» di Playwright): chiude solo la fotocamera, che si spegne, con i dati scritti
+e la foto del fronte al loro posto, anche con la fotocamera del retro aperta dopo lo scatto; una sola voce nella cronologia per fronte e
+retro; dopo la ✕ e dopo l'ultimo scatto nessuna voce in più, la pagina fatta scorrere dopo l'ultimo scatto resta lì, e un altro
+«indietro» porta alla pagina di prima.

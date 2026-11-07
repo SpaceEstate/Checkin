@@ -33,6 +33,40 @@
   const conLimite = (promessa, ms) => Promise.race([promessa, new Promise((_, no) => setTimeout(() => no(new Error('tempo')), ms))]);
 
   let aperta = null;
+  // Tasto «indietro» (07/11/2026, prova su Android: con la fotocamera aperta faceva uscire dal check-in e i dati scritti si perdevano).
+  // Aprendo la fotocamera si aggiunge una voce alla cronologia della pagina, con lo stesso indirizzo: «indietro» toglie quella voce e
+  // chiude solo la fotocamera. Chiusa con la ✕ o per un errore, la voce si toglie da qui. Dopo uno scatto la voce resta alla fotocamera
+  // che si apre subito dopo (il retro dopo il fronte) e si toglie se non se ne apre un'altra: così ogni voce nasce dal tocco su
+  // «Fotografa» (Chrome può saltare con «indietro» le pagine che aggiungono voci senza un tocco). Vale anche per lo scorrimento
+  // indietro di Safari sull'iPhone.
+  // Tornando alla voce del check-in il browser rimetterebbe lo scorrimento che la pagina aveva all'apertura della fotocamera: dopo
+  // l'ultimo scatto, se l'ospite l'ha già fatta scorrere, la pagina salterebbe. Finché c'è la voce della fotocamera lo scorrimento non si
+  // rimette (scrollRestoration «manual»); tornati al check-in si rimette il modo di prima.
+  let voceStoria = false;                 // la voce attuale della cronologia è quella della fotocamera
+  let modoScorrimento = null;             // history.scrollRestoration del check-in prima della voce
+  window.addEventListener('popstate', () => {
+    voceStoria = !!(history.state && history.state.fotocameraDocumento);
+    if (!voceStoria && modoScorrimento) setTimeout(rimettiModo, 0);        // dopo che il browser ha deciso lo scorrimento
+    const stato = aperta;
+    if (!voceStoria && stato) { chiudi({ cronologia: false }); if (stato.o.onChiusa) stato.o.onChiusa(); }
+  });
+  function aggiungiVoce() {
+    try {
+      if ('scrollRestoration' in history && !modoScorrimento) { modoScorrimento = history.scrollRestoration; history.scrollRestoration = 'manual'; }
+      history.pushState({ fotocameraDocumento: true }, '');      // la voce nuova ha il modo della voce del check-in
+      voceStoria = true;
+    } catch (e) { rimettiModo(); }
+  }
+  function rimettiModo() {
+    if (voceStoria || !modoScorrimento) return;
+    try { history.scrollRestoration = modoScorrimento; } catch (e) { /* resta com'è */ }
+    modoScorrimento = null;
+  }
+  function togliVoce() {
+    if (!voceStoria) return;
+    voceStoria = false;
+    try { history.back(); } catch (e) { /* senza cronologia */ }
+  }
 
   function disponibile() {
     return mobile() && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) && window.isSecureContext !== false;
@@ -41,7 +75,8 @@
   // Apre la fotocamera. opzioni: { titolo, onFoto(tela) (la tela va azzerata da chi la riceve), onChiusa(), onErrore(err) }
   async function apri(opzioni) {
     const o = opzioni || {};
-    if (aperta) chiudi();
+    if (aperta) chiudi({ cronologia: false });          // un'altra fotocamera al posto di questa: stessa voce della cronologia
+    if (!voceStoria) aggiungiVoce();
     const vista = document.createElement('div');
     vista.className = 'fotocamera';
     vista.setAttribute('role', 'dialog');
@@ -229,19 +264,27 @@
     } catch (e) { /* si usa quello che c'è */ }
     if (aperta !== stato) { if (tela) { tela.width = 0; tela.height = 0; } return; }      // chiusa nel frattempo
     const o = stato.o;
-    chiudi();
-    if (tela && o.onFoto) o.onFoto(tela);
+    chiudi({ cronologia: false });              // la voce resta alla fotocamera che può seguire (il retro dopo il fronte)
+    let fatto = null;
+    if (tela && o.onFoto) fatto = o.onFoto(tela);
     else if (!tela && o.onErrore) o.onErrore(new Error('scatto'));
+    // chi riceve la foto apre l'eventuale fotocamera seguente mentre la elabora (checkin.js: mezzo secondo dopo il file pronto); se un
+    // secondo dopo la fine non se n'è aperta un'altra, la voce si toglie (chi elabora a lungo, come la lettura, si aspetta al più 5 s)
+    Promise.race([Promise.resolve(fatto).catch(() => null), attendi(5000)])
+      .then(() => setTimeout(() => { if (!aperta) togliVoce(); }, 1000));
   }
 
   function ferma(stato) {
     if (stato && stato.stream) { stato.stream.getTracks().forEach(tr => tr.stop()); stato.stream = null; }
   }
 
-  function chiudi() {
+  // { cronologia: false }: la voce della cronologia non si tocca (un'altra fotocamera al posto di questa, scatto, «indietro» che l'ha già
+  // tolta, pagina che si chiude); senza, la si toglie (✕, Esc, errore)
+  function chiudi(opz) {
     const stato = aperta;
     if (!stato) return;
     aperta = null;
+    if (!(opz && opz.cronologia === false)) togliVoce();
     ferma(stato);
     if (stato.togliEsc) stato.togliEsc();
     try { stato.video.srcObject = null; } catch (e) { /* già chiuso */ }
@@ -264,5 +307,5 @@
 
   // _zoom, _mappa e _nitidezza: funzioni pure, esposte per le prove (tests/scansione.test.mjs)
   window.FotocameraDocumento = { disponibile, apri, chiudi, inFile, RAPPORTO, _zoom: valoreZoom, _mappa: mappaRegione, _nitidezza: nitidezza };
-  window.addEventListener('pagehide', chiudi);
+  window.addEventListener('pagehide', () => chiudi({ cronologia: false }));
 })();

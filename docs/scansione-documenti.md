@@ -243,6 +243,13 @@ Le prove automatiche usano Chromium. Prima di passare ad `'attiva'` vanno fatte 
 4. Connessione lenta (4G debole): il primo download (~4,5 MB) e i tempi; «Interrompi» deve fermare tutto.
 5. Una foto mossa e una con riflessi: messaggio chiaro, si prosegue a mano.
 
+Android simulato (07/11/2026, con la scansione già attiva): Chromium con i profili Pixel 7, Galaxy A55 e Galaxy S9+ di Playwright (schermo,
+tocco e user agent di Android) e la fotocamera finta. Fotocamera con il riquadro, scatto nel riquadro e ✕, CIE del responsabile (tutti gli
+11 campi), passaporto in foto e in PDF di un altro ospite, tastiera di Android sui campi con elenco (parole in composizione), nessuno
+scorrimento orizzontale, nessun errore della pagina. Trovato e corretto: il tasto «indietro» con la fotocamera aperta faceva uscire dal
+check-in e i dati scritti si perdevano (vedi [campi-elenco.md](campi-elenco.md)). Restano da provare su un telefono vero: la fotocamera
+vera (messa a fuoco, luce, qualità dello scatto), la velocità vera, la scelta dei file di Android (Galleria, Google Foto, File) e le foto HEIC.
+
 ## Limiti del riconoscimento
 
 - Affidabile soprattutto sulla MRZ (cifre di controllo). Il testo stampato (fronte della CIE, patente, carta cartacea) dipende molto da luce,
@@ -265,7 +272,10 @@ Le prove automatiche usano Chromium. Prima di passare ad `'attiva'` vanno fatte 
   perdere qualche campo, come una foto sfocata.
 - Tempi: su un computer recente 1–4 secondi per foto (meno di un secondo per una foto che non è un documento). **Su un telefono datato non sono stati
   misurati**: il rallentamento della CPU simulato nelle prove vale per la pagina, non per il worker dell'OCR, quindi non dice quanto ci vorrà.
-  Vanno misurati con le prove sui telefoni veri. Tempo massimo per foto 45 s, per la preparazione 60 s: oltre, messaggio e si continua a mano.
+  Una stima (07/11/2026, Android simulato con tutto il browser, worker compreso, limitato a metà e a un quinto di un processore del
+  computer): CIE fronte e retro in 5,8 e 16,7 secondi, passaporto in 6,7 e 19,3 secondi, PDF del passaporto in 6,8 e 19,8 secondi, sempre
+  con i valori giusti. I tempi veri vanno misurati sui telefoni. Tempo massimo per foto 45 s, per la preparazione 60 s: oltre, messaggio e
+  si continua a mano.
   Il motore senza SIMD (iPhone e Android datati) è provato: legge correttamente, con un altro file del motore.
 - Il modulo ha 192 Stati: chi ha una cittadinanza non in elenco (Kosovo, Palestina, Taiwan, apolidi…) non può sceglierla nemmeno a mano (limite esistente).
 - Documenti italiani: il modulo raccoglie solo lo Stato di rilascio (avviso esistente `RILASCIO_ITALIA` in `api/_checkin-alloggiati.js`).

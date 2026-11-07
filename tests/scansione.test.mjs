@@ -889,7 +889,8 @@ test('fotocamera con il riquadro e campi con elenco: nessuna archiviazione, ness
   }
   const foto = senzaCommenti(read('fotocamera.js'));
   assert.match(foto, /getTracks\(\)\.forEach\(tr => tr\.stop\(\)\)/, 'la fotocamera si spegne alla chiusura');
-  assert.match(foto, /window\.addEventListener\('pagehide', chiudi\)/);
+  assert.match(foto, /window\.addEventListener\('pagehide', \(\) => chiudi\(\{ cronologia: false \}\)\)/, 'si chiude anche uscendo dalla pagina, senza toccare la cronologia');
+  assert.match(foto, /window\.addEventListener\('popstate', /, '«indietro» chiude la fotocamera (prova nel browser: «telefono Android»)');
   assert.match(senzaCommenti(read('campi-elenco.js')), /s\.src = 'elenchi\/comuni\.js\?v=' \+ VERSIONE_ELENCHI;/, 'l\'elenco dei comuni dallo stesso sito');
   // pagina e build: i due file si caricano dopo checkin.js e si copiano in public/ (Vercel); l'elenco dei comuni a ogni build
   const html = read('index.html');

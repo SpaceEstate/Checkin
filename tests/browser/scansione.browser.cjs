@@ -7,7 +7,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { chromium } = require('playwright');
+const { chromium, devices } = require('playwright');
 const { avvia, API } = require('./server-prova.cjs');
 const { pdfDaJpeg, pdfUnaFotoPerPagina, pdfA4FronteRetro, dimensioniJpeg } = require('./pdf-di-prova.cjs');
 
@@ -27,9 +27,10 @@ test.after(async () => {
 });
 
 // Apre il check-in con la scansione nello stato voluto; registra richieste, console ed errori della pagina.
-async function apri({ scansione = 'attiva', hash = '', mobile = false, initScript = null, fotocamera = false } = {}) {
+// dispositivo: un profilo di Playwright (per esempio 'Pixel 7', telefono Android); prima: pagina aperta prima del check-in (tasto «indietro»)
+async function apri({ scansione = 'attiva', hash = '', mobile = false, initScript = null, fotocamera = false, dispositivo = null, prima = null } = {}) {
   const srv = await avvia({ scansione });
-  const context = await browser.newContext(Object.assign(mobile ? { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1' } : { viewport: { width: 1280, height: 900 } },
+  const context = await browser.newContext(Object.assign({}, dispositivo ? devices[dispositivo] : mobile ? { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1' } : { viewport: { width: 1280, height: 900 } },
     fotocamera ? { permissions: ['camera'] } : {}));
   await context.addInitScript(() => {
     window.__prova = { blobCreati: 0, blobRevocati: 0 };
@@ -48,6 +49,7 @@ async function apri({ scansione = 'attiva', hash = '', mobile = false, initScrip
     const corpo = route.request().postData() ? JSON.parse(route.request().postData()) : {};
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(await srv.api(nome, corpo)) });
   });
+  if (prima) await page.goto(srv.url + prima);
   await page.goto(srv.url + (hash ? '#' + hash : ''));
   return { srv, context, page, rete, console: console_, errori, chiudi: async () => { await context.close(); await srv.chiudi(); } };
 }
@@ -828,6 +830,86 @@ test('responsabile: il riquadro del documento è in cima al passo; sul telefono 
     await senza.page.setInputFiles('#ospite1_documento_retro', CIE.retro);
     await avanti(senza.page, '#step-3');
   } finally { await senza.chiudi(); }
+});
+
+// 07/11/2026, prova su Android (profili dei telefoni di Playwright): il tasto «indietro» con la fotocamera aperta faceva uscire dal
+// check-in e i dati scritti si perdevano. Ora chiude solo la fotocamera; la voce aggiunta alla cronologia nasce dal tocco su «Fotografa»,
+// resta alla fotocamera del retro aperta dopo lo scatto del fronte e si toglie quando non ne segue un'altra.
+test('telefono Android: «indietro» con la fotocamera aperta chiude solo la fotocamera, dati e foto restano; dopo la ✕ e dopo l\'ultimo scatto la cronologia è quella di prima', async () => {
+  const registra = () => {                   // voci aggiunte alla cronologia e stream della fotocamera (per vedere che si spengono)
+    window.__voci = 0; window.__flussi = [];
+    const ps = history.pushState;
+    history.pushState = function () { window.__voci++; return ps.apply(this, arguments); };
+    if (!navigator.mediaDevices) return;
+    const g = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+    navigator.mediaDevices.getUserMedia = async c => { const s = await g(c); window.__flussi.push(s); return s; };
+  };
+  const x = await apri({ scansione: 'attiva', dispositivo: 'Pixel 7', fotocamera: true, prima: 'fonts.css', initScript: registra });
+  const page = x.page;
+  const fotocameraPronta = () => page.waitForFunction(() => { const v = document.querySelector('.fotocamera video'); return v && v.videoWidth > 0; }, null, { timeout: 15000 });
+  const fotoNelCampo = lato => page.waitForFunction(lato => { const f = document.getElementById('ospite1_documento_' + lato).files[0]; return f && /^documento_ospite_1_.+\.jpg$/.test(f.name); }, lato, { timeout: 15000 });
+  const situazione = () => page.evaluate(() => ({
+    checkin: !!document.querySelector('#step-2.active'), fotocamera: !!document.querySelector('.fotocamera'),
+    classe: document.documentElement.classList.contains('fotocamera-aperta'),
+    cognome: (document.querySelector('[name="ospite1_cognome"]') || {}).value || null, stato: history.state, scorrimento: history.scrollRestoration,
+    spenta: (window.__flussi || []).every(s => s.getTracks().every(t => t.readyState === 'ended')) }));
+  const comePrima = { checkin: true, fotocamera: false, classe: false, cognome: 'SCRITTO A MANO', stato: null, scorrimento: 'auto', spenta: true };
+  const tornato = async quando => {          // di nuovo sulla voce del check-in, fotocamera chiusa
+    try { await page.waitForFunction(() => !document.querySelector('.fotocamera') && history.state === null && history.scrollRestoration === 'auto', null, { timeout: 10000 }); }
+    catch (e) { assert.fail(quando + ': ' + JSON.stringify(await situazione().catch(err => err.message))); }
+  };
+  const indietro = async quando => {         // «indietro» del telefono; stessa pagina, quindi niente caricamento da attendere
+    await page.goBack({ timeout: 5000 }).catch(() => null);
+    await tornato(quando);
+  };
+  try {
+    assert.match(await page.evaluate(() => navigator.userAgent), /Android/);
+    await iniziaFlusso(page);
+    await scegliScansione(page, 1);
+    await page.fill('[name="ospite1_cognome"]', 'SCRITTO A MANO');
+    const voci = await page.evaluate(() => history.length);
+    // 1) «indietro» con la fotocamera aperta: si chiude (e si spegne) solo la fotocamera, il check-in resta con i dati scritti
+    await page.tap('#upload-side-1-fronte .camera-btn');
+    await fotocameraPronta();
+    assert.deepEqual(await page.evaluate(() => history.state), { fotocameraDocumento: true });
+    await indietro('«indietro» con la fotocamera aperta');
+    assert.deepEqual(await situazione(), comePrima, '«indietro» con la fotocamera aperta');
+    // 2) chiusa con la ✕: la voce aggiunta si toglie da sola
+    await page.tap('#upload-side-1-fronte .camera-btn');
+    await fotocameraPronta();
+    await page.tap('.fotocamera-chiudi');
+    await tornato('dopo la ✕');
+    assert.deepEqual(await situazione(), comePrima, 'dopo la ✕');
+    // 3) scatto del fronte: si apre subito la fotocamera del retro, con la stessa voce; «indietro» la chiude e la foto del fronte resta
+    const vociPrima = await page.evaluate(() => window.__voci);
+    await page.tap('#upload-side-1-fronte .camera-btn');
+    await fotocameraPronta();
+    await page.tap('.fotocamera-scatta');
+    await fotoNelCampo('fronte');
+    await fotocameraPronta();
+    assert.deepEqual(await page.evaluate(() => history.state), { fotocameraDocumento: true }, 'fotocamera del retro: la voce aperta dal tocco su «Fotografa»');
+    assert.equal(await page.evaluate(() => window.__voci), vociPrima + 1, 'una sola voce per fronte e retro: nessuna aggiunta senza un tocco');
+    await indietro('«indietro» con la fotocamera del retro aperta');
+    assert.deepEqual(await situazione(), comePrima, '«indietro» con la fotocamera del retro aperta');
+    assert.equal(await page.$eval('#ospite1_documento_fronte', e => e.files.length), 1, 'la foto del fronte resta nel riquadro');
+    // 4) scatto del retro, l'ultimo lato: non segue un'altra fotocamera e la voce si toglie da sola, un secondo dopo; se intanto l'ospite
+    //    ha fatto scorrere la pagina, la pagina resta lì (non torna dov'era all'apertura della fotocamera)
+    await page.tap('#upload-side-1-retro .camera-btn');
+    await fotocameraPronta();
+    await page.tap('.fotocamera-scatta');
+    await fotoNelCampo('retro');
+    const scorsa = await page.evaluate(() => { const prima = scrollY; scrollBy(0, 600); return { prima: Math.round(prima), dopo: Math.round(scrollY), voce: !!(history.state && history.state.fotocameraDocumento) }; });
+    assert.ok(scorsa.voce && scorsa.dopo > scorsa.prima + 100, 'pagina fatta scorrere prima che la voce si tolga: ' + JSON.stringify(scorsa));
+    await tornato('dopo l\'ultimo scatto');
+    assert.deepEqual(await situazione(), comePrima, 'dopo l\'ultimo scatto');
+    assert.equal(await page.evaluate(() => Math.round(scrollY)), scorsa.dopo, 'la pagina resta dove l\'ha portata l\'ospite');
+    assert.equal(await page.evaluate(() => history.length), voci + 1, 'nessuna voce che si accumula (resta solo quella «avanti»)');
+    await attendiFine(page, 1, [1, 2]);      // le immagini della fotocamera finta non sono documenti: la lettura finisce lo stesso
+    // 5) un altro «indietro» lascia il check-in, come sempre
+    await page.goBack({ timeout: 10000 });
+    assert.match(page.url(), /\/fonts\.css$/);
+    assert.deepEqual(x.errori, []);
+  } finally { await x.chiudi(); }
 });
 
 test('campi con elenco: si scrive o si sceglie, ma vale solo una voce dell\'elenco; il comune compila la provincia (anche con la scansione spenta)', async () => {
