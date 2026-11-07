@@ -924,7 +924,7 @@ export function leggiTestoStampato(righe, opzioni) {
   const riga3 = r => { const m = /(\d{1,2}\s?[\/.\-]\s?\d{1,2}\s?[\/.\-]\s?\d{2,4})\s+(.+)$/.exec(r); return m && !/^\s*4\s?[ABC]\b/.test(r) && leggiLuogo(m[2], o) ? m[1] + ' ' + m[2] : null; };
   // patente riconosciuta anche senza l'intestazione (06/11/2026, il PDF del titolare: la zona letta cominciava appena sotto «PATENTE DI
   // GUIDA» e i numeri dei campi, in blu, non si leggevano): almeno due segni dei campi del fronte, che gli altri documenti non hanno.
-  // Le etichette 4a/4b/4c, l'ufficio del campo 4c (MC-TN, MIT-UCO, DTT-…), il numero nella forma della patente italiana, la riga 3
+  // Le etichette 4a/4b/4c, l'ufficio del campo 4c (MC-RM, MIT-UCO, DTT-…), il numero nella forma della patente italiana, la riga 3
   if (!indizi.patente) {
     const segni = [U.some(r => /(?:^|\s)4\s?[ABC]\s?[.,]?(?=\s|$)/.test(r)), /\b(?:MC|MIT|DTT|UMC)\s?-\s?[A-Z]{2,3}\b/.test(tutto),
       U.some(r => { const m = /\b([A-Z]{2}\d{7}[A-Z])\b/.exec(r); return !!(m && !codiceFiscaleValido(m[1])); }), U.concat(ricomposte).some(r => !!riga3(r))];
