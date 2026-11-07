@@ -1,7 +1,8 @@
 # Scansione facoltativa dei documenti (lettura automatica dei dati)
 
-Funzione aggiunta il 05/11/2026 (branch `claude/scansione-documenti`). **Spenta di default**: con il flag spento la scansione non c'è
-(nessun pulsante, nessun file della scansione, nessuna richiesta in più; le prove lo verificano). Dal 06/11/2026, a richiesta del titolare,
+Funzione aggiunta il 05/11/2026 (branch `claude/scansione-documenti`), provata dal titolare nell'anteprima (computer e iPhone) e
+**attiva per tutti dal 07/11/2026**, su sua decisione. Con il flag spento la scansione non c'è (nessun pulsante, nessun file della
+scansione, nessuna richiesta in più; le prove lo verificano): è lo spegnimento d'emergenza, più sotto. Dal 06/11/2026, a richiesta del titolare,
 cambiano per tutti (anche con la scansione spenta) i campi con elenco, il comune con l'elenco dei comuni e la fotocamera del documento:
 vedi [campi-elenco.md](campi-elenco.md).
 
@@ -37,13 +38,13 @@ const SCANSIONE_DOCUMENTI = 'prova';   // 'spenta' | 'prova' | 'attiva'
 | Valore | Effetto |
 |---|---|
 | `'spenta'` | Il modulo è quello di prima. |
-| `'prova'` | La scansione compare solo aprendo il check-in con `#scansione=prova` in fondo all'indirizzo, per esempio `https://spaceestate.github.io/Checkin/#scansione=prova`. Gli ospiti non la vedono. Serve a provare sui telefoni veri. **È il valore attuale sul branch `claude/scansione-documenti`** (05/11/2026, per le prove del titolare nell'anteprima di Vercel). |
-| `'attiva'` | La scansione compare a tutti. |
+| `'prova'` | La scansione compare solo aprendo il check-in con `#scansione=prova` in fondo all'indirizzo, per esempio `https://spaceestate.github.io/Checkin/#scansione=prova`. Gli ospiti non la vedono. Serve a provare sui telefoni veri. È stato il valore sul branch `claude/scansione-documenti` dal 05/11 al 07/11/2026, per le prove del titolare nell'anteprima di Vercel. |
+| `'attiva'` | La scansione compare a tutti. **È il valore attuale** (07/11/2026, decisione del titolare). |
 
-**Diagnosi per le prove sul telefono:** con `#scansione=prova&diagnosi` in fondo all'indirizzo, sotto le foto compare per ogni lato
-una riga con dispositivo e browser, misure della foto, tempi, nitidezza, zone trovate, passaggi dell'OCR con la fiducia, controlli della
-MRZ e i **nomi** dei campi letti (mai i valori). Serve a capire cosa succede su un telefono che non si può provare in locale (06/11/2026:
-sull'iPhone del titolare il luogo di nascita restava vuoto, sul computer con le stesse foto no). Senza quella parola non cambia nulla.
+**Diagnosi per le prove sul telefono:** c'è stata dal 06 al 07/11/2026 (con `#scansione=prova&diagnosi` nell'indirizzo, sotto le foto
+misure, tempi, zone e i **nomi** dei campi letti, mai i valori) ed è stata tolta prima della pubblicazione, come promesso al titolare: anche
+con quella parola nell'indirizzo non compare nulla (prova nel browser «diagnosi tolta»). Per un caso difficile la si ricostruisce in
+locale, non nel sito.
 
 **Spegnimento d'emergenza (kill switch):** rimettere `'spenta'` (una riga) e aumentare `?v=` di `checkin.js` in `index.html`, copiando i due
 file in `public/`. Su GitHub Pages è online in un paio di minuti. Se i file della scansione non si scaricano (rete, file mancanti), il modulo mostra un

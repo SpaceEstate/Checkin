@@ -902,10 +902,13 @@ test('fotocamera con il riquadro e campi con elenco: nessuna archiviazione, ness
   assert.match(SRC_CHECKIN, /if \(typeof window\.potenziaCampiElenco === 'function'\) window\.potenziaCampiElenco\(stepDiv\);\n    if \(i === 1\) aggiornaObbligoRetro\(1\);\n    if \(scansioneDisponibile\(\)\) avviaScansione\(i\);/);
 });
 
-test('flag della scansione: «spenta» nel codice pubblicato; «prova» solo con #scansione=prova; «attiva» per tutti', () => {
-  // valore deciso dal titolare: 05/11/2026 'prova' sul branch delle prove (gli ospiti non vedono nulla senza #scansione=prova).
-  // 'attiva' solo con una sua decisione esplicita: cambiarlo qui va dichiarato nel messaggio di commit.
-  assert.match(SRC_CHECKIN, /\nconst SCANSIONE_DOCUMENTI = 'prova';/, 'valore del flag diverso da quello deciso dal titolare');
+test('flag della scansione: «attiva» nel codice pubblicato (decisione del titolare); «prova» solo con #scansione=prova; «spenta» vince sempre', () => {
+  // valore deciso dal titolare: 05/11/2026 'prova' sul branch delle prove (gli ospiti non vedevano nulla senza #scansione=prova);
+  // 07/11/2026 'attiva', dopo le sue prove («a me funziona… se non manca nulla procedi»). Cambiarlo va dichiarato nel messaggio di
+  // commit; per lo spegnimento d'emergenza basta 'spenta' (docs/scansione-documenti.md).
+  assert.match(SRC_CHECKIN, /\nconst SCANSIONE_DOCUMENTI = 'attiva';/, 'valore del flag diverso da quello deciso dal titolare');
+  // la diagnosi per le prove sul telefono (con «diagnosi» nell'indirizzo) è tolta prima della pubblicazione (07/11/2026)
+  assert.ok(!/diagnosi/i.test(SRC_CHECKIN + read('scansione/scansione-documento.js') + read('checkin.css')), 'diagnosi tolta');
   const FLAG = /const SCANSIONE_DOCUMENTI = '[a-z]+';/;
   const con = (valore, hash) => passiOspiti(ROOT, 2, { hash, sorgente: SRC_CHECKIN.replace(FLAG, "const SCANSIONE_DOCUMENTI = '" + valore + "';") });
   // 06/11/2026: niente scelta «a mano / scansione», il pannello è sempre aperto in cima al passo

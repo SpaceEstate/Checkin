@@ -725,7 +725,9 @@ test('foto piccola, come uno scatto a bassa risoluzione: si leggono anche luogo 
 });
 
 // 06/11/2026: per capire cosa succede sul telefono del titolare (Safari), che qui non si può provare
-test('diagnosi: solo con «diagnosi» nell\'indirizzo, sotto le foto misure, tempi, zone e nomi dei campi, mai i valori', async () => {
+// 07/11/2026: la diagnosi per le prove sul telefono (con «diagnosi» nell'indirizzo: misure, tempi, zone e nomi dei campi sotto le foto)
+// è tolta prima della pubblicazione, come promesso al titolare. Anche con quella parola nell'indirizzo sotto le foto non compare nulla
+test('diagnosi tolta: anche con «diagnosi» nell\'indirizzo nessuna riga sotto le foto; la lettura è quella di sempre', async () => {
   const x = await apri({ scansione: 'attiva', hash: 'diagnosi' });
   try {
     await iniziaFlusso(x.page);
@@ -733,22 +735,11 @@ test('diagnosi: solo con «diagnosi» nell\'indirizzo, sotto le foto misure, tem
     await x.page.setInputFiles('#ospite1_documento_fronte', CIE.fronte);
     await x.page.setInputFiles('#ospite1_documento_retro', CIE.retro);
     await attendiFine(x.page, 1, [1, 2]);
-    const d = await x.page.$eval('#scan-pannello-1 .scan-diagnosi', e => e.textContent);
-    assert.match(d, /Fronte: \d+×\d+ → \d+×\d+/);
-    assert.match(d, /Retro: .*MRZ: TD1 cifre 3\/3, complessiva sì/);
-    assert.match(d, /stampato: cognome nome nascita luogo/);
-    // nessun valore letto (quelli di almeno tre caratteri: una lettera come «F» compare in «Fronte»)
-    for (const valore of Object.values(RESPONSABILE_A_MANO).concat(['19.04.1980', '1980']).filter(v => v.length >= 3)) assert.ok(!d.includes(valore), 'nessun valore letto: ' + valore);
+    assert.equal(await x.page.locator('.scan-diagnosi').count(), 0, 'nessuna diagnosi');
+    assert.doesNotMatch(await x.page.$eval('#scan-pannello-1', e => e.textContent), /MRZ:|nitidezza|OCR pronto|PDF pag\./);
     assert.deepEqual(await valori(x.page, 1), RESPONSABILE_A_MANO);
+    assert.deepEqual(x.errori, []);
   } finally { await x.chiudi(); }
-  const senza = await apri({ scansione: 'attiva' });
-  try {
-    await iniziaFlusso(senza.page);
-    await scegliScansione(senza.page, 1);
-    await senza.page.setInputFiles('#ospite1_documento_fronte', CIE.fronte);
-    await attendiFine(senza.page, 1, [1]);
-    assert.equal(await senza.page.locator('.scan-diagnosi').count(), 0, 'senza «diagnosi» nell\'indirizzo niente');
-  } finally { await senza.chiudi(); }
 });
 
 test('responsabile: tipo di documento riconosciuto (patente) compilato, verde; PDF danneggiato caricato per il gestore non si apre ma resta allegato', async () => {
