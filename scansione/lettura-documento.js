@@ -905,6 +905,7 @@ export function leggiTestoStampato(righe, opzioni) {
   const nomePulito = t => /^[A-ZÀ-ÖØ-Ý][A-ZÀ-ÖØ-Ý' \-]*$/.test(t.trim()) && t.trim().split(/[ '\-]+/).every(p => p.length >= 2);
   const tutto = U.join('\n');
   const indizi = { patente: RE_PATENTE.test(tutto), carta: RE_CARTA.test(tutto), passaporto: RE_PASSAPORTO.test(tutto), italia: RE_ITALIA.test(tutto) };
+  indizi.intestazionePatente = indizi.patente;
   indizi.retroPatente = LEGENDA_PATENTE.filter(re => re.test(tutto)).length >= 3;
   const v = { indizi };
 
@@ -921,6 +922,15 @@ export function leggiTestoStampato(righe, opzioni) {
   // campo 3 (data e luogo di nascita) anche dal contenuto: il «3.» si legge male («Q», «a»), la riga «GG/MM/AA COMUNE (PR)» no
   let p3 = campoNumerato('3');
   const riga3 = r => { const m = /(\d{1,2}\s?[\/.\-]\s?\d{1,2}\s?[\/.\-]\s?\d{2,4})\s+(.+)$/.exec(r); return m && !/^\s*4\s?[ABC]\b/.test(r) && leggiLuogo(m[2], o) ? m[1] + ' ' + m[2] : null; };
+  // patente riconosciuta anche senza l'intestazione (06/11/2026, il PDF del titolare: la zona letta cominciava appena sotto «PATENTE DI
+  // GUIDA» e i numeri dei campi, in blu, non si leggevano): almeno due segni dei campi del fronte, che gli altri documenti non hanno.
+  // Le etichette 4a/4b/4c, l'ufficio del campo 4c (MC-TN, MIT-UCO, DTT-…), il numero nella forma della patente italiana, la riga 3
+  if (!indizi.patente) {
+    const segni = [U.some(r => /(?:^|\s)4\s?[ABC]\s?[.,]?(?=\s|$)/.test(r)), /\b(?:MC|MIT|DTT|UMC)\s?-\s?[A-Z]{2,3}\b/.test(tutto),
+      U.some(r => { const m = /\b([A-Z]{2}\d{7}[A-Z])\b/.exec(r); return !!(m && !codiceFiscaleValido(m[1])); }), U.concat(ricomposte).some(r => !!riga3(r))];
+    indizi.segniPatente = segni.filter(Boolean).length;
+    if (indizi.segniPatente >= 2) indizi.patente = true;
+  }
   if (!p3 && indizi.patente) for (const r of U.concat(ricomposte)) { const x = riga3(r); if (x) { p3 = x; break; } }
   // numeri dei campi 1 e 2 illeggibili (stampati in blu; 06/11/2026, patente del titolare letta da una foto piccola): con
   // l'intestazione della patente letta, le due righe di sole lettere subito sopra la riga 3, nella stessa colonna, sono il
@@ -1198,7 +1208,9 @@ export function combinaLetture(letture, opzioni) {
     const cieCerta = !!(tipo && tipo.tipo === 'cie' && mrz && mrz.controlli && mrz.controlli.nascita && mrz.controlli.scadenza);
     // patente: l'intestazione («PATENTE DI GUIDA») e i campi numerati letti dicono con certezza che è una patente, l'unica voce
     // dell'elenco per le patenti; «REPUBBLICA ITALIANA» dice dove è rilasciata (06/11/2026, il titolare: «tutto giallo ma giusto»)
-    const patenteCerta = !!(tipo && tipo.tipo === 'patente' && !mrz && st.indizi.patente && st.indizi.campiPatente);
+    // (senza l'intestazione letta, certa se ci sono almeno tre dei quattro segni dei campi del fronte; con due resta da controllare)
+    const patenteCerta = !!(tipo && tipo.tipo === 'patente' && !mrz && st.indizi.patente && st.indizi.campiPatente &&
+      (st.indizi.intestazionePatente || st.indizi.segniPatente >= 3));
     if (patenteCerta) campi.tipoDocumento = { valore: tipo.voce, affidabilita: SICURO, fonte: 'stampato' };
     else if (tipo && tipo.voce && (cieCerta || (tipo.modo === 'proposto' && mrz && mrz.valida))) campi.tipoDocumento = { valore: tipo.voce, affidabilita: cieCerta ? SICURO : DA_VERIFICARE, fonte: 'mrz' };
     else if (tipo && tipo.voce) campi.tipoDocumento = { valore: null, suggerimento: tipo.voce, affidabilita: DA_VERIFICARE, fonte: mrz ? 'mrz' : 'stampato' };

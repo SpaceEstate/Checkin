@@ -10,7 +10,7 @@
 //    loro campi e partono per il gestore come prima (raccogliDatiPrenotazioneConCompressione in checkin.js, invariata).
 //  - si compilano solo i campi vuoti dell'ospite giusto; ogni ospite ha il suo stato; «Annulla la compilazione» ripristina
 //    esattamente i valori di prima. La conferma finale resta dell'ospite. Se qualcosa non va, si continua a mano.
-import * as L from './lettura-documento.js?v=20261106j';
+import * as L from './lettura-documento.js?v=20261107a';
 import * as I from './immagine.js?v=20261106j';
 
 const VENDOR = new URL('./vendor/', import.meta.url);

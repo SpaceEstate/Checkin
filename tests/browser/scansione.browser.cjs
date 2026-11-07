@@ -491,7 +491,7 @@ test('PDF: la scansione A4 del responsabile con fronte e retro si legge e resta 
 // 06/11/2026: il PDF della patente del titolare non si leggeva (sulla scansione di un foglio A4 la carta è piccola). Le scansioni si
 // costruiscono nella prova dalle foto sintetiche: la carta ritagliata e messa su un foglio bianco a 200 dpi, in un'immagine sola come
 // negli scanner; il retro della patente disegnato (categorie e legenda dei campi, che non hanno dati per il modulo)
-test('PDF di scansioni: foglio A4 dello scanner con la CIE (fronte e retro, carte chiare) e con la patente (il retro sopra); patente ritagliata e ruotata', async () => {
+test('PDF di scansioni: foglio A4 dello scanner con la CIE (fronte e retro, carte chiare) e con la patente (il retro sopra); patente ritagliata e ruotata; patente come la scansione documenti dell\'iPhone', async () => {
   const x = await apri({ scansione: 'attiva' });
   try {
     await iniziaFlusso(x.page);
@@ -514,15 +514,23 @@ test('PDF di scansioni: foglio A4 dello scanner con la CIE (fronte e retro, cart
       const ruotata = document.createElement('canvas'); ruotata.width = mm(54) * 2; ruotata.height = mm(85.6) * 2;          // 400 dpi, in verticale
       const k = ruotata.getContext('2d'); k.imageSmoothingQuality = 'high'; k.translate(ruotata.width / 2, ruotata.height / 2); k.rotate(Math.PI / 2);
       k.drawImage(PF, carta.x, carta.y, carta.w, carta.h, -ruotata.height / 2, -ruotata.width / 2, ruotata.height, ruotata.width);
+      // come la scansione documenti dell'iPhone (il PDF del titolare, 06/11/2026): la carta ritagliata, schiarita, 1633×1045, a 72 dpi
+      const comeIphone = sorgente => { const c = document.createElement('canvas'); c.width = 1633; c.height = 1045; const q = c.getContext('2d');
+        q.filter = 'brightness(1.12) contrast(1.25) saturate(0.8)'; q.imageSmoothingQuality = 'high';
+        if (sorgente === PF) q.drawImage(PF, carta.x, carta.y, carta.w, carta.h, 0, 0, c.width, c.height); else q.drawImage(sorgente, 0, 0, c.width, c.height);
+        return c; };
       const jpeg = c => c.toDataURL('image/jpeg', 0.9).split(',')[1];
-      return { cie: jpeg(foglio(ritaglia(CF, mm(85.6), mm(54)), ritaglia(CR, mm(85.6), mm(54)))), patente: jpeg(foglio(retroPatente, ritaglia(PF, mm(85.6), mm(54)))), ruotata: jpeg(ruotata) };
+      return { cie: jpeg(foglio(ritaglia(CF, mm(85.6), mm(54)), ritaglia(CR, mm(85.6), mm(54)))), patente: jpeg(foglio(retroPatente, ritaglia(PF, mm(85.6), mm(54)))), ruotata: jpeg(ruotata),
+        iphoneFronte: jpeg(comeIphone(PF)), iphoneRetro: jpeg(comeIphone(retroPatente)) };
     }, [b64('cie-fronte.jpg'), b64('cie-retro.jpg'), b64('patente-it.jpg')]);
     const A4 = j => pdfDaJpeg([{ larghezza: 595.28, altezza: 841.89, immagini: [{ jpeg: Buffer.from(j, 'base64'), x: 0, y: 0, w: 595.28, h: 841.89 }] }]);
     const ruotata = Buffer.from(imm.ruotata, 'base64'), { w, h } = dimensioniJpeg(ruotata), pt = 72 / 400;
     const casi = [
       ['CIE, foglio A4 dello scanner', A4(imm.cie), v => assert.deepEqual(v, RESPONSABILE_A_MANO)],
       ['patente, foglio A4 con il retro sopra', A4(imm.patente)],
-      ['patente ritagliata e ruotata', pdfDaJpeg([{ larghezza: w * pt, altezza: h * pt, immagini: [{ jpeg: ruotata, x: 0, y: 0, w: w * pt, h: h * pt }] }])]
+      ['patente ritagliata e ruotata', pdfDaJpeg([{ larghezza: w * pt, altezza: h * pt, immagini: [{ jpeg: ruotata, x: 0, y: 0, w: w * pt, h: h * pt }] }])],
+      ['patente come la scansione documenti dell\'iPhone: fronte e retro, due pagine', pdfDaJpeg(['iphoneFronte', 'iphoneRetro'].map(k =>
+        ({ larghezza: 1633, altezza: 1045, immagini: [{ jpeg: Buffer.from(imm[k], 'base64'), x: 0, y: 0, w: 1633, h: 1045 }] })))]
     ];
     for (const [nome, pdf, controlla] of casi) {
       const t0 = Date.now();

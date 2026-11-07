@@ -768,6 +768,31 @@ test('PDF: zone dei documenti su un foglio (carte chiare, MRZ compresa, in un an
   assert.equal(I.zoneDocumento(polvere.px, polvere.w, polvere.h), null);
 });
 
+// 06/11/2026, il PDF della patente del titolare (fronte e retro ritagliati e schiariti dall'iPhone): la zona letta cominciava appena sotto
+// «PATENTE DI GUIDA» e i numeri dei campi (in blu) si leggevano male o per niente. Le stesse righe, con le stesse posizioni, e dati di fantasia
+test('patente senza l\'intestazione letta: riconosciuta dai segni dei campi del fronte; tipo certo con tre segni su quattro', () => {
+  const pz = (testo, x0, y0, x1, y1) => ({ testo, bbox: { x0, y0, x1, y1 } });
+  const resp = Object.assign({ responsabile: true }, OPZ);
+  const letta = [pz('Ao', 148, 0, 169, 6), pz('» ae', 343, 0, 367, 15), pz('ROSSI', 153, 51, 299, 77), pz('ADA', 153, 108, 297, 135), pz('Z', 77, 118, 92, 133),
+    pz('10/11/90 ROMA (RM)', 153, 160, 543, 192), pz('01/02/2020 4c,', 155, 210, 411, 244), pz('MC-RM', 447, 215, 552, 241), pz('4a', 77, 219, 111, 244),
+    pz('01/02/2030', 154, 270, 356, 302), pz('4b', 77, 274, 112, 299), pz('RM1234567X', 154, 327, 351, 353), pz('5', 78, 329, 93, 354)];
+  const st = L.leggiTestoStampato(letta, OPZ);
+  assert.deepEqual([st.cognome, st.nome, st.nascita, st.luogo && st.luogo.comune, st.luogo && st.luogo.provincia, st.numero], ['ROSSI', 'ADA', '1990-11-10', 'ROMA', 'RM', 'RM1234567X']);
+  assert.deepEqual([st.indizi.patente, st.indizi.intestazionePatente, st.indizi.segniPatente], [true, false, 4]);
+  const c = L.combinaLetture([{ mrz: null, stampato: st }], resp);
+  assert.deepEqual([c.campi.tipoDocumento.valore, c.campi.tipoDocumento.affidabilita], ['PATENTE DI GUIDA', L.SICURO], 'quattro segni: tipo certo');
+  assert.deepEqual([c.campi.luogoRilascio.valore, c.campi.luogoRilascio.affidabilita], ['Italia', L.SICURO], 'l\'ufficio del campo 4c');
+  // due segni (la riga 3 e il numero nella forma della patente): è una patente, ma il tipo resta da controllare
+  const due = L.leggiTestoStampato(letta.filter(p => !/^(4a|4b|MC-RM|01\/02\/2020 4c,)$/.test(p.testo)), OPZ);
+  assert.deepEqual([due.cognome, due.nome, due.numero, due.indizi.segniPatente], ['ROSSI', 'ADA', 'RM1234567X', 2]);
+  const c2 = L.combinaLetture([{ mrz: null, stampato: due }], resp);
+  assert.equal(c2.campi.tipoDocumento.affidabilita, L.DA_VERIFICARE);
+  assert.equal(c2.campi.tipoDocumento.suggerimento || c2.campi.tipoDocumento.valore, 'PATENTE DI GUIDA');
+  // un segno solo non basta (la prova di prima: «senza l'intestazione della patente nessuna di queste regole»); la CIE non ha segni
+  assert.equal(L.leggiTestoStampato([pz('ROSSI', 145, 115, 274, 140), pz('ADA', 145, 163, 230, 187), pz('10/11/90 ROMA (RM)', 145, 205, 486, 235)], OPZ).cognome, undefined);
+  assert.ok(!L.leggiTestoStampato(CIE_FRONTE, OPZ).indizi.patente, 'CIE');
+});
+
 test('retro della patente: riconosciuto dalla legenda dei campi, anche letta male; nessun dato dalla legenda; il fronte sulla stessa lettura resta', () => {
   const legenda = ['+ 1. Cognoma 2. Nome 3, Data e luogo di nascita 4a. Data del rilascio', '4b. Data di scadonza 4c. Ritasciata da 5, Numero della patente',
     '10. Valida dal 11. Valida fino al 12. Godici', 'AM A1 A2 A B1 B C1 C D1 D BE C1E CE D1E DE'];
