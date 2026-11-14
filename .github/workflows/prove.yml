@@ -81,3 +81,13 @@ jobs:
           set -o pipefail
           node --test tests/browser/scansione.browser.cjs | tee /tmp/prove-browser.txt
           grep -q "^# skipped 0$" /tmp/prove-browser.txt || { echo "::error::alcune prove della scansione sono state saltate"; exit 1; }
+
+      # Il resto del modulo nel browser (passi degli ospiti, verifica della prenotazione, campo data, campi con elenco, lingue, pagina
+      # di esito): stesso browser, stesso server di prova, API finte.
+      - name: Prove del modulo nel browser
+        env:
+          NODE_PATH: /tmp/pw/node_modules
+        run: |
+          set -o pipefail
+          node --test tests/browser/modulo.browser.cjs | tee /tmp/prove-modulo.txt
+          grep -q "^# skipped 0$" /tmp/prove-modulo.txt || { echo "::error::alcune prove del modulo sono state saltate"; exit 1; }

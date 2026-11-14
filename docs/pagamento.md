@@ -15,6 +15,14 @@ Come sul sito di La Columbera (pagina «Conferma e paga»), l'ospite paga **dent
 - **Dopo 30 minuti** il pagamento su Stripe scade: il riquadro si chiude e basta premere di nuovo «Continua al pagamento».
 - **La banca chiede una conferma su un'altra pagina** (3D Secure con reindirizzamento): al termine si torna sulla pagina di esito.
 
+### Pagina di esito (dal 13/11/2026)
+
+- **Tre tentativi** per leggere i dati del pagamento (subito, dopo 1,5 e dopo 3 secondi): un errore di rete o del server di un momento non mostra più «Errore nel caricamento» a chi ha appena pagato.
+- **Dettagli e codice restano a schermo**: un errore qualsiasi arrivato dopo (anche di uno script estraneo alla pagina) non li cancella.
+- **Valori come testo**: appartamento, numero di ospiti e notti arrivano dal pagamento e si scrivono come testo, mai come HTML.
+- **Lingua e data**: cambiando lingua si aggiornano anche la data e la descrizione dell'appartamento; la data di arrivo è il giorno scelto anche per chi guarda la pagina da un altro fuso orario.
+- **Rielaborazione di riserva solo nei primi 7 giorni** (`GIORNI_RIELABORAZIONE` in `api/get-session.js`): la pagina la chiede a ogni apertura, ma serve solo finché Stripe può ancora ritentare il webhook (circa 3 giorni). Il registro tecnico si cancella dopo 30 giorni: senza questo limite, riaprendo la pagina più tardi l'ospite riceveva di nuovo l'email di benvenuto. Dettagli e codice si leggono sempre.
+
 ## Impostazioni su Vercel (progetto Check-in → Settings → Environment Variables)
 
 | Variabile | A cosa serve |

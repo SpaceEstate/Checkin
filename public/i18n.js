@@ -88,6 +88,9 @@ const I18N_UI = {
     "valid.ospitiRichiesti": "Seleziona il numero di ospiti",
     "valid.nottiNonValide": "Inserisci un numero di notti valido (minimo 1)",
     "valid.tipoGruppoRichiesto": "Seleziona il tipo di gruppo",
+    "valid.dataNonValida": "Data non valida: controlla giorno, mese e anno.",
+    "valid.dataNascitaNonValida": "Data di nascita non valida: deve essere compresa tra il 1900 e oggi.",
+    "date.placeholder": "GG/MM/AAAA",
     "field.cognome": "Cognome",
     "field.nome": "Nome",
     "field.genere": "Genere",
@@ -133,6 +136,7 @@ const I18N_UI = {
     "guest.tipoDocumento": "Tipo documento *",
     "guest.selezionaTipoDocumento": "Seleziona tipo documento",
     "guest.numeroDocumento": "Numero documento *",
+    "guest.numeroDocumentoPlaceholder": "Es. AA1234567",
     "guest.luogoRilascio": "Luogo rilascio documento *",
     "guest.selezionaLuogoRilascio": "Seleziona luogo rilascio",
     "guest.documentoTitolo": "📄 Documento di identità",
@@ -162,8 +166,8 @@ const I18N_UI = {
     "summary.numeroNotti": "Numero notti:",
     "summary.ospitiTitle": "👥 Ospiti",
     "summary.responsabile": "(Responsabile)",
-    "summary.etaSoggetta": "Età: {eta} anni (soggetto a tassa)",
-    "summary.etaEsente": "Età: {eta} anni (esente)",
+    "summary.etaSoggetta": "Età: {eta} {eta:anno|anni} (soggetto a tassa)",
+    "summary.etaEsente": "Età: {eta} {eta:anno|anni} (esente)",
     "summary.totaleTitle": "💰 Totale tassa di soggiorno",
     "summary.totaleNota": "Tassa di €1,50 per notte per ospiti dai 4 anni in su",
     "stepFinal.title": "Riepilogo e pagamento",
@@ -176,7 +180,7 @@ const I18N_UI = {
     "pay.title": "Pagamento",
     "pay.badge": "Pagamento protetto",
     "pay.due": "Da pagare ora",
-    "pay.dueSub": "Imposta di soggiorno · {notti} notti",
+    "pay.dueSub": "Imposta di soggiorno · {notti} {notti:notte|notti}",
     "pay.button": "Paga €{amount}",
     "pay.inCorso": "Pagamento in corso…",
     "pay.modifica": "← Modifica i dati",
@@ -199,7 +203,7 @@ const I18N_UI = {
     "alloggiati.suggerimenti": " Possibili corrispondenze: {elenco}.",
     "alloggiati.caratteriNonAmmessi": "Ospite {n}: il campo «{campo}» contiene caratteri non accettati per la comunicazione alla Questura (nome e cognome: solo lettere, spazi e apostrofo; numero documento: lettere e cifre).",
     "alloggiati.troppoLungo": "Ospite {n}: il campo «{campo}» è troppo lungo per la comunicazione alla Questura.",
-    "alloggiati.altriProblemi": "(Ci sono altri {quanti} dati da controllare.)",
+    "alloggiati.altriProblemi": "(Altri dati da controllare: {quanti}.)",
     "stepFinal.identitaTitolo": "Verifica dell'identità all'arrivo",
     "stepFinal.identitaTesto": "Compilare questo modulo e inviare la foto del documento non basta per essere identificati. All'arrivo il gestore deve verificare di persona che i documenti originali corrispondano a chi soggiorna (oppure con un collegamento video in tempo reale, se idoneo). Tieni a portata di mano i documenti originali di tutti gli ospiti.",
     "stepFinal.privacyLink": "Leggi l'informativa privacy",
@@ -294,7 +298,7 @@ const I18N_UI = {
     "scan.annulla": "↩︎ Annulla",
     "scan.annullata": "Compilazione annullata.",
     "scan.campo.provincia": "Provincia",
-    "scan.fotocameraNonDisponibile": "Fotocamera non disponibile: usa «Carica una foto».",
+    "scan.fotocameraNonDisponibile": "Fotocamera non disponibile: usa «Carica foto o PDF».",
     "scan.fotoRetro": "Retro del documento",
     "scan.fotoFronte": "Fronte del documento",
     "foto.titolo": "Fotografa il documento",
@@ -389,6 +393,9 @@ const I18N_UI = {
     "valid.ospitiRichiesti": "Select the number of guests",
     "valid.nottiNonValide": "Enter a valid number of nights (minimum 1)",
     "valid.tipoGruppoRichiesto": "Select the type of group",
+    "valid.dataNonValida": "Invalid date: please check day, month and year.",
+    "valid.dataNascitaNonValida": "Invalid date of birth: it must be between 1900 and today.",
+    "date.placeholder": "DD/MM/YYYY",
     "field.cognome": "Last name",
     "field.nome": "First name",
     "field.genere": "Gender",
@@ -434,6 +441,7 @@ const I18N_UI = {
     "guest.tipoDocumento": "Document type *",
     "guest.selezionaTipoDocumento": "Select document type",
     "guest.numeroDocumento": "Document number *",
+    "guest.numeroDocumentoPlaceholder": "e.g. AA1234567",
     "guest.luogoRilascio": "Document issue place *",
     "guest.selezionaLuogoRilascio": "Select issue place",
     "guest.documentoTitolo": "📄 Identity document",
@@ -463,8 +471,8 @@ const I18N_UI = {
     "summary.numeroNotti": "Number of nights:",
     "summary.ospitiTitle": "👥 Guests",
     "summary.responsabile": "(Lead guest)",
-    "summary.etaSoggetta": "Age: {eta} years (subject to tax)",
-    "summary.etaEsente": "Age: {eta} years (exempt)",
+    "summary.etaSoggetta": "Age: {eta} {eta:year|years} (subject to tax)",
+    "summary.etaEsente": "Age: {eta} {eta:year|years} (exempt)",
     "summary.totaleTitle": "💰 Total tourist tax",
     "summary.totaleNota": "Tax of €1.50 per night for guests aged 4 and over",
     "stepFinal.title": "Summary and payment",
@@ -477,7 +485,7 @@ const I18N_UI = {
     "pay.title": "Payment",
     "pay.badge": "Secure payment",
     "pay.due": "To pay now",
-    "pay.dueSub": "Tourist tax · {notti} nights",
+    "pay.dueSub": "Tourist tax · {notti} {notti:night|nights}",
     "pay.button": "Pay €{amount}",
     "pay.inCorso": "Payment in progress…",
     "pay.modifica": "← Edit details",
@@ -500,7 +508,7 @@ const I18N_UI = {
     "alloggiati.suggerimenti": " Possible matches: {elenco}.",
     "alloggiati.caratteriNonAmmessi": "Guest {n}: the field “{campo}” contains characters that are not accepted for the police report (names: letters, spaces and apostrophes only; document number: letters and digits).",
     "alloggiati.troppoLungo": "Guest {n}: the field “{campo}” is too long for the police report.",
-    "alloggiati.altriProblemi": "({quanti} more details need checking.)",
+    "alloggiati.altriProblemi": "(Other details to check: {quanti}.)",
     "stepFinal.identitaTitolo": "Identity check on arrival",
     "stepFinal.identitaTesto": "Filling in this form and sending a photo of your ID is not enough to identify you. On arrival the host must check in person that the original documents match the people staying (or through a suitable real-time video connection). Please keep the original ID documents of all guests at hand.",
     "stepFinal.privacyLink": "Read the privacy notice",
@@ -595,7 +603,7 @@ const I18N_UI = {
     "scan.annulla": "↩︎ Undo",
     "scan.annullata": "Automatic filling undone.",
     "scan.campo.provincia": "Province",
-    "scan.fotocameraNonDisponibile": "Camera not available: use «Upload a photo».",
+    "scan.fotocameraNonDisponibile": "Camera not available: use «Upload photo or PDF».",
     "scan.fotoRetro": "Back of the document",
     "scan.fotoFronte": "Front of the document",
     "foto.titolo": "Take a photo of the document",
@@ -690,6 +698,9 @@ const I18N_UI = {
     "valid.ospitiRichiesti": "Wählen Sie die Anzahl der Gäste",
     "valid.nottiNonValide": "Geben Sie eine gültige Anzahl von Nächten ein (mindestens 1)",
     "valid.tipoGruppoRichiesto": "Wählen Sie die Gruppenart",
+    "valid.dataNonValida": "Ungültiges Datum: Bitte Tag, Monat und Jahr prüfen.",
+    "valid.dataNascitaNonValida": "Ungültiges Geburtsdatum: Es muss zwischen 1900 und heute liegen.",
+    "date.placeholder": "TT/MM/JJJJ",
     "field.cognome": "Nachname",
     "field.nome": "Vorname",
     "field.genere": "Geschlecht",
@@ -735,6 +746,7 @@ const I18N_UI = {
     "guest.tipoDocumento": "Dokumententyp *",
     "guest.selezionaTipoDocumento": "Dokumententyp wählen",
     "guest.numeroDocumento": "Dokumentnummer *",
+    "guest.numeroDocumentoPlaceholder": "z. B. AA1234567",
     "guest.luogoRilascio": "Ausstellungsort des Dokuments *",
     "guest.selezionaLuogoRilascio": "Ausstellungsort wählen",
     "guest.documentoTitolo": "📄 Ausweisdokument",
@@ -764,8 +776,8 @@ const I18N_UI = {
     "summary.numeroNotti": "Anzahl der Nächte:",
     "summary.ospitiTitle": "👥 Gäste",
     "summary.responsabile": "(Hauptgast)",
-    "summary.etaSoggetta": "Alter: {eta} Jahre (steuerpflichtig)",
-    "summary.etaEsente": "Alter: {eta} Jahre (befreit)",
+    "summary.etaSoggetta": "Alter: {eta} {eta:Jahr|Jahre} (steuerpflichtig)",
+    "summary.etaEsente": "Alter: {eta} {eta:Jahr|Jahre} (befreit)",
     "summary.totaleTitle": "💰 Gesamte Kurtaxe",
     "summary.totaleNota": "Kurtaxe von 1,50 € pro Nacht für Gäste ab 4 Jahren",
     "stepFinal.title": "Übersicht und Zahlung",
@@ -778,7 +790,7 @@ const I18N_UI = {
     "pay.title": "Zahlung",
     "pay.badge": "Sichere Zahlung",
     "pay.due": "Jetzt zu zahlen",
-    "pay.dueSub": "Kurtaxe · {notti} Nächte",
+    "pay.dueSub": "Kurtaxe · {notti} {notti:Nacht|Nächte}",
     "pay.button": "€{amount} bezahlen",
     "pay.inCorso": "Zahlung läuft…",
     "pay.modifica": "← Daten ändern",
@@ -801,7 +813,7 @@ const I18N_UI = {
     "alloggiati.suggerimenti": " Mögliche Treffer: {elenco}.",
     "alloggiati.caratteriNonAmmessi": "Gast {n}: Das Feld „{campo}“ enthält Zeichen, die für die Meldung an die Polizei nicht zulässig sind (Namen: nur Buchstaben, Leerzeichen und Apostroph; Dokumentnummer: Buchstaben und Ziffern).",
     "alloggiati.troppoLungo": "Gast {n}: Das Feld „{campo}“ ist für die Meldung an die Polizei zu lang.",
-    "alloggiati.altriProblemi": "(Weitere {quanti} Angaben sind zu prüfen.)",
+    "alloggiati.altriProblemi": "(Weitere zu prüfende Angaben: {quanti}.)",
     "stepFinal.identitaTitolo": "Identitätsprüfung bei der Ankunft",
     "stepFinal.identitaTesto": "Das Ausfüllen dieses Formulars und das Senden eines Fotos des Ausweises reichen für die Identifizierung nicht aus. Bei der Ankunft muss der Gastgeber persönlich prüfen, ob die Originaldokumente mit den übernachtenden Personen übereinstimmen (oder über eine geeignete Videoverbindung in Echtzeit). Bitte halten Sie die Originalausweise aller Gäste bereit.",
     "stepFinal.privacyLink": "Datenschutzerklärung lesen",
@@ -896,7 +908,7 @@ const I18N_UI = {
     "scan.annulla": "↩︎ Rückgängig",
     "scan.annullata": "Automatisches Ausfüllen rückgängig gemacht.",
     "scan.campo.provincia": "Provinz",
-    "scan.fotocameraNonDisponibile": "Kamera nicht verfügbar: «Foto hochladen» verwenden.",
+    "scan.fotocameraNonDisponibile": "Kamera nicht verfügbar: «Foto oder PDF hochladen» verwenden.",
     "scan.fotoRetro": "Rückseite des Dokuments",
     "scan.fotoFronte": "Vorderseite des Dokuments",
     "foto.titolo": "Dokument fotografieren",
@@ -1123,13 +1135,16 @@ const I18N_DOCUMENTI = {
 const LINGUE_SUPPORTATE = ['it', 'en', 'de'];
 const LINGUA_STORAGE_KEY = 'columbera_lingua';
 const LINGUA_DEFAULT = 'it';
+// Lingua scelta in questa pagina: vale quando il browser blocca la memoria locale (Safari con «Blocca tutti i cookie», alcune app che
+// aprono i link al loro interno). Prima, lì, il selettore della lingua non cambiava nulla: la scelta non si poteva né salvare né rileggere.
+let linguaDiQuestaPagina = null;
 
 function getLingua() {
   try {
     const salvata = window.localStorage?.getItem(LINGUA_STORAGE_KEY);
     if (salvata && LINGUE_SUPPORTATE.includes(salvata)) return salvata;
   } catch (e) { /* localStorage non disponibile (es. modalità privata): si ignora */ }
-  return LINGUA_DEFAULT;
+  return linguaDiQuestaPagina || LINGUA_DEFAULT;
 }
 
 // Mappa lingua interna -> locale BCP47 usato per Intl/toLocaleDateString
@@ -1148,6 +1163,8 @@ function t(key, params) {
   if (str === undefined) str = I18N_UI[LINGUA_DEFAULT][key];
   if (str === undefined) return key; // fallback estremo: mai un campo vuoto in UI
   if (params) {
+    // «{n:singolare|plurale}»: la parola giusta per il numero n («1 notte», «2 notti»). Prima il testo era sempre al plurale («1 notti», «1 anni»).
+    str = str.replace(/\{(\w+):([^|{}]*)\|([^{}]*)\}/g, (tutto, k, uno, molti) => (k in params ? (Number(params[k]) === 1 ? uno : molti) : tutto));
     Object.keys(params).forEach(k => {
       str = str.split(`{${k}}`).join(params[k]);
     });
@@ -1209,6 +1226,10 @@ function applicaTraduzioni(root) {
 
   // Testo semplice, nessun parametro
   scope.querySelectorAll('[data-i18n]').forEach(el => {
+    // Un elemento il cui contenuto è stato sostituito da altri elementi tradotti non si riscrive: si traducono quelli (il sottotitolo
+    // del passo 1 dopo la verifica: «✓ Dati prenotazione verificati»). Prima, al primo cambio di lingua e arrivando al riepilogo,
+    // tornava il testo generico e la conferma della verifica spariva.
+    if (el.querySelector('[data-i18n]')) return;
     el.textContent = t(el.getAttribute('data-i18n'));
   });
 
@@ -1244,7 +1265,8 @@ function applicaTraduzioni(root) {
 
   document.documentElement.setAttribute('lang', lang);
   const titleEl = document.querySelector('title');
-  if (titleEl && !titleEl.hasAttribute('data-i18n')) titleEl.textContent = t('meta.title');
+  // come nel titolo scritto in index.html («Check-in Ospiti · La Columbera»): prima, tradotto, perdeva il nome della struttura
+  if (titleEl && !titleEl.hasAttribute('data-i18n')) titleEl.textContent = t('meta.title') + ' · La Columbera';
   const metaDesc = document.querySelector('meta[name="description"]');
   if (metaDesc) metaDesc.setAttribute('content', t('meta.description'));
 
@@ -1268,6 +1290,7 @@ function onCambioLingua(fn) {
 
 function impostaLingua(lingua) {
   if (!LINGUE_SUPPORTATE.includes(lingua)) return;
+  linguaDiQuestaPagina = lingua;
   try { window.localStorage?.setItem(LINGUA_STORAGE_KEY, lingua); } catch (e) { /* ignora */ }
   applicaTraduzioni(document);
   _onCambioLinguaCallbacks.forEach(fn => {

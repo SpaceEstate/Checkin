@@ -65,7 +65,13 @@ async function elaboraProduzione(session) {
   return elaboraCheckin(session, dipendenzeProduzione("gs_" + Date.now()));
 }
 
-// `stripe` è un parametro per poterlo sostituire nei test (nessuna chiamata reale a Stripe)
+// La pagina di successo chiede l'elaborazione a ogni apertura (?elabora=1). È una rete di sicurezza per i primi giorni: Stripe ritenta
+// il webhook per circa tre giorni. Oltre GIORNI_RIELABORAZIONE dalla creazione della sessione non si elabora più nulla: il registro
+// tecnico si cancella dopo 30 giorni (_pulizia.js) e, riaprendo la pagina più tardi, l'elaborazione ripartiva da capo e l'ospite
+// riceveva di nuovo l'email di benvenuto.
+export const GIORNI_RIELABORAZIONE = 7;
+
+// `stripe` è un parametro per poterlo sostituire nei test (nessuna chiamata reale a Stripe); deps.now idem (l'ora)
 async function gestisciRichiesta(stripe, req, res, deps = {}) {
   // CORS Headers
   res.setHeader("Access-Control-Allow-Origin", "https://spaceestate.github.io");
@@ -132,6 +138,9 @@ async function gestisciRichiesta(stripe, req, res, deps = {}) {
     // idempotente (lease + stato di ogni passo nel registro): se il webhook l'ha già fatta o la sta facendo non cambia nulla.
     if (elabora === '1') {
       if (!eSessioneCheckin(session)) return res.status(400).json({ error: "Sessione non valida" });
+      if (session.created > 0 && (deps.now || Date.now)() - session.created * 1000 > GIORNI_RIELABORAZIONE * 86400e3) {
+        return res.status(200).json({ elaborazione: 'non_necessaria' });
+      }
       try {
         const r = await (deps.elabora || elaboraProduzione)(session);
         return res.status(200).json({ elaborazione: r && r.esito || 'sconosciuto' });

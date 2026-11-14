@@ -268,7 +268,9 @@ function formatDataItaliana(dataISO) {
   // Nome storico invariato per non toccare gli altri punti di chiamata;
   // il formato ora segue la lingua selezionata dall'ospite (vedi i18n.js).
   if (!dataISO) return 'N/A';
-  const data = new Date(dataISO);
+  // «AAAA-MM-GG» è un giorno, non un istante: va letto come mezzanotte di qui. new Date('2026-12-20') è la mezzanotte UTC e, a ovest
+  // di Greenwich (un ospite che compila dall'America), il riepilogo mostrava il giorno prima («sabato 19» per il 20 dicembre).
+  const data = /^\d{4}-\d{2}-\d{2}$/.test(dataISO) ? new Date(dataISO + 'T00:00:00') : new Date(dataISO);
   if (isNaN(data.getTime())) return 'N/A';
   return data.toLocaleDateString(localeCorrente(), {
     weekday: 'long',
@@ -283,6 +285,8 @@ function showNotification(message, type = 'info') {
   
   const notification = document.createElement('div');
   notification.className = `notification ${type}`;
+  // letta anche dai lettori di schermo (prima compariva solo a video)
+  notification.setAttribute('role', type === 'error' ? 'alert' : 'status');
   notification.textContent = message;
   notification.style.cssText = `
     position: fixed; top: 20px; right: 20px; padding: 14px 22px;
@@ -302,7 +306,10 @@ function showNotification(message, type = 'info') {
   }
   
   document.body.appendChild(notification);
-  setTimeout(() => { if (notification.parentNode) notification.remove(); }, 4000);
+  // 4 secondi per i messaggi brevi, di più per quelli lunghi (al più 12): prima anche gli errori con le istruzioni («il file è troppo
+  // grande…», «il comune non risulta…») sparivano dopo 4 secondi, prima di poterli leggere
+  const durata = Math.min(12000, Math.max(4000, 1500 + String(message == null ? '' : message).length * 55));
+  setTimeout(() => { if (notification.parentNode) notification.remove(); }, durata);
 }
 
 // Modale di conferma personalizzata, al posto del confirm() nativo del
@@ -409,7 +416,11 @@ window.verificaPrenotazione = async function() {
       },
       body: JSON.stringify({ numeroPrenotazione })
     });
-    
+
+    // Errore del server (non «numero non trovato», 404, né «troppi tentativi», 429): è un errore, non un numero sbagliato.
+    // Prima anche questo caso diceva «Numero di prenotazione non trovato».
+    if (response.status >= 500) throw new Error('verifica non riuscita (HTTP ' + response.status + ')');
+
     const result = await response.json();
     
     if (result.found && result.dati) {
@@ -423,7 +434,9 @@ window.verificaPrenotazione = async function() {
       // il vero bug della data (vedi commenti nella funzione) era legato a
       // readOnly e non alla visibilità.
       requestAnimationFrame(() => {
+        sbloccaDatiPrenotazione();        // blocchi di una verifica precedente (ospite tornato indietro): si riparte puliti
         precompilaDatiPrenotazione(result.dati);
+        completaBlocchiPrenotazione();    // quello che non si è potuto precompilare resta da compilare
         console.log('✅ [FIX] campo data-checkin dopo la precompilazione:', document.getElementById('data-checkin')?.value);
       });
     } else {
@@ -444,15 +457,56 @@ window.verificaPrenotazione = async function() {
     }
     input?.focus();
   } finally {
-    if (currentStep === 0 && btn) {
+    // Il pulsante torna sempre com'era, anche dopo una verifica riuscita: il primo passo non si vede più, ma l'ospite può tornarci
+    // con «Torna indietro». Prima restava disattivato con «Verifica in corso…» e la prenotazione non si poteva più verificare.
+    if (btn) {
       btn.disabled = false;
-      btn.innerHTML = originalText;
+      btn.textContent = t('step0.verifyBtn');
     }
+  }
+}
+
+// Toglie i blocchi messi da precompilaDatiPrenotazione (data, appartamenti, ospiti, notti, sottotitolo «verificati»): i valori restano
+// scritti, ma si possono cambiare. Serve a chi, dopo una verifica, torna indietro e sceglie «Non ho il numero di prenotazione»
+// (prima i campi restavano bloccati anche compilando a mano) e prima di precompilare una seconda prenotazione.
+function sbloccaDatiPrenotazione() {
+  const dataInput = document.getElementById('data-checkin');
+  if (dataInput) {
+    dataInput.style.backgroundColor = '';
+    const wrapper = dataInput.closest('.date-input-wrapper');
+    const textInput = wrapper?.querySelector('.date-text-input');
+    const pickerBtn = wrapper?.querySelector('.date-picker-btn');
+    if (textInput) { textInput.readOnly = false; textInput.style.backgroundColor = ''; textInput.style.cursor = ''; }
+    if (pickerBtn) { pickerBtn.disabled = false; pickerBtn.style.opacity = ''; pickerBtn.style.cursor = ''; }
+  }
+  document.querySelectorAll('.apartment-chip input[type="checkbox"]').forEach(cb => { cb.disabled = false; });
+  const ospitiSelect = document.getElementById('numero-ospiti');
+  if (ospitiSelect) { ospitiSelect.disabled = false; ospitiSelect.style.backgroundColor = ''; ospitiSelect.style.cursor = ''; }
+  const nottiInput = document.getElementById('numero-notti');
+  if (nottiInput) { nottiInput.readOnly = false; nottiInput.style.backgroundColor = ''; nottiInput.style.cursor = ''; }
+  const sottotitolo = document.querySelector('#step-1 .step-subtitle');
+  if (sottotitolo) sottotitolo.textContent = t(sottotitolo.getAttribute('data-i18n') || 'step1.subtitle');
+}
+
+// Dopo la precompilazione: un dato che non si è potuto precompilare resta da scegliere. Se nel foglio l'appartamento è scritto in un
+// modo che non si riconosce (né «Torre» né «Corte»), o gli ospiti sono più di quelli del menu, quel campo prima restava bloccato e
+// vuoto: l'ospite non poteva andare avanti. Senza appartamento riconosciuto si sblocca anche il numero di ospiti, che ne dipende.
+function completaBlocchiPrenotazione() {
+  const caselle = Array.from(document.querySelectorAll('.apartment-chip input[type="checkbox"]'));
+  const nessunAppartamento = caselle.length > 0 && !caselle.some(cb => cb.checked);
+  if (nessunAppartamento) caselle.forEach(cb => { cb.disabled = false; });
+  const ospitiSelect = document.getElementById('numero-ospiti');
+  if (ospitiSelect && ospitiSelect.disabled && (!ospitiSelect.value || nessunAppartamento)) {
+    ospitiSelect.disabled = false;
+    ospitiSelect.style.backgroundColor = '';
+    ospitiSelect.style.cursor = '';
   }
 }
 
 // Funzione per saltare la verifica
 window.saltaVerifica = function() {
+  // Dopo una verifica riuscita e «Torna indietro»: chi sceglie di compilare a mano deve poter cambiare i dati
+  if (window.datiPrecompilati) { sbloccaDatiPrenotazione(); aggiornaMaxOspiti(); }
   window.datiPrecompilati = false;
   numeroPrenotazioneVerificato = '';
   currentStep = 1;
@@ -552,7 +606,9 @@ function validaStep1() {
     return false;
   }
 
-  const dataScelta = new Date(dataCheckinInput.value);
+  // giorno locale (mezzanotte di qui), come «oggi» qui sotto: new Date('AAAA-MM-GG') è la mezzanotte UTC e, a ovest di Greenwich,
+  // la data di oggi risultava «nel passato»
+  const dataScelta = new Date(dataCheckinInput.value + 'T00:00:00');
   const oggi = new Date();
   oggi.setHours(0, 0, 0, 0);
   
@@ -594,6 +650,11 @@ function validaStep1() {
       return false;
     }
   }
+
+  // Passi degli ospiti già creati e numero di ospiti cambiato tornando a questo passo: si creano i passi che mancano (quelli già
+  // compilati restano) e si aggiorna il pulsante dell'ultimo ospite. Prima, passando da 2 a 3 ospiti, dopo il secondo ospite la
+  // pagina restava vuota, senza pulsanti.
+  if (stepGenerated) generaStepOspiti();
 
   return true;
 }
@@ -985,6 +1046,7 @@ function generaStepOspiti() {
   if (!form || !stepFinal) return;
   
   for (let i = 1; i <= numeroOspiti; i++) {
+    if (document.getElementById(`step-${i + 1}`)) continue;      // passo già creato: resta com'è, con i dati già scritti
     const stepDiv = document.createElement('div');
     stepDiv.className = 'step';
     stepDiv.id = `step-${i + 1}`;
@@ -1110,12 +1172,29 @@ ${bloccoUploadLato(1, 'retro')}
         </button>
       </div>
     `;
+    // segnaposto del numero del documento nella lingua dell'ospite (nel markup è scritto in italiano: «Es.»)
+    stepDiv.querySelector('#ospite1_numero_documento')?.setAttribute('data-i18n-placeholder', 'guest.numeroDocumentoPlaceholder');
     form.insertBefore(stepDiv, stepFinal);
     applicaTraduzioni(stepDiv);
     // campi con elenco scrivibili e comune con l'elenco dei comuni (campi-elenco.js): le select restano quelle di sempre
     if (typeof window.potenziaCampiElenco === 'function') window.potenziaCampiElenco(stepDiv);
     if (i === 1) aggiornaObbligoRetro(1);
     if (scansioneDisponibile()) avviaScansione(i);
+  }
+  aggiornaPulsantiOspiti();
+}
+
+// Il pulsante «avanti» dei passi degli ospiti: «Vai al riepilogo» sull'ultimo, «Prossimo ospite» sugli altri. Il numero di ospiti
+// può cambiare tornando al passo 1: prima il testo restava quello del momento in cui il passo era stato creato.
+function aggiornaPulsantiOspiti() {
+  for (let i = 1; ; i++) {
+    const btn = document.querySelector(`#step-${i + 1} .button-group .btn-primary`);
+    if (!btn) break;
+    const chiave = i === numeroOspiti ? 'guest.nextBtnSummary' : 'guest.nextBtnMore';
+    if (btn.getAttribute('data-i18n') !== chiave) {
+      btn.setAttribute('data-i18n', chiave);
+      btn.textContent = t(chiave);
+    }
   }
 }
 
@@ -2283,7 +2362,25 @@ function supportaDateInput() {
   return input.type === 'date' && input.value === '2024-01-01';
 }
 
+// campi data nativi già preparati: potenziaTuosDateInput ripassa tutti i campi a ogni modifica del modulo, e senza questo elenco
+// aggiungeva ogni volta gli stessi ascoltatori allo stesso campo (sull'iPhone, decine dopo qualche passo)
+const dateNativePronte = new WeakSet();
+
 function miglioraDateInputNativo(input) {
+  if (dateNativePronte.has(input)) return;
+  dateNativePronte.add(input);
+
+  // Data di nascita fuori dai limiti del campo (dal 1900 a oggi): il calendario del telefono non sempre li fa rispettare, e prima
+  // passava anche una data futura (età 0, esente dall'imposta) o un anno come 0001. Il campo si svuota e lo si dice.
+  if (/_nascita$/.test(input.name || '')) {
+    input.addEventListener('change', function() {
+      if (this.value && ((this.max && this.value > this.max) || (this.min && this.value < this.min) || !/^\d{4}-\d{2}-\d{2}$/.test(this.value))) {
+        this.value = '';
+        showNotification(t('valid.dataNascitaNonValida'), 'error');
+      }
+    });
+  }
+
   input.addEventListener('change', function() {
     if (this.value) {
       const date = new Date(this.value + 'T00:00:00');
@@ -2304,17 +2401,20 @@ function miglioraDateInputNativo(input) {
   });
 }
 
-function validaData(giorno, mese, anno) {
+// massima (facoltativa, «AAAA-MM-GG»): l'ultima data ammessa dal campo. La data di nascita non va oltre oggi; la data di arrivo non
+// ha un limite: prima l'anno si fermava a quello in corso per tutti i campi, e a fine anno un arrivo a gennaio non si poteva scrivere.
+function validaData(giorno, mese, anno, massima) {
   const g = parseInt(giorno);
   const m = parseInt(mese);
   const a = parseInt(anno);
 
-  if (g < 1 || g > 31 || m < 1 || m > 12 || a < 1900 || a > new Date().getFullYear()) {
+  if (g < 1 || g > 31 || m < 1 || m > 12 || a < 1900 || a > 2100) {
     return false;
   }
 
   const date = new Date(a, m - 1, g);
-  return date.getDate() === g && date.getMonth() === m - 1 && date.getFullYear() === a;
+  if (!(date.getDate() === g && date.getMonth() === m - 1 && date.getFullYear() === a)) return false;
+  return !massima || `${anno}-${mese}-${giorno}` <= massima;
 }
 
 function creaCustomDateInput(originalInput) {
@@ -2328,10 +2428,13 @@ function creaCustomDateInput(originalInput) {
 
   const textInput = document.createElement('input');
   textInput.type = 'text';
-  textInput.placeholder = 'GG/MM/AAAA';
+  // segnaposto nella lingua dell'ospite (prima «GG/MM/AAAA» anche in inglese e in tedesco)
+  textInput.placeholder = t('date.placeholder');
+  textInput.setAttribute('data-i18n-placeholder', 'date.placeholder');
   textInput.className = 'date-text-input form-input';
   textInput.maxLength = '10';
-  textInput.pattern = '[0-9/]*';
+  // la barra va scritta «\/»: i browser recenti leggono il pattern con le regole nuove e «[0-9/]*» era un errore in console
+  textInput.pattern = '[0-9\\/]*';
   textInput.inputMode = 'numeric';
 
   // Il campo nativo resta type="date" (serve al bottone calendario per aprire
@@ -2370,13 +2473,20 @@ function creaCustomDateInput(originalInput) {
       const mese = value.slice(2, 4);
       const anno = value.slice(4, 8);
       
-      if (validaData(giorno, mese, anno)) {
+      if (validaData(giorno, mese, anno, originalInput.max)) {
         originalInput.value = `${anno}-${mese}-${giorno}`;
         originalInput.dispatchEvent(new Event('change', { bubbles: true }));
         textInput.classList.remove('error');
       } else {
         textInput.classList.add('error');
+        originalInput.value = '';
+        // si dice subito che cosa non va (prima solo il bordo rosso): una data che esiste ma è oltre il limite è una data di nascita futura
+        showNotification(t(validaData(giorno, mese, anno) ? 'valid.dataNascitaNonValida' : 'valid.dataNonValida'), 'error');
       }
+    } else {
+      // Data cancellata o ancora da finire: il campo vero (quello che il modulo legge) non deve tenere la data di prima. Prima, scritta
+      // una data e poi cancellata o corretta a metà, si andava avanti con la data vecchia mentre a schermo c'era altro.
+      originalInput.value = '';
     }
   });
 
@@ -2390,7 +2500,7 @@ function creaCustomDateInput(originalInput) {
       const mese = pasted.slice(-6, -4);
       const giorno = pasted.slice(-8, -6);
       
-      if (validaData(giorno, mese, anno)) {
+      if (validaData(giorno, mese, anno, originalInput.max)) {
         this.value = giorno + '/' + mese + '/' + anno;
         originalInput.value = `${anno}-${mese}-${giorno}`;
         originalInput.dispatchEvent(new Event('change', { bubbles: true }));

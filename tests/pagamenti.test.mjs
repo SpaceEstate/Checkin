@@ -110,6 +110,31 @@ test('get-session ?elabora=1: solo sessioni pagate del check-in; un errore inter
   assert.ok(!JSON.stringify(r.body).includes('segretissima') && !righe.join('\n').includes('segretissima'), 'il dettaglio dell\'errore non esce né nella risposta né nei log');
 });
 
+test('get-session ?elabora=1: oltre 7 giorni dal pagamento non si rielabora (riaprendo la pagina di successo dopo la pulizia del registro l\'ospite riceveva di nuovo l\'email di benvenuto)', async () => {
+  const creata = Math.floor(NOW / 1000);
+  const x = scenario(), s = sessioneCheckin({ created: creata });
+  let r = await x.fallback(s, { now: () => NOW + 3600e3 });
+  assert.equal(r.body.elaborazione, 'completato'); assert.deepEqual(conteggi(x), [3, 1, 1]);
+  // 31 giorni dopo il registro tecnico non c'è più (pulizia giornaliera) e l'ospite riapre il link della pagina di successo
+  x.store.registri.clear();
+  r = await x.fallback(s, { now: () => NOW + 31 * 86400e3 });
+  assert.equal(r.statusCode, 200); assert.equal(r.body.elaborazione, 'non_necessaria');
+  assert.deepEqual(conteggi(x), [3, 1, 1], 'nessuna email in più, nessuna riga in più');
+  assert.equal(x.store.registri.size, 0, 'nessun registro ricreato');
+  // entro i 7 giorni la rete di sicurezza resta: webhook perso e pagina aperta qualche giorno dopo
+  const y = scenario();
+  r = await y.fallback(sessioneCheckin({ created: creata }), { now: () => NOW + 6 * 86400e3 });
+  assert.equal(r.body.elaborazione, 'completato'); assert.deepEqual(conteggi(y), [3, 1, 1]);
+  // una sessione senza data di creazione si elabora come prima
+  const z = scenario();
+  r = await z.fallback(sessioneCheckin(), { now: () => NOW + 400 * 86400e3 });
+  assert.equal(r.body.elaborazione, 'completato');
+  // dettagli e codici della pagina si leggono sempre, anche molto dopo (richiesta senza ?elabora)
+  r = fintoRes();
+  await catturaLog(() => makeSessione({ checkout: { sessions: { retrieve: async () => s } } }, { now: () => NOW + 400 * 86400e3 })(fintoReq('GET', null, {}, { session_id: s.id, lang: 'it' }), r));
+  assert.equal(r.statusCode, 200); assert.equal(r.body.dataCheckin, '2026-11-05');
+});
+
 test('get-session: un errore di Stripe non rivela il suo messaggio (può contenere parti della chiave)', async () => {
   const r = fintoRes();
   const stripeKo = { checkout: { sessions: { retrieve: async () => { throw Object.assign(new Error('Invalid API Key provided: sk_live_****abcd'), { type: 'StripeAuthenticationError' }); } } } };

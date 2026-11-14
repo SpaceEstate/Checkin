@@ -16,6 +16,31 @@ dei dati, la verifica per Alloggiati e l'invio **non cambiano** (le prove contro
 `<select>` c'è una casella di testo con l'elenco; segue anche i valori messi dal codice (la scansione, «Annulla», il cambio di Stato di
 nascita) e il cambio di lingua. Stesso schema del campo data (`creaCustomDateInput` in `checkin.js`).
 
+Dal 13/11/2026:
+
+- **il testo scritto vale anche toccando subito «Avanti»**: un tocco fuori dalla casella conferma subito quello che l'ospite stava
+  scrivendo, prima che il pulsante faccia il suo lavoro. Prima la conferma arrivava 200 ms dopo l'uscita dal campo: chi scriveva
+  «Germania» per intero e toccava «Prossimo ospite» trovava «Cittadinanza è obbligatorio», a ogni tocco. Il tocco su una voce
+  dell'elenco ha sempre la precedenza;
+- **l'elenco dei Paesi è in ordine alfabetico nella lingua dell'ospite** (prima seguiva i nomi italiani anche in inglese e in tedesco:
+  «Deutschland» stava tra «Georgien» e «Ghana»).
+
+Prove: `tests/browser/modulo.browser.cjs`.
+
+## Campo data digitabile (`creaCustomDateInput` in `checkin.js`), dal 13/11/2026
+
+- **Data di arrivo nell'anno prossimo**: si può scrivere (prima l'anno si fermava a quello in corso per tutti i campi, e a fine anno un
+  arrivo a gennaio si poteva scegliere solo dal calendario).
+- **Data cancellata o sbagliata**: il campo vero non tiene più la data di prima (prima si andava avanti con la data vecchia mentre a
+  schermo c'era altro); una data che non esiste si segnala subito con un messaggio, oltre al bordo rosso.
+- **Data di nascita**: non oltre oggi e non prima del 1900, anche sull'iPhone, dove il calendario del telefono non fa rispettare i limiti
+  (prima per gli ospiti diversi dal responsabile passava anche una data futura: età 0, esente dall'imposta).
+- Segnaposto nella lingua dell'ospite («GG/MM/AAAA», «DD/MM/YYYY», «TT/MM/JJJJ»).
+
+Nota: il campo digitabile si usa sui computer e, di fatto, su tutti i telefoni Android (`isOldAndroid` riconosce come «vecchio» ogni
+Android dalla versione 10 in poi: `/Android [0-5]/` vale anche per «Android 13»). Sull'iPhone resta il campo data del telefono. Non è
+stato cambiato: il campo digitabile su Android è quello provato finora.
+
 ## Comune di nascita con l'elenco dei comuni
 
 Il comune si scrive o si sceglie dall'elenco dei comuni; **scelto il comune, la provincia si compila da sola** (si può cambiare). Valgono

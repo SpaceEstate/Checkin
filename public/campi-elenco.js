@@ -293,9 +293,18 @@
     nativo.addEventListener('focus', () => input.focus());       // la validazione porta il fuoco sul campo nativo
     osservaValore(nativo, aggiorna);
     input.value = o.etichetta();
-    const casella = { input, nativo, aggiorna, ridisegna: () => { if (aperta()) disegna(input.value === o.etichetta() ? '' : input.value); }, conferma };
+    const casella = { input, nativo, box, aggiorna, ridisegna: () => { if (aperta()) disegna(input.value === o.etichetta() ? '' : input.value); }, conferma };
     tutti.push(casella);
+    if (tutti.length === 1) document.addEventListener('click', confermaAlTocco, true);      // con la prima casella della pagina
     return casella;
+  }
+
+  // Un tocco fuori dalla casella (per esempio su «Avanti») conferma subito il testo che l'ospite stava scrivendo, prima che il pulsante
+  // faccia il suo lavoro: la conferma all'uscita dal campo arriva 200 ms dopo (vedi sopra), e chi scriveva «Germania» per intero e
+  // toccava «Prossimo ospite» trovava «Cittadinanza è obbligatorio», a ogni tocco. Un tocco su una voce dell'elenco sta dentro la casella
+  // e non passa di qui: la scelta ha sempre la precedenza.
+  function confermaAlTocco(e) {
+    for (const c of tutti) if (!c.box.contains(e.target)) c.conferma();
   }
 
   // ---- <select>: genere, cittadinanza, Stato di nascita, provincia, tipo di documento, luogo di rilascio ----
@@ -310,6 +319,9 @@
     const trova = testo => {
       const q = norm(testo), qs = senzaSpazi(q);
       const tutte = opzioni().map(voceDi);
+      // Paesi: in ordine alfabetico nella lingua dell'ospite. Le opzioni sono nell'ordine dei nomi italiani e, tradotte, in inglese e in
+      // tedesco «Deutschland» stava tra «Georgien» e «Ghana», «United Kingdom» dopo «Qatar».
+      if (!q && stati) tutte.sort((a, b) => a.testo.localeCompare(b.testo, document.documentElement.lang || 'it'));
       if (!q) return tutte.slice(0, 400);
       return tutte.map(v => [punteggio(v.chiavi, q, qs), v]).filter(x => x[0] < Infinity)
         .sort((a, b) => a[0] - b[0] || a[1].testo.localeCompare(b[1].testo)).slice(0, MAX_VOCI).map(x => x[1]);
