@@ -3,7 +3,8 @@
 //
 // Cosa è cambiato (adeguamento GDPR, branch gdpr/checkin-semplificazione):
 //  - i dati degli ospiti vanno al foglio Google del check-in come prima (da lì lo script del gestore crea il TXT);
-//  - al gestore vanno l'immagine del documento e il PDF di riepilogo (dati solo negli allegati, mai nel corpo dell'email);
+//  - al gestore vanno l'immagine del documento (allegato) e, dal 14/11/2026, il riepilogo dei dati nel testo dell'email (il PDF di riepilogo
+//    non si crea più, nessun servizio esterno lo genera);
 //  - i dati temporanei si leggono direttamente dal database (prima: chiamata HTTP all'URL di produzione con
 //    INTERNAL_API_SECRET, che dalle preview puntava comunque alla produzione) e si cancellano appena non servono;
 //  - se un passo fallisce per un motivo temporaneo il webhook risponde 500 e Stripe ritenta: ogni passo è idempotente,
@@ -15,7 +16,6 @@ import { pgStore } from './_db.js';
 import { elaboraCheckin } from './_elabora-checkin.js';
 import { inviaImmaginiAlGestore } from './_email-gestore.js';
 import { salvaSuSheet } from './_sheet-checkin.js';
-import { generaPdfRiepilogo } from './_pdf-riepilogo.js';
 import { eSessioneCheckin } from './_sessione-checkin.js';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
@@ -57,7 +57,6 @@ export function dipendenzeProduzione(requestId) {
     env: process.env,
     fetch: (...a) => globalThis.fetch(...a),
     salvaSuSheet,
-    generaPdfRiepilogo,
     inviaEmailOspite: inviaEmailOspiteHttp,
     inviaEmailGestore: inviaImmaginiAlGestore,
     log: msg => console.log(`[${requestId}] ${msg}`)

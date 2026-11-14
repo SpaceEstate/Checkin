@@ -2844,3 +2844,8 @@ html.dispositivo-pc .camera-group {
   white-space: nowrap;
   border: 0;
 }
+
+/* Titolo del passo che riceve il fuoco al cambio di passo (checkin.js, mostraStepCorrente): senza il riquadro di fuoco dei campi */
+.step-title:focus {
+  outline: none;
+}

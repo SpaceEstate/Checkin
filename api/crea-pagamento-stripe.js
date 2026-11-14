@@ -1,5 +1,5 @@
 import Stripe from "stripe";
-import { leggiRighePrenotazioni, trovaPerDataEAppartamento } from "./verifica-prenotazione.js";
+import { leggiRighePrenotazioni, trovaPerDataEAppartamento, cercaPrenotazione } from "./verifica-prenotazione.js";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -60,20 +60,36 @@ export function chiavePubblicabile(env = process.env) {
 // (webhook, get-session, pagina di Stripe) resta com'era.
 export const VERSIONE_API_NELLA_PAGINA = '2026-08-26.dahlia';
 
-// Check-in senza numero («Non ho il numero di prenotazione»): il numero si cerca nel foglio Prenotazioni per data di arrivo e appartamento
-// (trovaPerDataEAppartamento). Al massimo 5 secondi: se il foglio non risponde si paga lo stesso, senza numero.
-async function numeroDaFoglio(dataCheckin, appartamento, notti, env) {
-  if (!(env.GOOGLE_CLIENT_EMAIL && env.GOOGLE_PRIVATE_KEY && (env.SHEET_ID_PRENOTAZIONI || env.SHEET_ID))) return '';      // foglio non configurato
-  let timer;
-  const tempo = new Promise(ok => { timer = setTimeout(() => ok(null), 5000); });
-  try {
-    const rows = await Promise.race([leggiRighePrenotazioni(env), tempo]);
-    return rows ? trovaPerDataEAppartamento(rows, dataCheckin, appartamento, notti) : '';
-  } catch (e) { console.warn('numero dal foglio non trovato: ' + (e && (e.code || e.name) || 'errore')); return ''; }
-  finally { clearTimeout(timer); }
+// Righe del foglio Prenotazioni per questa richiesta (lette una volta sola, al massimo 5 secondi). null se il foglio non è configurato, non
+// risponde o dà errore: chi le usa prosegue come se il foglio non ci fosse, il pagamento non si blocca mai per il foglio.
+function righePrenotazioni(env) {
+  let promessa = null;
+  return () => promessa || (promessa = (async () => {
+    if (!(env.GOOGLE_CLIENT_EMAIL && env.GOOGLE_PRIVATE_KEY && (env.SHEET_ID_PRENOTAZIONI || env.SHEET_ID))) return null;      // foglio non configurato
+    let timer;
+    const tempo = new Promise(ok => { timer = setTimeout(() => ok(null), 5000); });
+    try { return (await Promise.race([leggiRighePrenotazioni(env), tempo])) || null; }
+    catch (e) { console.warn('foglio prenotazioni non letto: ' + (e && (e.code || e.name) || 'errore')); return null; }
+    finally { clearTimeout(timer); }
+  })());
 }
 
-// `stripe` è un parametro per poterlo sostituire nei test (nessuna chiamata reale a Stripe); deps.cercaNumero idem (foglio Prenotazioni)
+// Check-in senza numero («Non ho il numero di prenotazione»): il numero si cerca nel foglio Prenotazioni per data di arrivo e appartamento
+// (trovaPerDataEAppartamento). Se il foglio non risponde si paga lo stesso, senza numero.
+async function numeroDaFoglio(dataCheckin, appartamento, notti, righe) {
+  const rows = await righe();
+  return rows ? trovaPerDataEAppartamento(rows, dataCheckin, appartamento, notti) : '';
+}
+
+// Il numero scritto dall'ospite si ricontrolla nel foglio (14/11/2026): true se c'è e non è annullata, false se non c'è (o è annullata),
+// null se il foglio non risponde. Prima si guardava solo la forma del numero: chiunque pagasse poteva portare nel pagamento il numero di
+// un'altra prenotazione, e il sito di La Columbera avrebbe segnato per quella il check-in come fatto.
+async function numeroNelFoglio(numero, righe) {
+  const rows = await righe();
+  return rows ? !!cercaPrenotazione(rows, numero) : null;
+}
+
+// `stripe` è un parametro per poterlo sostituire nei test (nessuna chiamata reale a Stripe); deps.cercaNumero e deps.numeroNelFoglio idem (foglio Prenotazioni)
 async function gestisciRichiesta(stripe, req, res, env = process.env, deps = {}) {
   res.setHeader("Access-Control-Allow-Origin", "https://spaceestate.github.io");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
@@ -158,9 +174,13 @@ async function gestisciRichiesta(stripe, req, res, env = process.env, deps = {})
     // Il numero della prenotazione va nel pagamento (e nell'oggetto dell'email al gestore): quello verificato dall'ospite nel primo passo,
     // altrimenti quello trovato nel foglio per data di arrivo e appartamento (numeroDa = 'foglio'). Il sito di La Columbera lo legge dal
     // pagamento e segna il check-in come fatto nell'area clienti.
+    const righe = righePrenotazioni(env);
     let numero = numeroPrenotazioneValido(numeroPrenotazione), numeroDa = numero ? 'ospite' : '';
+    // un numero che nel foglio non c'è (inventato o di una prenotazione annullata) non si porta nel pagamento: si cerca per data e appartamento.
+    // Foglio che non risponde: si tiene il numero dell'ospite, come prima.
+    if (numero && (await Promise.resolve().then(() => (deps.numeroNelFoglio || (n => numeroNelFoglio(n, righe)))(numero)).catch(() => null)) === false) { numero = ''; numeroDa = ''; }
     if (!numero) {
-      numero = numeroPrenotazioneValido(await (deps.cercaNumero || ((d, a, n) => numeroDaFoglio(d, a, n, env)))(dataCheckin, appartamento, numeroNotti).catch(() => ''));
+      numero = numeroPrenotazioneValido(await (deps.cercaNumero || ((d, a, n) => numeroDaFoglio(d, a, n, righe)))(dataCheckin, appartamento, numeroNotti).catch(() => ''));
       if (numero) numeroDa = 'foglio';
     }
     const metadata = {

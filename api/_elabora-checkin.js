@@ -5,7 +5,8 @@
 //   1. email di benvenuto all'ospite (codici cassetta) — invariata nei contenuti, ma riceve solo i dati che le servono;
 //   2. invio dei dati al foglio Google del check-in (SHEET_ID), da cui lo script del gestore crea il TXT Alloggiati
 //      (ripristinato su richiesta del gestore: il salvataggio diretto su Drive non è possibile con l'account di servizio);
-//   3. email al gestore con l'immagine del documento e il PDF di riepilogo dei dati (ripristinato su richiesta del gestore);
+//   3. email al gestore con l'immagine del documento e, nel testo, il riepilogo dei dati inseriti (dal 14/11/2026, richiesta del titolare:
+//      il PDF di riepilogo non si crea più, il suo contenuto sta nel corpo dell'email);
 //   4. eliminazione dei dati temporanei (anagrafiche + immagini) appena i dati sono nel foglio e l'email al gestore è partita.
 // Se un passo fallisce per un motivo temporaneo (rete, Google, SMTP) il risultato è "da_ripetere": il webhook
 // risponde con errore e Stripe ritenta più tardi. I dati temporanei restano al massimo TTL_DOPO_PAGAMENTO_MS dal primo
@@ -13,7 +14,7 @@
 // Nessun invio ad Alloggiati Web da questo sistema. Nessun log con dati personali.
 import crypto from 'crypto';
 import { descriviErroreEmail } from './_email-gestore.js';
-import { righeSheet, sheetConfigurato } from './_sheet-checkin.js';
+import { righeSheet, sheetConfigurato, calcolaEta } from './_sheet-checkin.js';
 
 export const TTL_PRIMA_DEL_PAGAMENTO_MS = 2 * 3600e3;    // checkout Stripe scade dopo 30 minuti: 2 ore bastano
 export const TTL_DOPO_PAGAMENTO_MS = 72 * 3600e3;        // finestra massima per i nuovi tentativi (Stripe ritenta fino a ~3 giorni)
@@ -32,7 +33,7 @@ function descriviStatoSheet(reg) {
   }
 }
 
-// deps = { store, env, now, salvaSuSheet(righe, env), inviaEmailOspite(payload), inviaEmailGestore(args), generaPdfRiepilogo(args), log }
+// deps = { store, env, now, salvaSuSheet(righe, env), inviaEmailOspite(payload), inviaEmailGestore(args), log }
 export async function elaboraCheckin(session, deps) {
   const { store, env } = deps;
   const now = deps.now || (() => Date.now());
@@ -103,23 +104,26 @@ export async function elaboraCheckin(session, deps) {
       }
     }
 
-    // 3. email al gestore: immagini del documento + PDF di riepilogo (se il PDF fallisce, l'email parte comunque)
+    // 3. email al gestore: immagini del documento in allegato e, nel testo, i dati di tutti gli ospiti (il contenuto del vecchio PDF)
     if (!TERMINALI_EMAIL.includes(reg.email_gestore_stato)) {
       const dest = env.EMAIL_PROPRIETARIO;
       if (!dest) await aggiorna({ email_gestore_stato: 'non_configurata' });
       else if (!dati) await aggiorna({ email_gestore_stato: 'dati_non_disponibili' });
       else {
         try {
-          const generaPdf = deps.generaPdfRiepilogo ? allegati => deps.generaPdfRiepilogo({ dati, metadata, allegati, env, oggi: new Date(now()) }) : undefined;
           const resp = Array.isArray(dati.ospiti) ? dati.ospiti.find(o => o.numero === 1) : null;
+          // ospiti in ordine, con l'età di oggi (stessa regola del foglio): sono i dati che il gestore confronta con il documento
+          const oggi = new Date(now());
+          const ospitiDettaglio = Array.isArray(dati.ospiti) ? dati.ospiti.slice().sort((a, b) => (a.numero || 0) - (b.numero || 0))
+            .map(o => Object.assign({}, o, { eta: calcolaEta(o.nascita, oggi), isResponsabile: o.numero === 1 || o.isResponsabile === true })) : [];
           const riepilogo = {
             dataCheckin: metadata.dataCheckin || dati.dataCheckin || '', appartamento: metadata.appartamento || dati.appartamento || '',
             ospiti: parseInt(metadata.numeroOspiti, 10) || dati.numeroOspiti || 0, registrati: Array.isArray(dati.ospiti) ? dati.ospiti.length : 0,
             notti: parseInt(metadata.numeroNotti, 10) || dati.numeroNotti || 0, totale: parseFloat(metadata.totale) || 0,
             responsabile: resp ? [resp.nome, resp.cognome].filter(Boolean).join(' ') : '',
-            numeroPrenotazione: metadata.numeroPrenotazione || '', numeroDa: metadata.numeroDa || ''
+            numeroPrenotazione: metadata.numeroPrenotazione || '', numeroDa: metadata.numeroDa || '', ospitiDettaglio
           };
-          await deps.inviaEmailGestore({ documenti: dati.documenti, riferimento: riferimentoBreve(checkinId), statoTxt: descriviStatoSheet(reg), destinatario: dest, env, generaPdf, riepilogo });
+          await deps.inviaEmailGestore({ documenti: dati.documenti, riferimento: riferimentoBreve(checkinId), statoTxt: descriviStatoSheet(reg), destinatario: dest, env, riepilogo });
           await aggiorna({ email_gestore_stato: 'inviata' });
           log('email gestore: inviata');
         } catch (e) {

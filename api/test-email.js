@@ -75,9 +75,9 @@ export default async function handler(req, res) {
     console.log('👥 Ospiti:', datiPrenotazioneTest.numeroOspiti);
     console.log('📎 Documenti:', datiPrenotazioneTest.documenti.length);
 
-    // TEST 1: Email al gestore — SOLO immagine del documento (sostituisce il vecchio test PDF di genera-pdf-email,
-    // rimosso con l'adeguamento GDPR). L'immagine è SINTETICA (quadrato grigio generato qui), nessun documento reale.
-    console.log('\n📧 TEST 1: Email gestore con sola immagine documento (sintetica)...');
+    // TEST 1: Email al gestore — immagine del documento in allegato e dati degli ospiti nel testo (dal 14/11/2026 il PDF di riepilogo non
+    // si crea più). L'immagine è SINTETICA (quadrato grigio generato qui) e i dati sono di fantasia: nessun documento né persona reale.
+    console.log('\n📧 TEST 1: Email gestore con immagine sintetica e dati di fantasia nel testo...');
     const test1Start = Date.now();
     try {
       if (!process.env.EMAIL_PROPRIETARIO) {
@@ -88,7 +88,12 @@ export default async function handler(req, res) {
         riferimento: 'TEST',
         statoTxt: 'test: nessun TXT generato',
         destinatario: process.env.EMAIL_PROPRIETARIO,
-        env: process.env
+        env: process.env,
+        riepilogo: {
+          dataCheckin: datiPrenotazioneTest.dataCheckin, appartamento: datiPrenotazioneTest.appartamento, ospiti: datiPrenotazioneTest.numeroOspiti,
+          registrati: datiPrenotazioneTest.ospiti.length, notti: datiPrenotazioneTest.numeroNotti, totale: datiPrenotazioneTest.totale,
+          responsabile: 'Mario Rossi', numeroPrenotazione: 'PROVA', numeroDa: 'ospite', ospitiDettaglio: datiPrenotazioneTest.ospiti
+        }
       });
       const test1Time = Date.now() - test1Start;
       results.tests.push({ test: 'Email Gestore (solo immagine)', status: 'SUCCESS', executionTime: `${test1Time}ms`, response: result1 });

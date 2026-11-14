@@ -17,7 +17,7 @@
   <title>Check-in Ospiti · La Columbera</title>
 
   <link rel="stylesheet" href="fonts.css?v=20261102b">
-  <link rel="stylesheet" href="checkin.css?v=20261107b">
+  <link rel="stylesheet" href="checkin.css?v=20261114a">
 
   <!-- Preconnect solo al backend del check-in. Niente preconnect verso Stripe: Stripe.js si carica solo quando l'ospite preme
        «Continua al pagamento» e il browser non deve collegarsi a server di terzi prima che l'ospite scelga di pagare. -->
@@ -176,7 +176,7 @@
 
           <div class="privacy-section">
             <!-- Informativa breve (art. 13 GDPR) sui trattamenti del check-in; testo completo su privacy.html del sito -->
-            <p class="privacy-info" data-i18n="stepFinal.infoBreve">In breve: i dati di tutti gli ospiti servono per la comunicazione obbligatoria alla Questura (portale Alloggiati Web) e, con le date di nascita, per calcolare l&#39;imposta di soggiorno; il pagamento avviene con Stripe, che riceve direttamente i dati della carta. Per controllare i dati, il gestore riceve via email l&#39;immagine del documento e un riepilogo in PDF (generato dal servizio esterno Browserless, su server negli Stati Uniti): queste copie e il foglio di lavoro vengono cancellati entro 24 ore dalla registrazione su Alloggiati Web. I dati non sono usati per altri scopi. Questa conferma non è un consenso: serve solo a dichiarare che hai letto l&#39;informativa.</p>
+            <p class="privacy-info" data-i18n="stepFinal.infoBreve">In breve: i dati di tutti gli ospiti servono per la comunicazione obbligatoria alla Questura (portale Alloggiati Web) e, con le date di nascita, per calcolare l&#39;imposta di soggiorno; il pagamento avviene con Stripe, che riceve direttamente i dati della carta. Per controllare i dati, il gestore riceve via email l&#39;immagine del documento e un riepilogo dei dati inseriti: queste copie e il foglio di lavoro vengono cancellati entro 24 ore dalla registrazione su Alloggiati Web. I dati non sono usati per altri scopi. Questa conferma non è un consenso: serve solo a dichiarare che hai letto l&#39;informativa.</p>
             <!-- Presa visione dell'informativa: NON è un consenso, non viene inviata al server né registrata -->
             <div class="privacy-checkbox">
               <input type="checkbox" id="privacy-presa-visione" name="privacy-presa-visione" class="privacy-input" required>
@@ -249,8 +249,8 @@
     <p class="page-privacy"><a href="https://la-columbera.vercel.app/privacy.html" target="_blank" rel="noopener noreferrer" data-i18n="footer.privacy" data-testid="checkin-footer-privacy">Informativa privacy</a></p>
   </div>
 
-  <script src="i18n.js?v=20261113a"></script>
-  <script src="checkin.js?v=20261113a"></script>
+  <script src="i18n.js?v=20261114a"></script>
+  <script src="checkin.js?v=20261114a"></script>
   <script src="campi-elenco.js?v=20261113a"></script>
   <script src="fotocamera.js?v=20261107a"></script>
 </body>

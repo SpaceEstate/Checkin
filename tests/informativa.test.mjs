@@ -44,7 +44,12 @@ test('testi: chiavi nuove presenti in it/en/de; informativa breve coerente con i
     assert.ok(UI[l] && typeof UI[l][k] === 'string' && UI[l][k].length > 0, l + ': ' + k);
   const it = UI.it;
   assert.ok(!/accett|consenso/i.test(it['notif.privacyAccettata'] + it['notif.privacyRichiesta'] + it['stepFinal.privacyText']), 'nessun "accetto"/"consenso" per una presa visione');
-  for (const w of ['Questura', 'imposta di soggiorno', 'Stripe', 'Browserless', 'Stati Uniti', '24 ore', 'non è un consenso']) assert.ok(it['stepFinal.infoBreve'].includes(w), 'informativa breve: ' + w);
+  for (const w of ['Questura', 'imposta di soggiorno', 'Stripe', '24 ore', 'non è un consenso']) assert.ok(it['stepFinal.infoBreve'].includes(w), 'informativa breve: ' + w);
+  // 14/11/2026: il PDF di riepilogo non si crea più, nessun servizio esterno (Browserless) lo genera né riceve i dati: l'informativa breve non
+  // lo nomina più, in nessuna lingua (e il gestore riceve «un riepilogo dei dati inseriti» nel testo dell'email)
+  for (const l of ['it', 'en', 'de']) assert.ok(!/Browserless|PDF|Stati Uniti|United States|USA/.test(UI[l]['stepFinal.infoBreve']), l + ': informativa breve senza PDF né Browserless');
+  assert.ok(/riepilogo dei dati inseriti/.test(it['stepFinal.infoBreve']) && /summary of the data entered/.test(UI.en['stepFinal.infoBreve']) && /Zusammenfassung der eingegebenen Daten/.test(UI.de['stepFinal.infoBreve']));
+  assert.ok(!/Browserless|PDF/.test(read('index.html').slice(read('index.html').indexOf('privacy-info'), read('index.html').indexOf('privacy-info') + 1200)), 'index.html: testo di riserva dell\'informativa breve senza PDF né Browserless');
   assert.ok(/non sostituisce/i.test(it['guest.documentoAvvisoIdentita']), "l'immagine non sostituisce il controllo del documento originale");
 });
 

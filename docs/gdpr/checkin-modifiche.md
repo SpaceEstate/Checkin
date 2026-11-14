@@ -4,6 +4,17 @@ Branch `gdpr/checkin-semplificazione`. È il primo di tre interventi: 1) check-i
 
 Il documento descrive cosa fa il codice. Non attesta la conformità al GDPR: per questo servono anche le verifiche organizzative, contrattuali e sugli account reali elencate più sotto.
 
+## ⚠️ Aggiornamento 14/11/2026 — il PDF di riepilogo non si crea più (richiesta del titolare)
+
+Questa sezione ha la precedenza su tutto ciò che il documento dice del PDF e di Browserless (§ 2, § 4, § 6 e gli aggiornamenti del 27/10 e dell'intervento 3).
+
+- **Il PDF di riepilogo non si crea più.** Il modulo `api/_pdf-riepilogo.js`, l'azione admin `prova-pdf` e ogni chiamata a **Browserless** sono stati **rimossi** dal codice. Nessun servizio esterno riceve più i dati anagrafici degli ospiti per generare un documento.
+- **Il contenuto del PDF sta nel testo dell'email al gestore** (`api/_email-gestore.js`, `componiEmail`): dettagli del soggiorno e, per ogni ospite, cognome e nome, genere, data di nascita (con età e «tassabile»/«esente»), cittadinanza, luogo di nascita, comune e provincia; per il responsabile anche tipo, numero e luogo di rilascio del documento. In allegato restano **solo le immagini del documento** (fronte ed eventuale retro), con i nomi generici di sempre.
+- **Cosa cambia per la privacy.** Prima i dati degli altri ospiti stavano solo in un allegato PDF; ora stanno nel **corpo** dell'email, quindi si vedono anche nelle anteprime e nelle notifiche del programma di posta. L'**oggetto** continua a non portare dati personali (solo numero di prenotazione, appartamento, data e riferimento tecnico). Il percorso resta quello di prima (server SMTP di Gmail: nessun fornitore in più, uno in meno). Il promemoria in fondo all'email chiede ancora di eliminarla, con gli allegati, anche da Posta inviata e Cestino dopo la registrazione su Alloggiati Web.
+- **Informativa breve del modulo** (`stepFinal.infoBreve`, it/en/de): non nomina più Browserless né i «server negli Stati Uniti»; dice che il gestore riceve «l'immagine del documento e un riepilogo dei dati inseriti» e che le copie si cancellano entro 24 ore dalla registrazione su Alloggiati Web. **L'informativa completa del sito** (`privacy.html` nel repository LaColumbera) nomina ancora Browserless e va allineata: non è in questo repository.
+- **Variabili su Vercel:** `BROWSERLESS_API_TOKEN` e `BROWSERLESS_URL` non servono più e si possono togliere (non l'ho fatto: sono configurazione di produzione).
+- **Account Browserless:** i dati già inviati in passato restano nel loro sistema secondo le sue regole; va valutata la cancellazione dell'account o dei dati.
+
 ## ⚠️ Aggiornamento intervento 3 (branch `gdpr/informativa`) — cosa vale oggi
 
 Questa sezione corregge le parti del documento non più attuali. Le ho verificate sul codice di `main` (commit `431feb0`).

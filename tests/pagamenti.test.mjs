@@ -10,7 +10,6 @@ import { makeHandler as makeSessione } from '../api/get-session.js';
 import { makeHandler as makePagamento, urlAmmesso, numeroPrenotazioneValido, chiavePubblicabile } from '../api/crea-pagamento-stripe.js';
 import { cercaPrenotazione, trovaPerDataEAppartamento } from '../api/verifica-prenotazione.js';
 import { elaboraCheckin, checkinIdDa } from '../api/_elabora-checkin.js';
-import { urlBrowserless } from '../api/_pdf-riepilogo.js';
 import { requireApi, memStore, fintoRes, fintoReq, checkinFamiglia, catturaLog, NOW, ENV_DRIVE } from './helpers.mjs';
 
 const Stripe = requireApi('stripe');
@@ -31,7 +30,6 @@ function scenario() {
   const store = memStore(), ospite = [], gestore = [], foglio = [];
   const deps = {
     store, env: ENV, now: () => NOW,
-    generaPdfRiepilogo: async () => ({ filename: 'checkin.pdf', content: Buffer.from('%PDF-1.4 finto'), contentType: 'application/pdf' }),
     salvaSuSheet: async righe => { foglio.push(...JSON.parse(JSON.stringify(righe))); },
     inviaEmailOspite: async p => { ospite.push(JSON.parse(JSON.stringify(p))); return { success: true }; },
     inviaEmailGestore: async a => { gestore.push(a.riferimento); },
@@ -243,21 +241,44 @@ test('check-in senza numero («Non ho il numero di prenotazione»): il numero si
   assert.equal(r.statusCode, 200); assert.ok(!('numeroPrenotazione' in creata.metadata) && !('numeroDa' in creata.metadata));
 });
 
+test('pagamento: il numero scritto dall\'ospite si ricontrolla nel foglio Prenotazioni; se non c\'è (o è annullata) non va nel pagamento e si cerca per data e appartamento; foglio che non risponde: si tiene come prima', async () => {
+  const riga = v => ({ get: k => v[k] });
+  const rows = [riga({ 'Numero Prenotazione': 'HMSEDESZCW', STATO: 'CONFERMATA', 'Data Check-in': '2026-10-30', Appartamento: 'La Columbera - Torre', 'Numero Notti': '2' }),
+    riga({ 'Numero Prenotazione': 'ANNUL123', STATO: 'ANNULLATA', 'Data Check-in': '2026-10-31', Appartamento: 'La Columbera - Torre', 'Numero Notti': '2' }),
+    riga({ 'Numero Prenotazione': 'ALTRA999', STATO: 'CONFERMATA', 'Data Check-in': '2026-12-01', Appartamento: 'La Columbera - Torre', 'Numero Notti': '3' })];
+  let creata = null, abbinamenti = 0, controlli = 0;
+  const fintoStripe = { checkout: { sessions: { create: async p => { creata = p; return { id: 'cs_test_x', url: 'https://checkout.stripe.invalid/x' }; } } } };
+  const deps = (over) => Object.assign({ numeroNelFoglio: async n => { controlli++; return !!cercaPrenotazione(rows, n); },
+    cercaNumero: async (d, a, n) => { abbinamenti++; return trovaPerDataEAppartamento(rows, d, a, n); } }, over || {});
+  const d = Object.assign(checkinFamiglia(), { dataCheckin: '2026-10-30', appartamento: 'La Columbera - Torre, Appartamento con 2 camere da letto', numeroNotti: 2 });
+  const paga = async (extra, dd) => { const r = fintoRes(); await catturaLog(() => makePagamento(fintoStripe, undefined, dd)(fintoReq('POST', Object.assign({}, d, extra)), r)); assert.equal(r.statusCode, 200); return [creata.metadata.numeroPrenotazione, creata.metadata.numeroDa]; };
+  // numero che c'è: vale, anche scritto a gruppi; il foglio non si interroga una seconda volta per l'abbinamento
+  assert.deepEqual(await paga({ numeroPrenotazione: 'HMSEDESZCW' }, deps()), ['HMSEDESZCW', 'ospite']);
+  assert.deepEqual([controlli, abbinamenti], [1, 0]);
+  // numero di un'altra prenotazione che esiste: è sempre una prenotazione del foglio, vale (non si confronta con la data: la verifica del primo passo ha già bloccato i campi)
+  assert.deepEqual(await paga({ numeroPrenotazione: 'ALTRA999' }, deps()), ['ALTRA999', 'ospite']);
+  // numero inventato: non va nel pagamento; per data e appartamento si trova quello vero
+  assert.deepEqual(await paga({ numeroPrenotazione: 'INVENTATO1' }, deps()), ['HMSEDESZCW', 'foglio']);
+  assert.equal(abbinamenti, 1);
+  // numero di una prenotazione annullata: come inventato (qui per data e appartamento non c'è nulla: nessun numero)
+  assert.deepEqual(await paga({ numeroPrenotazione: 'ANNUL123', dataCheckin: '2026-10-31' }, deps()), [undefined, undefined]);
+  // foglio che non risponde o dà errore: si tiene il numero dell'ospite, il pagamento non si blocca
+  assert.deepEqual(await paga({ numeroPrenotazione: 'HMSEDESZCW' }, deps({ numeroNelFoglio: async () => null })), ['HMSEDESZCW', 'ospite']);
+  assert.deepEqual(await paga({ numeroPrenotazione: 'HMSEDESZCW' }, deps({ numeroNelFoglio: async () => { throw new Error('giù'); } })), ['HMSEDESZCW', 'ospite']);
+  // senza numero non si ricontrolla nulla
+  const prima = controlli;
+  await paga({}, deps());
+  assert.equal(controlli, prima);
+  // la lettura vera: foglio non configurato (nei test non ci sono le credenziali di Google) = numero tenuto, nessuna rete
+  assert.deepEqual(await paga({ numeroPrenotazione: 'QUALSIASI1' }, undefined), ['QUALSIASI1', 'ospite']);
+});
+
 test('verifica prenotazione: il numero si trova anche scritto con spazi, punti o trattini e in minuscolo; prima vale la corrispondenza esatta', () => {
   const riga = n => ({ get: k => k === 'Numero Prenotazione' ? n : '' });
   const rows = [riga('558RTE56487A9'), riga(6877180932), riga('HM-ABC123'), riga('HMABC123')];
   for (const [n, i] of [['558RTE56487A9', 0], ['558r te56 487a9', 0], ['6877.180.932', 1], ['6877180932', 1], [' hm-abc123 ', 2], ['HMABC123', 3]]) assert.equal(cercaPrenotazione(rows, n), rows[i], n);
   for (const n of ['558RTE56487A', 'XX', '--']) assert.equal(cercaPrenotazione(rows, n), undefined, n);
   assert.equal(cercaPrenotazione(rows, 'hm abc123'), undefined, 'due righe possibili (HM-ABC123 e HMABC123): non si indovina');
-});
-
-test('Browserless: di serie Amsterdam (UE); Londra o San Francisco solo se indicati; qualsiasi altro indirizzo è ignorato (i dati non vanno altrove)', () => {
-  assert.equal(urlBrowserless({}), 'https://production-ams.browserless.io');
-  assert.equal(urlBrowserless({ BROWSERLESS_URL: 'https://production-sfo.browserless.io' }), 'https://production-sfo.browserless.io');
-  assert.equal(urlBrowserless({ BROWSERLESS_URL: 'https://production-ams.browserless.io' }), 'https://production-ams.browserless.io');
-  assert.equal(urlBrowserless({ BROWSERLESS_URL: ' https://production-lon.browserless.io/ ' }), 'https://production-lon.browserless.io');
-  for (const v of ['https://evil.example', 'http://production-ams.browserless.io', 'https://production-ams.browserless.io.evil.example', 'https://production-ams.browserless.io/x', 'ams'])
-    assert.equal(urlBrowserless({ BROWSERLESS_URL: v }), 'https://production-ams.browserless.io', v);
 });
 
 // ---- Pagamento nella pagina, lato browser (checkin.js) ----

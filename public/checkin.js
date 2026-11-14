@@ -202,6 +202,13 @@ function mostraStepCorrente() {
   if (stepToShow) {
     stepToShow.classList.add('active');
     stepToShow.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // Il fuoco passa al titolo del passo nuovo: il pulsante appena premuto sparisce con il passo vecchio e il fuoco finiva su <body>, quindi
+    // chi usa la tastiera o un lettore di schermo ripartiva dall'inizio della pagina. Senza scorrimento (c'è già quello morbido qui sopra).
+    const titolo = stepToShow.querySelector('.step-title');
+    if (titolo) {
+      if (!titolo.hasAttribute('tabindex')) titolo.setAttribute('tabindex', '-1');
+      try { titolo.focus({ preventScroll: true }); } catch (e) { /* senza fuoco: com'era */ }
+    }
   }
   aggiornaProgressBar();
 }
@@ -1451,6 +1458,24 @@ window.handleFileUpload = function(input, ospiteNum, lato) {
   if (file) notificaLatoCaricato(ospiteNum, latoEffettivo);
 }
 
+// PDF troppo grande (14/11/2026): un PDF non si comprime, e oltre LIMITE_PDF_KB l'invio dei dati lo rifiuta («il file del documento è troppo
+// grande anche dopo compressione»). Prima lo si scopriva solo premendo «Continua al pagamento», dopo aver compilato tutti i passi. Ora il
+// PDF si rifiuta alla scelta, con il limite scritto, come gli altri file non adatti (stesso aggiornamento del riquadro). Il controllo sta
+// qui, prima di handleFileUpload (ascolto in fase di cattura sulla pagina): il file troppo grande non arriva a quella funzione.
+const LIMITE_PDF_KB = 900;      // lo stesso limite di raccogliDatiPrenotazioneConCompressione (900 KB dopo la compressione)
+document.addEventListener('change', function(e) {
+  const input = e.target;
+  if (!input || !input.classList || !input.classList.contains('upload-input') || input.type !== 'file') return;
+  const file = input.files && input.files[0];
+  if (!file || file.type !== 'application/pdf' || file.size <= LIMITE_PDF_KB * 1024) return;
+  e.stopImmediatePropagation();
+  const dimensioneKB = Math.round(file.size / 1024);
+  input.value = '';
+  const m = /^ospite(\d+)_documento_(fronte|retro)$/.exec(input.id || '');
+  if (m) { aggiornaLabelUpload(parseInt(m[1], 10), m[2]); aggiornaStatoDocumenti(parseInt(m[1], 10)); }
+  showNotification(t('notif.pdfTroppoGrande', { size: dimensioneKB, max: LIMITE_PDF_KB }), 'error');
+}, true);
+
 // La ✕ in alto a destra di un lato caricato (06/11/2026, richiesta del titolare): toglie il file sbagliato senza doverne scegliere
 // un altro. Il riquadro torna com'era prima del caricamento (etichetta, contatore dei file); la ✕ si vede solo con un file
 // (classe «completo», checkin.css). Con la scansione accesa si tolgono anche i dati letti da quel lato (scansione-documento.js).
@@ -2316,15 +2341,17 @@ document.addEventListener('click', e => {
 });
 
 function gestisciRitornoStripe() {
-  const urlParams = new URLSearchParams(window.location.search);
-  const canceled = urlParams.get('canceled');
+  // «?canceled=true» è aggiunto in fondo all'indirizzo della pagina: se la pagina era stata aperta con altri parametri (un link di un'app,
+  // «?fbclid=…») resta dopo un secondo «?» («?fbclid=abc?canceled=true») e URLSearchParams non lo vede. Si riconosce in tutti e due i modi
+  // e si toglie lasciando gli altri parametri. Prima, in quel caso, l'avviso «Pagamento annullato» non compariva.
+  const ricerca = window.location.search;
+  const annullato = /(?:^|[?&])canceled=true(?=&|$)/.test(ricerca);
   
-  if (canceled === 'true') {
+  if (annullato) {
     console.log("👈 Pagamento annullato");
     showNotification(t('notif.pagamentoAnnullato'), 'info');
-    const url = new URL(window.location);
-    url.searchParams.delete('canceled');
-    window.history.replaceState({}, document.title, url.toString());
+    const pulita = ricerca.replace(/([?&])canceled=true(&|$)/, (m, apertura, dopo) => (dopo === '&' ? apertura : '')).replace(/[?&]$/, '');
+    window.history.replaceState({}, document.title, window.location.pathname + pulita + window.location.hash);
     const payButton = document.querySelector('.btn-payment');
     if (payButton) {
       payButton.disabled = false;

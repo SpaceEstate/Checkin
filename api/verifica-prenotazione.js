@@ -50,9 +50,16 @@ function normalizzaDataISO(valore) {
   return null;
 }
 
+// Prenotazione annullata (colonna STATO del foglio): come nell'abbinamento per data e appartamento (trovaPerDataEAppartamento) e sul sito di
+// La Columbera, non è più una prenotazione. Prima il suo numero si verificava lo stesso, precompilava il check-in e portava al pagamento e
+// al codice della cassetta (14/11/2026).
+const annullata = row => String(row.get('STATO') || '').trim().toUpperCase() === 'ANNULLATA';
+
 // Cerca la riga della prenotazione (case-insensitive, trim degli spazi); poi anche senza spazi, punti e trattini, come la scrive l'ospite:
 // Booking mostra "6877.180.932", la mail di La Columbera il codice a gruppi "558R TE56 487A9". Se così le righe sono più di una, nessuna.
-export function cercaPrenotazione(rows, numeroPrenotazione) {
+// Le prenotazioni annullate non si trovano: con lo stesso numero scritto su due righe (annullata e poi riprenotata) vale quella attiva.
+export function cercaPrenotazione(tutte, numeroPrenotazione) {
+  const rows = tutte.filter(row => !annullata(row));
   const numeroNormalizzato = String(numeroPrenotazione).trim().toUpperCase();
   const esatta = rows.find(row => (row.get('Numero Prenotazione') || '').toString().trim().toUpperCase() === numeroNormalizzato);
   if (esatta) return esatta;

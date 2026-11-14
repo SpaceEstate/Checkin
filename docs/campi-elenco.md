@@ -128,3 +128,23 @@ scansione spenta, si vede solo con un file, piccola in alto a destra, toglie il 
 e la foto del fronte al loro posto, anche con la fotocamera del retro aperta dopo lo scatto; una sola voce nella cronologia per fronte e
 retro; dopo la ✕ e dopo l'ultimo scatto nessuna voce in più, la pagina fatta scorrere dopo l'ultimo scatto resta lì, e un altro
 «indietro» porta alla pagina di prima.
+
+## Altre correzioni del modulo, 14/11/2026
+
+Seguono l'analisi del 13/11/2026; ognuna ha la sua prova in `tests/browser/modulo.browser.cjs`. Nessuna delle 24 funzioni storiche di
+`tests/scansione-dom.mjs` (`FUNZIONI_INVARIATE`) è stata toccata: i nuovi controlli stanno fuori da quelle funzioni.
+
+- **PDF troppo grande, rifiutato subito.** Un PDF non si comprime e oltre 900 KB l'invio dei dati lo rifiuta («il file del documento è troppo
+  grande anche dopo compressione»): prima l'ospite lo scopriva solo premendo «Continua al pagamento», dopo tutti i passi. Ora alla scelta
+  compare «Il PDF pesa N KB: il limite è 900 KB…» (it/en/de), il riquadro resta com'era e il file non si carica. Il controllo è un
+  ascolto in fase di cattura sul campo file del documento del responsabile (`LIMITE_PDF_KB` in `checkin.js`): `handleFileUpload` non
+  cambia. Le foto non hanno il limite (si comprimono all'invio), come i PDF degli altri ospiti (si leggono solo in memoria).
+- **Ritorno dalla pagina di Stripe.** «Pagamento annullato» compare anche se la pagina era stata aperta con altri parametri
+  (`?fbclid=…?canceled=true`); gli altri parametri restano nell'indirizzo (`gestisciRitornoStripe`).
+- **Fuoco al cambio di passo.** Il fuoco passa al titolo del passo (`tabindex="-1"`, senza riquadro): prima restava su `<body>` e chi usa la
+  tastiera o un lettore di schermo ripartiva dall'inizio della pagina (`mostraStepCorrente`).
+
+Non corretti di proposito (spiegazione nel rapporto dell'analisi): importi con il punto anche in italiano e tedesco (tocca il codice del
+pagamento, solo estetico); doppio tocco su «Avanti» (un secondo tocco entro mezzo secondo romperebbe le prove e il flusso di chi tocca in
+fretta); avviso «vuoi uscire?» (con le prove che usano «indietro» del browser); Android dalla 10 riconosciuto come «vecchio» (è il campo provato
+finora sui telefoni); province PL e ZA (da confrontare con la tabella ufficiale di Alloggiati).

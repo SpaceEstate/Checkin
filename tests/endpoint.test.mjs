@@ -182,18 +182,11 @@ test('admin: prove di configurazione di Drive e tabelle senza dati personali', a
   assert.equal(r.body.ok, true); assert.equal(r.body.italiaRiconosciuta, true);
 });
 
-test('admin: prova-pdf segnala token mancante, token rifiutato e PDF generato', async () => {
+test('admin: l\'azione prova-pdf non esiste più (il PDF di riepilogo non si crea, 14/11/2026)', async () => {
   const H = { 'x-admin-secret': 'segreto-admin-di-prova' };
-  let h = makeAdmin({ store: memStore(), env: { ADMIN_SECRET: 'segreto-admin-di-prova' }, drive: {}, caricaTabelle: caricaTabelleOk, now: () => NOW });
-  let r = fintoRes(); await h(fintoReq('POST', { azione: 'prova-pdf' }, H), r);
-  assert.equal(r.body.ok, false); assert.match(r.body.esito, /non configurata/);
-  const env = { ADMIN_SECRET: 'segreto-admin-di-prova', BROWSERLESS_API_TOKEN: 'finto' };
-  h = makeAdmin({ store: memStore(), env, drive: {}, caricaTabelle: caricaTabelleOk, now: () => NOW, generaPdfRiepilogo: async () => { throw new Error('Browserless error (401)'); } });
-  r = fintoRes(); await h(fintoReq('POST', { azione: 'prova-pdf' }, H), r);
-  assert.equal(r.body.ok, false); assert.equal(r.body.dettaglio, 'Browserless HTTP 401'); assert.match(r.body.suggerimento, /token non è valido/);
-  h = makeAdmin({ store: memStore(), env, drive: {}, caricaTabelle: caricaTabelleOk, now: () => NOW, generaPdfRiepilogo: async () => ({ content: Buffer.concat([Buffer.from('%PDF-1.4'), Buffer.alloc(2000)]) }) });
-  r = fintoRes(); await h(fintoReq('POST', { azione: 'prova-pdf' }, H), r);
-  assert.equal(r.body.ok, true); assert.match(r.body.esito, /Nessuna email inviata/);
+  const h = makeAdmin({ store: memStore(), env: { ADMIN_SECRET: 'segreto-admin-di-prova', BROWSERLESS_API_TOKEN: 'finto' }, drive: {}, caricaTabelle: caricaTabelleOk, now: () => NOW });
+  const r = fintoRes(); await h(fintoReq('POST', { azione: 'prova-pdf' }, H), r);
+  assert.equal(r.statusCode, 400); assert.ok(!r.body.azioni.includes('prova-pdf'), 'elenco delle azioni senza prova-pdf');
 });
 
 test('pulizia programmata: CRON_SECRET rispettata, scaduti eliminati, registri con TXT ancora su Drive conservati', async () => {
@@ -211,6 +204,21 @@ test('pulizia programmata: CRON_SECRET rispettata, scaduti eliminati, registri c
   assert.equal(r.statusCode, 200);
   assert.equal(store.sessioni.size, 0);
   assert.deepEqual([...store.registri.keys()], ['ckbbbbbbbbbbbbbbbb'], 'il registro di un TXT non ancora eliminato da Drive resta come promemoria');
+});
+
+test('verifica del numero: una prenotazione annullata non si verifica (come non trovata, e conta tra i tentativi falliti); una riprenotata con lo stesso numero vale quella attiva', async () => {
+  const riga = v => ({ get: k => v[k] });
+  const base = { 'Data Check-in': '2026-12-20', 'Appartamento': 'La Columbera - Torre', 'Numero Ospiti': '2', 'Numero Notti': '2' };
+  const r0 = extra => riga(Object.assign({}, base, extra));
+  const righe = [r0({ 'Numero Prenotazione': 'ANN111', STATO: 'ANNULLATA' }), r0({ 'Numero Prenotazione': 'ATT222', STATO: 'DA VERIFICARE' }),
+    r0({ 'Numero Prenotazione': 'DUE333', STATO: ' annullata ' }), r0({ 'Numero Prenotazione': 'DUE333', STATO: 'CONFERMATA', 'Numero Notti': '4' }), r0({ 'Numero Prenotazione': 'SENZA4' })];
+  const store = memStore(), h = makeVerificaNumero({ leggiRighe: async () => righe, store });
+  const chiama = async numero => { const r = fintoRes(); await catturaLog(() => h(fintoReq('POST', { numeroPrenotazione: numero }, { 'x-forwarded-for': '203.0.113.7' }), r)); return r; };
+  let r = await chiama('ANN111');
+  assert.equal(r.statusCode, 404); assert.equal(r.body.found, false, 'annullata: come un numero che non c\'è');
+  assert.equal((await chiama('ann 111')).statusCode, 404, 'anche scritta con lo spazio e in minuscolo');
+  assert.equal((await store.tentativiFalliti([...store.tentativi.keys()][0])), 2, 'i tentativi con numeri annullati contano come falliti');
+  for (const [numero, notti] of [['ATT222', 2], ['SENZA4', 2], ['DUE333', 4]]) { r = await chiama(numero); assert.equal(r.statusCode, 200, numero); assert.equal(r.body.dati.numeroNotti, notti, numero); }
 });
 
 test('verifica del numero: niente numero né dati nei log, niente dettagli interni, tentativi falliti limitati per IP', async () => {
@@ -288,11 +296,13 @@ test('Vercel Hobby: al massimo 12 funzioni nella cartella api/ (file senza "_")'
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root, 'vercel.json'), 'utf8')).regions, ['fra1'], 'funzioni a Francoforte, come il database Neon');
 });
 
-test('vecchio endpoint PDF rimosso; Browserless solo nel modulo interno del PDF; foglio Google solo da _sheet-checkin.js', () => {
+test('vecchio endpoint PDF rimosso; nessun servizio esterno per il PDF (né modulo, né Browserless); foglio Google solo da _sheet-checkin.js', () => {
   assert.equal(fs.existsSync(path.join(root, 'api', 'genera-pdf-email.js')), false);
+  assert.equal(fs.existsSync(path.join(root, 'api', '_pdf-riepilogo.js')), false, '14/11/2026: il PDF di riepilogo non si crea più');
   const api = fs.readdirSync(path.join(root, 'api')).filter(f => f.endsWith('.js')).map(f => [f, fs.readFileSync(path.join(root, 'api', f), 'utf8')]);
   for (const [f, s] of api) {
-    if (f !== '_pdf-riepilogo.js') assert.ok(!/browserless\.io|genera-pdf-email['"`]/.test(s.replace(/^\s*\/\/.*$/gm, '')), f + ': riferimento a Browserless o al vecchio endpoint');
+    const codice = s.replace(/^\s*\/\/.*$/gm, '');
+    assert.ok(!/browserless|genera-pdf-email['"`]|_pdf-riepilogo|generaPdf/i.test(codice), f + ': riferimento a Browserless, al PDF di riepilogo o al vecchio endpoint');
     if (!['verifica-prenotazione.js', '_sheet-checkin.js'].includes(f)) assert.ok(!/google-spreadsheet|addRows?\(/.test(s), f + ': scrittura su Google Sheets');
   }
   const wh = fs.readFileSync(path.join(root, 'api', 'stripeWebhook.js'), 'utf8');

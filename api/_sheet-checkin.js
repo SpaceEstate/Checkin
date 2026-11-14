@@ -21,6 +21,19 @@ export function calcolaEta(dataNascita, oggi) {
   return Math.max(0, eta);
 }
 
+// I valori si scrivono «come digitati» (USER_ENTERED): un testo che inizia con = + - @ diventerebbe una formula del foglio (per esempio
+// =IMPORTDATA(…) o =HYPERLINK(…), scritta da chi chiama l'API a mano: nome, cognome, comune… arrivano dal browser dell'ospite e il
+// server non li ricontrolla), e un numero del documento di sole cifre con lo zero davanti, o più lungo di 15 cifre, perderebbe zeri e
+// cifre. L'apostrofo iniziale è il modo di Google Sheets per dire «questo è testo»: non resta nella cella. I valori normali (nomi, date,
+// numeri…) restano com'erano, quindi lo script del gestore che legge il foglio non vede differenze.
+const INIZIO_FORMULA = /^[=+\-@\t\r\n]/;
+export function testoSicuro(v, comeNumeroDocumento) {
+  const t = v == null ? '' : String(v);
+  if (INIZIO_FORMULA.test(t)) return "'" + t;
+  if (comeNumeroDocumento && /^\d+$/.test(t) && (t[0] === '0' || t.length > 15)) return "'" + t;
+  return t;
+}
+
 // Righe nel formato della versione precedente. `metadata` = metadati della sessione Stripe (totale e timestamp).
 export function righeSheet(dati, metadata, oggi) {
   const md = metadata || {};
@@ -31,25 +44,25 @@ export function righeSheet(dati, metadata, oggi) {
     const responsabile = ospite.numero === 1 || ospite.isResponsabile;
     return {
       'Data Check-in': dati.dataCheckin || '',
-      'Appartamento': dati.appartamento || '',
+      'Appartamento': testoSicuro(dati.appartamento || ''),
       'Numero Ospiti': (dati.numeroOspiti || 0).toString(),
       'Numero Notti': (dati.numeroNotti || 0).toString(),
-      'Tipo Gruppo': dati.tipoGruppo || '',
+      'Tipo Gruppo': testoSicuro(dati.tipoGruppo || ''),
       'Totale': String(md.totale || 0),
       'Numero Ospite': (ospite.numero || 1).toString(),
-      'Cognome': ospite.cognome || '',
-      'Nome': ospite.nome || '',
+      'Cognome': testoSicuro(ospite.cognome || ''),
+      'Nome': testoSicuro(ospite.nome || ''),
       'Genere': ospite.genere || '',
       'Data Nascita': ospite.nascita || '',
       'Età': eta ? eta.toString() : '',
-      'Cittadinanza': ospite.cittadinanza || '',
-      'Luogo Nascita': ospite.luogoNascita || '',
-      'Comune': ospite.comune || '',
-      'Provincia': ospite.provincia || '',
-      'Timestamp': md.timestamp || new Date().toISOString(),
-      'Tipo Documento': responsabile ? (ospite.tipoDocumento || '') : '',
-      'Numero Documento': responsabile ? (ospite.numeroDocumento || '') : '',
-      'Luogo Rilascio': responsabile ? (ospite.luogoRilascio || '') : ''
+      'Cittadinanza': testoSicuro(ospite.cittadinanza || ''),
+      'Luogo Nascita': testoSicuro(ospite.luogoNascita || ''),
+      'Comune': testoSicuro(ospite.comune || ''),
+      'Provincia': testoSicuro(ospite.provincia || ''),
+      'Timestamp': testoSicuro(md.timestamp || new Date().toISOString()),
+      'Tipo Documento': responsabile ? testoSicuro(ospite.tipoDocumento || '') : '',
+      'Numero Documento': responsabile ? testoSicuro(ospite.numeroDocumento || '', true) : '',
+      'Luogo Rilascio': responsabile ? testoSicuro(ospite.luogoRilascio || '') : ''
     };
   });
 }

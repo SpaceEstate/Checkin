@@ -6,8 +6,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
+const fs = require('fs');
 const { chromium } = require('playwright');
 const { avvia, API } = require('./server-prova.cjs');
+const { pdfUnaFotoPerPagina } = require('./pdf-di-prova.cjs');
 
 const DOC = path.join(__dirname, 'documenti-sintetici');
 const IPHONE = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1' };
@@ -68,7 +70,7 @@ async function compila(page, n, dati = {}) {
     metti(`select[name="ospite${n}_cittadinanza"]`, v.cittadinanza); metti(`select[name="ospite${n}_luogo_nascita"]`, v.luogo);
     if (n === 1) { metti('select[name="ospite1_tipo_documento"]', 'PASSAPORTO ORDINARIO'); metti('input[name="ospite1_numero_documento"]', 'C01X00T47'); metti('select[name="ospite1_luogo_rilascio"]', 'Germania'); }
   }, { n, v });
-  if (n === 1) await page.setInputFiles('#ospite1_documento_fronte', path.join(DOC, 'passaporto-de.jpg'));
+  if (n === 1 && !dati.senzaFile) await page.setInputFiles('#ospite1_documento_fronte', path.join(DOC, 'passaporto-de.jpg'));
 }
 
 // Primo passo senza numero di prenotazione, poi i dati del soggiorno scritti a mano
@@ -536,6 +538,92 @@ test('lingua: il selettore funziona anche se il browser blocca la memoria locale
     assert.equal(await p.textContent('#step-1 .step-title'), 'Allgemeine Informationen', 'la lingua scelta vale per tutta la pagina');
     await p.click('.lang-flag[data-lang="en"]');
     assert.equal(await p.textContent('#step-1 .step-title'), 'General information');
+    assert.deepEqual(x.errori, []);
+  } finally { await x.chiudi(); }
+});
+
+// ---- Altri punti dell'analisi del 13/11/2026 (corretti il 14/11/2026) ----
+
+test('PDF del documento troppo grande: rifiutato subito alla scelta, con il limite scritto (prima solo a «Continua al pagamento»); un PDF entro il limite e le foto restano accettati', async () => {
+  const jpg = fs.readFileSync(path.join(DOC, 'passaporto-de.jpg'));
+  const pdfDi = kb => Buffer.concat([pdfUnaFotoPerPagina([jpg]), Buffer.from('\n%' + 'x'.repeat(kb * 1024) + '\n')]);
+  for (const lingua of ['it', 'en', 'de']) {
+    const x = await apri({ lingua });
+    try {
+      const p = x.page;
+      await soggiornoAMano(p, { ospiti: 1 });
+      await avanti(p, 'step-1', 'step-2');
+      const grande = pdfDi(1500);
+      await p.setInputFiles('#ospite1_documento_fronte', { name: 'scansione.pdf', mimeType: 'application/pdf', buffer: grande });
+      await p.waitForFunction(() => /\d+ KB/.test((document.querySelector('.notification') || {}).textContent || ''));
+      const messaggio = await notifica(p);
+      assert.match(messaggio, new RegExp(Math.round(grande.length / 1024) + ' KB'), lingua + ': dimensione del file nel messaggio');
+      assert.match(messaggio, /900 KB/, lingua + ': limite nel messaggio');
+      assert.equal(await p.getAttribute('.notification', 'role'), 'alert');
+      // il riquadro è com'era prima: nessun file, nessun «completo», contatore a zero
+      assert.deepEqual(await p.evaluate(() => ({ file: document.getElementById('ospite1_documento_fronte').files.length, completo: document.getElementById('upload-side-1-fronte').classList.contains('completo'),
+        stato: document.getElementById('upload-status-1').textContent.trim() })), { file: 0, completo: false, stato: { it: '0 di 2 file caricati', en: '0 of 2 files uploaded', de: '0 von 2 Dateien hochgeladen' }[lingua] });
+      // senza altri file il passo non va avanti
+      await compila(p, 1, { senzaFile: true });
+      await p.click('#step-2 .btn-primary');
+      await p.waitForFunction(() => /(fronte|front|vorderseite)/i.test((document.querySelector('.notification') || {}).textContent || '') && !/KB/.test(document.querySelector('.notification').textContent));
+      assert.equal(await passoAttivo(p), 'step-2');
+      // un PDF entro il limite (circa 300 KB) è accettato come prima
+      const piccolo = pdfDi(100);
+      assert.ok(piccolo.length < 900 * 1024, 'PDF di prova entro il limite');
+      await p.setInputFiles('#ospite1_documento_fronte', { name: 'scansione.pdf', mimeType: 'application/pdf', buffer: piccolo });
+      await p.waitForFunction(() => document.getElementById('upload-side-1-fronte').classList.contains('completo'));
+      assert.equal(await p.evaluate(() => document.getElementById('ospite1_documento_fronte').files.length), 1);
+      // una foto grande resta accettata (si comprime all'invio)
+      await p.setInputFiles('#ospite1_documento_retro', path.join(DOC, 'passaporto-de.jpg'));
+      await p.waitForFunction(() => document.getElementById('upload-side-1-retro').classList.contains('completo'));
+      assert.deepEqual(x.errori, []);
+    } finally { await x.chiudi(); }
+  }
+});
+
+test('ritorno dalla pagina di Stripe: «Pagamento annullato» compare anche se la pagina era aperta con altri parametri; gli altri parametri restano, quello dell\'annullo si toglie', async () => {
+  for (const [ricerca, atteso] of [['?canceled=true', ''], ['?fbclid=abc?canceled=true', '?fbclid=abc'], ['?utm_source=x&canceled=true', '?utm_source=x'], ['?canceled=true&utm_source=x', '?utm_source=x']]) {
+    const x = await apri({ pagina: 'index.html' + ricerca });
+    try {
+      const p = x.page;
+      await p.waitForFunction(() => /Pagamento annullato/.test((document.querySelector('.notification') || {}).textContent || ''), null, { timeout: 5000 });
+      assert.equal(new URL(p.url()).search, atteso, ricerca);
+      assert.equal(await p.evaluate(() => window.location.hash), '');
+    } finally { await x.chiudi(); }
+  }
+  // senza l'annullo nessun avviso, indirizzo intatto; un parametro che si chiama quasi così non conta
+  for (const ricerca of ['', '?fbclid=abc', '?canceled=false', '?xcanceled=true', '?canceled=trueish']) {
+    const x = await apri({ pagina: 'index.html' + ricerca });
+    try {
+      await x.page.waitForTimeout(400);
+      assert.equal(await notifica(x.page), '', ricerca);
+      assert.equal(new URL(x.page.url()).search, ricerca, ricerca);
+    } finally { await x.chiudi(); }
+  }
+});
+
+test('cambio di passo: il fuoco va al titolo del passo (prima restava su <body>: tastiera e lettori di schermo ripartivano dall\'inizio della pagina); il titolo non mostra riquadri di fuoco', async () => {
+  const x = await apri();
+  try {
+    const p = x.page;
+    const fuoco = () => p.evaluate(() => { const a = document.activeElement; return a ? { tag: a.tagName, classe: a.className, passo: (a.closest('.step') || {}).id || null, tabindex: a.getAttribute('tabindex') } : null; });
+    await p.click('.no-booking-link'); await p.waitForSelector('#step-1.active');
+    assert.deepEqual(await fuoco(), { tag: 'H2', classe: 'step-title', passo: 'step-1', tabindex: '-1' });
+    await soggiornoAMano(p, { ospiti: 2 });
+    await avanti(p, 'step-1', 'step-2');
+    assert.deepEqual(await fuoco(), { tag: 'H2', classe: 'step-title', passo: 'step-2', tabindex: '-1' });
+    assert.equal(await p.evaluate(() => getComputedStyle(document.activeElement).outlineStyle), 'none', 'nessun riquadro di fuoco sul titolo');
+    // si scrive subito: il fuoco passa al campo e il titolo non lo riprende
+    await p.click('[name="ospite1_cognome"]'); await p.keyboard.type('Rossi');
+    assert.equal(await p.inputValue('[name="ospite1_cognome"]'), 'Rossi');
+    await compila(p, 1);
+    await avanti(p, 'step-2', 'step-3');
+    assert.equal((await fuoco()).passo, 'step-3');
+    await p.click('#step-3 .btn-secondary'); await p.waitForSelector('#step-2.active');
+    assert.equal((await fuoco()).passo, 'step-2', 'anche tornando indietro');
+    assert.equal(await p.inputValue('[name="ospite1_cognome"]'), 'Esempio', 'i dati restano');
+    // la pagina non scorre per il fuoco: la posizione resta quella dello scorrimento morbido (nessun salto)
     assert.deepEqual(x.errori, []);
   } finally { await x.chiudi(); }
 });
