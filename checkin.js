@@ -256,19 +256,23 @@ function calcolaEta(dataNascita) {
   return Math.max(0, eta);
 }
 
+// Regola dell'imposta di soggiorno (14/11/2026, conferma del titolare; imposta provinciale del Trentino): 1,50 € a notte per ogni ospite di
+// almeno 14 anni (i minori di 14 anni sono esenti), per al massimo 10 notti. Stessa regola del server (api/_imposta-soggiorno.js): una prova
+// (tests/pagamenti.test.mjs) controlla che i valori coincidano. Prima: dai 4 anni, senza tetto di notti.
+const TASSA_PER_NOTTE = 1.50, ETA_MINIMA_IMPOSTA = 14, NOTTI_MASSIME_IMPOSTA = 10;
+
 function calcolaTotale() {
-  const tassaPerNotte = 1.50;
   let ospitiSoggetti = 0;
   
   for (let i = 1; i <= numeroOspiti; i++) {
     const nascitaInput = document.querySelector(`input[name="ospite${i}_nascita"]`);
     if (nascitaInput && nascitaInput.value) {
       const eta = calcolaEta(nascitaInput.value);
-      if (eta >= 4) ospitiSoggetti++;
+      if (eta >= ETA_MINIMA_IMPOSTA) ospitiSoggetti++;
     }
   }
   
-  return Math.round((ospitiSoggetti * numeroNotti * tassaPerNotte) * 100) / 100;
+  return Math.round((ospitiSoggetti * Math.min(numeroNotti, NOTTI_MASSIME_IMPOSTA) * TASSA_PER_NOTTE) * 100) / 100;
 }
 
 function formatDataItaliana(dataISO) {
@@ -1273,7 +1277,7 @@ function preparaRiepilogo(mantieniPosizione) {
     const nome = document.querySelector(`input[name="ospite${i}_nome"]`)?.value || '';
     const nascita = document.querySelector(`input[name="ospite${i}_nascita"]`)?.value || '';
     const eta = nascita ? calcolaEta(nascita) : 0;
-    const etaChiave = eta >= 4 ? 'summary.etaSoggetta' : 'summary.etaEsente';
+    const etaChiave = eta >= ETA_MINIMA_IMPOSTA ? 'summary.etaSoggetta' : 'summary.etaEsente';
     
     ospitiHTML += `
       <div class="guest-summary" style="background: white; padding: 15px; border-radius: 10px; margin-bottom: 12px; border: 1px solid #dccfb6;">
@@ -1300,7 +1304,7 @@ function preparaRiepilogo(mantieniPosizione) {
       €${totale.toFixed(2)}
     </div>
     <small class="tax-note" style="display: block; text-align: center; color: #6c5f55; font-size: 0.85rem; font-style: italic; margin-top: 10px;" data-i18n="summary.totaleNota">
-      Tassa di €1,50 per notte per ospiti dai 4 anni in su
+      Tassa di €1,50 per notte per ospiti dai 14 anni in su, fino a un massimo di 10 notti
     </small>
   `;
   fragment.appendChild(totaleSection);

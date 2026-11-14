@@ -114,8 +114,11 @@ test('email al gestore: i dati di tutti gli ospiti nel testo, come nel vecchio P
 test('email al gestore: bambini esenti, età di un anno, valori su più righe o vuoti, nove ospiti', () => {
   const g = bloccoOspite({ cognome: 'Rossi\nBcc: x@esempio.invalid', nome: '  Mario  ', genere: 'M', nascita: '2025-01-01', eta: 1, cittadinanza: 'Italia', luogoNascita: 'Francia' }, 2);
   assert.equal(g, '2. Rossi Bcc: x@esempio.invalid Mario\n   Genere: Maschio\n   Data di nascita: 01/01/2025 (1 anno, esente)\n   Cittadinanza: Italia\n   Luogo di nascita: Francia');
+  // imposta dai 14 anni (14/11/2026; prima dai 4): fino a 13 anni esenti, da 14 tassabili
   assert.match(bloccoOspite({ nascita: '2022-06-01', eta: 3 }, 1), /\(3 anni, esente\)/);
-  assert.match(bloccoOspite({ nascita: '2022-06-01', eta: 4 }, 1), /\(4 anni, tassabile\)/);
+  assert.match(bloccoOspite({ nascita: '2013-06-01', eta: 13 }, 1), /\(13 anni, esente\)/);
+  assert.match(bloccoOspite({ nascita: '2012-06-01', eta: 14 }, 1), /\(14 anni, tassabile\)/);
+  assert.match(bloccoOspite({ nascita: '1980-06-01', eta: 46 }, 1), /\(46 anni, tassabile\)/);
   const vuoto = bloccoOspite({}, 5);
   assert.equal(vuoto, '5. —\n   Genere: —\n   Data di nascita: —\n   Cittadinanza: —\n   Luogo di nascita: —');
   assert.ok(!/Documento/.test(bloccoOspite({ isResponsabile: true }, 1)), 'responsabile senza estremi del documento: nessuna riga vuota');

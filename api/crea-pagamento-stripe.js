@@ -1,5 +1,6 @@
 import Stripe from "stripe";
 import { leggiRighePrenotazioni, trovaPerDataEAppartamento, cercaPrenotazione } from "./verifica-prenotazione.js";
+import { eSoggettoImposta, totaleImposta } from "./_imposta-soggiorno.js";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -17,8 +18,9 @@ function calcolaEtaServer(dataNascita) {
   return Math.max(0, eta);
 }
 
-// Ricalcola il totale — stessa regola di calcolaTotale() in checkin.js:
-// €1,50 a notte per ogni ospite di almeno 4 anni.
+// Ricalcola il totale — stessa regola di calcolaTotale() in checkin.js (e di _imposta-soggiorno.js):
+// €1,50 a notte per ogni ospite di almeno 14 anni (i minori di 14 anni sono esenti), per al massimo 10 notti.
+// Dal 14/11/2026 (conferma del titolare, imposta provinciale del Trentino); prima: dai 4 anni, senza tetto di notti.
 //
 // IMPORTANTE: questo è il valore che va usato per l'addebito. Il campo "totale"
 // che arriva dal client va nella richiesta POST insieme al resto dei dati, quindi
@@ -27,10 +29,8 @@ function calcolaEtaServer(dataNascita) {
 // unit_amount: bastava cambiare quel numero per pagare qualsiasi cifra,
 // indipendentemente da ospiti/notti reali.
 function calcolaTotaleServer(ospiti, numeroNotti) {
-  const notti = parseInt(numeroNotti, 10) || 0;
-  const TASSA_PER_NOTTE = 1.50;
-  const ospitiSoggetti = (ospiti || []).filter(o => calcolaEtaServer(o?.nascita) >= 4).length;
-  return Math.round(ospitiSoggetti * notti * TASSA_PER_NOTTE * 100) / 100;
+  const ospitiSoggetti = (ospiti || []).filter(o => eSoggettoImposta(calcolaEtaServer(o?.nascita))).length;
+  return totaleImposta(ospitiSoggetti, numeroNotti);
 }
 
 // Dopo il pagamento (o l'annullamento) Stripe riporta l'ospite all'indirizzo ricevuto dal browser. Si accettano solo gli indirizzi

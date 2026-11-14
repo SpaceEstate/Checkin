@@ -51,6 +51,14 @@ test('testi: chiavi nuove presenti in it/en/de; informativa breve coerente con i
   assert.ok(/riepilogo dei dati inseriti/.test(it['stepFinal.infoBreve']) && /summary of the data entered/.test(UI.en['stepFinal.infoBreve']) && /Zusammenfassung der eingegebenen Daten/.test(UI.de['stepFinal.infoBreve']));
   assert.ok(!/Browserless|PDF/.test(read('index.html').slice(read('index.html').indexOf('privacy-info'), read('index.html').indexOf('privacy-info') + 1200)), 'index.html: testo di riserva dell\'informativa breve senza PDF né Browserless');
   assert.ok(/non sostituisce/i.test(it['guest.documentoAvvisoIdentita']), "l'immagine non sostituisce il controllo del documento originale");
+  // imposta di soggiorno (14/11/2026, conferma del titolare): dai 14 anni, al massimo 10 notti, in tutte le lingue (prima: dai 4 anni)
+  for (const l of ['it', 'en', 'de']) {
+    const nota = UI[l]['summary.totaleNota'];
+    assert.ok(/\b14\b/.test(nota) && /\b10\b/.test(nota) && !/\b4 (anni|Jahren)|aged 4\b/.test(nota), l + ': nota dell\'imposta con 14 anni e 10 notti: ' + nota);
+  }
+  // testo «Verifica dell'identità all'arrivo»: tolto su richiesta del titolare (14/11/2026), non compariva mai nel modulo
+  for (const l of ['it', 'en', 'de']) assert.deepEqual(Object.keys(UI[l]).filter(k => /^stepFinal\.identita/.test(k)), [], l + ': nessun testo sulla verifica dell\'identità all\'arrivo');
+  assert.ok(!/identita/.test(read('index.html')), 'index.html: nessun riferimento a quel testo');
 });
 
 test('nessun preconnect verso Stripe: Stripe.js si carica solo quando l\'ospite sceglie di pagare (pagamento nella pagina)', () => {

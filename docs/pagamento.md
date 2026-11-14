@@ -2,6 +2,18 @@
 
 Come sul sito di La Columbera (pagina «Conferma e paga»), l'ospite paga **dentro il modulo del check-in**, con i campi della carta di Stripe nello stile del sito.
 
+## L'imposta: la regola (dal 14/11/2026)
+
+Conferma del titolare, imposta provinciale di soggiorno del Trentino:
+
+- **1,50 € a notte** per ogni ospite di **almeno 14 anni**: i **minori di 14 anni sono esenti** (chi compie 14 anni paga dal giorno del compleanno; l'età è quella del giorno della compilazione, come per il foglio);
+- **al massimo 10 notti** per ospite: oltre la decima non si paga altro (un soggiorno di 14 notti per un adulto costa 15,00 €, non 21,00 €). Le notti del soggiorno restano quelle vere ovunque altrove (foglio, TXT, email).
+- Prima: dai 4 anni, senza tetto di notti.
+
+Dove sta la regola: server `api/_imposta-soggiorno.js` (usata da `api/crea-pagamento-stripe.js`, che ricalcola sempre l'importo, e da `api/_email-gestore.js` per «tassabile»/«esente»); modulo `checkin.js` (`TASSA_PER_NOTTE`, `ETA_MINIMA_IMPOSTA`, `NOTTI_MASSIME_IMPOSTA`, `calcolaTotale`, riepilogo). Le due copie hanno gli stessi valori e una prova (`tests/pagamenti.test.mjs`) lo controlla. Il testo sotto il totale (`summary.totaleNota`, it/en/de) dice «dai 14 anni in su, fino a un massimo di 10 notti». Se la regola cambia: tutti questi punti e quel testo, insieme.
+
+Il sito di La Columbera ha una frase sulla stessa imposta nella sua informativa (`privacy.html`: «l'imposta si applica dai 4 anni»): va allineata, è in un altro repository.
+
 ## Come funziona
 
 1. Ultimo passo («Riepilogo e pagamento»): l'ospite controlla il riepilogo, dichiara di aver letto l'informativa e preme **«Continua al pagamento · €…»**. I dati si salvano (come prima, temporanei) e si crea il pagamento su Stripe con l'importo ricalcolato dal server.

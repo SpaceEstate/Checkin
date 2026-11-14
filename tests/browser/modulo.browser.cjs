@@ -627,3 +627,39 @@ test('cambio di passo: il fuoco va al titolo del passo (prima restava su <body>:
     assert.deepEqual(x.errori, []);
   } finally { await x.chiudi(); }
 });
+
+test('imposta di soggiorno nel modulo (14/11/2026): dai 14 anni, minori esenti, al massimo 10 notti; riepilogo, importo da pagare e totale mandato al server; nota nelle tre lingue; nessun testo sulla verifica dell\'identità', async () => {
+  const nato = (anni, giorni) => { const d = new Date(); d.setFullYear(d.getFullYear() - anni); d.setDate(d.getDate() + giorni); return d.toISOString().slice(0, 10); };
+  const creazioni = [];
+  const x = await apri({ dominio: 'checkin.prova', stripe: STRIPE_FINTO, api: (nome, corpo) => { if (nome === 'crea-pagamento-stripe') { creazioni.push(corpo); return { clientSecret: 'cs_secret', publishableKey: 'pk_test_x', sessionId: 'cs_test_x', totale: 30 }; } } });
+  try {
+    const p = x.page;
+    await soggiornoAMano(p, { ospiti: 3, notti: 12 });
+    await avanti(p, 'step-1', 'step-2');
+    await compila(p, 1);                                            // 46 anni circa: soggetta
+    await avanti(p, 'step-2', 'step-3');
+    await compila(p, 2, { nome: 'Quattordicenne', nascita: nato(14, -2) });      // 14 anni compiuti da due giorni: soggetta
+    await avanti(p, 'step-3', 'step-4');
+    await compila(p, 3, { nome: 'Tredicenne', nascita: nato(14, 2) });           // ne compie 14 tra due giorni: esente
+    await avanti(p, 'step-4', 'step-final');
+    const eta = () => p.evaluate(() => [...document.querySelectorAll('.guest-summary .age')].map(e => e.textContent.trim()));
+    const [e1, e2, e3] = await eta();
+    assert.match(e1, /^Età: \d+ anni \(soggetto a tassa\)$/); assert.equal(e2, 'Età: 14 anni (soggetto a tassa)'); assert.equal(e3, 'Età: 13 anni (esente)');
+    // 2 ospiti soggetti × 10 notti (non 12) × 1,50 € = 30,00 €
+    assert.equal((await p.textContent('.total-amount')).trim(), '€30.00');
+    assert.equal(await p.textContent('#summary-content .summary-item:nth-of-type(4) strong'), '12', 'le notti del soggiorno restano 12');
+    const nota = lingua => p.click(`.lang-flag[data-lang="${lingua}"]`).then(() => p.textContent('.tax-note')).then(t => t.trim());
+    assert.equal(await nota('it'), 'Tassa di €1,50 per notte per ospiti dai 14 anni in su, fino a un massimo di 10 notti');
+    assert.equal(await nota('en'), 'Tax of €1.50 per night for guests aged 14 and over, up to a maximum of 10 nights');
+    assert.equal(await nota('de'), 'Kurtaxe von 1,50 € pro Nacht für Gäste ab 14 Jahren, für höchstens 10 Nächte');
+    await p.click('.lang-flag[data-lang="it"]');
+    assert.equal(await p.evaluate(() => /Verifica dell.identità|identity check|Identitätsprüfung/i.test(document.body.innerText)), false, 'nessun testo sulla verifica dell\'identità all\'arrivo');
+    // il pagamento: importo mostrato e totale mandato al server
+    await p.click('.privacy-label'); await p.click('#btn-procedi-pagamento');
+    await p.waitForSelector('#pay-panel:not([hidden])');
+    assert.equal(await p.textContent('#pay-amount'), '€30.00');
+    assert.equal(creazioni[0].totale, 30); assert.equal(creazioni[0].numeroNotti, 12);
+    assert.deepEqual(creazioni[0].ospiti.map(o => o.numero), [1, 2, 3]);
+    assert.deepEqual(x.errori, []);
+  } finally { await x.chiudi(); }
+});

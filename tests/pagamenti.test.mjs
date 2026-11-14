@@ -10,6 +10,7 @@ import { makeHandler as makeSessione } from '../api/get-session.js';
 import { makeHandler as makePagamento, urlAmmesso, numeroPrenotazioneValido, chiavePubblicabile } from '../api/crea-pagamento-stripe.js';
 import { cercaPrenotazione, trovaPerDataEAppartamento } from '../api/verifica-prenotazione.js';
 import { elaboraCheckin, checkinIdDa } from '../api/_elabora-checkin.js';
+import { TASSA_PER_NOTTE, ETA_MINIMA_IMPOSTA, NOTTI_MASSIME_IMPOSTA, eSoggettoImposta, totaleImposta } from '../api/_imposta-soggiorno.js';
 import { requireApi, memStore, fintoRes, fintoReq, checkinFamiglia, catturaLog, NOW, ENV_DRIVE } from './helpers.mjs';
 
 const Stripe = requireApi('stripe');
@@ -162,6 +163,39 @@ test('pagamento: Stripe riporta l\'ospite solo a indirizzi del check-in; qualsia
   assert.equal(r.statusCode, 200);
   assert.equal(creata.success_url, 'https://spaceestate.github.io/Checkin/successo-pagamento.html?session_id={CHECKOUT_SESSION_ID}');
   assert.equal(creata.cancel_url, 'https://spaceestate.github.io/Checkin/index.html?canceled=true');
+});
+
+test('imposta di soggiorno (14/11/2026, conferma del titolare): 1,50 € a notte dai 14 anni, minori di 14 esenti, al massimo 10 notti; il server ricalcola e il modulo ha gli stessi valori', async () => {
+  assert.deepEqual([TASSA_PER_NOTTE, ETA_MINIMA_IMPOSTA, NOTTI_MASSIME_IMPOSTA], [1.5, 14, 10]);
+  for (const [eta, atteso] of [[0, false], [3, false], [4, false], [13, false], [14, true], [15, true], [46, true], [NaN, false], [undefined, false]]) assert.equal(eSoggettoImposta(eta), atteso, String(eta));
+  for (const [soggetti, notti, atteso] of [[1, 1, 1.5], [3, 3, 13.5], [2, 10, 30], [2, 11, 30], [2, 30, 30], [1, 14, 15], [0, 5, 0], [2, 0, 0], [1, '7', 10.5], [3, 'x', 0]]) assert.equal(totaleImposta(soggetti, notti), atteso, soggetti + ' ospiti, ' + notti + ' notti');
+  // stessi valori nel modulo (checkin.js): una prova che li confronta, perché le due copie non divergano
+  const src = fs.readFileSync(new URL('../checkin.js', import.meta.url), 'utf8');
+  const m = /const TASSA_PER_NOTTE = ([\d.]+), ETA_MINIMA_IMPOSTA = (\d+), NOTTI_MASSIME_IMPOSTA = (\d+);/.exec(src);
+  assert.ok(m, 'costanti dell\'imposta in checkin.js');
+  assert.deepEqual([+m[1], +m[2], +m[3]], [TASSA_PER_NOTTE, ETA_MINIMA_IMPOSTA, NOTTI_MASSIME_IMPOSTA], 'modulo e server hanno la stessa regola');
+  assert.ok(/eta >= ETA_MINIMA_IMPOSTA \? 'summary\.etaSoggetta'/.test(src) && /Math\.min\(numeroNotti, NOTTI_MASSIME_IMPOSTA\)/.test(src), 'il modulo usa le costanti (riepilogo e totale)');
+  assert.ok(!/eta >= 4\b/.test(src), 'la vecchia soglia dei 4 anni non c\'è più nel modulo');
+  // sul server, attraverso la creazione del pagamento: età il giorno del confronto, notti oltre la decima non si pagano
+  const nato = anni => { const d = new Date(); d.setFullYear(d.getFullYear() - anni); d.setDate(d.getDate() - 2); return d.toISOString().slice(0, 10); };       // compiuti da due giorni
+  const quasi = anni => { const d = new Date(); d.setFullYear(d.getFullYear() - anni); d.setDate(d.getDate() + 2); return d.toISOString().slice(0, 10); };      // li compie tra due giorni
+  let creata = null;
+  const fintoStripe = { checkout: { sessions: { create: async p => { creata = p; return { id: 'cs_test_x', url: 'https://checkout.stripe.invalid/x' }; } } } };
+  const paga = async (nascite, notti) => {
+    const d = Object.assign(checkinFamiglia(), { numeroNotti: notti, numeroOspiti: nascite.length, ospiti: nascite.map((n, i) => ({ numero: i + 1, isResponsabile: i === 0, nascita: n })) });
+    const r = fintoRes(); await catturaLog(() => makePagamento(fintoStripe)(fintoReq('POST', d), r));
+    return [r.statusCode, r.statusCode === 200 ? creata.line_items[0].price_data.unit_amount : r.body.error];
+  };
+  assert.deepEqual(await paga([nato(46), nato(14)], 3), [200, 900], 'a 14 anni compiuti si paga');
+  assert.deepEqual(await paga([nato(46), quasi(14)], 3), [200, 450], 'a 13 anni (ne compie 14 tra due giorni) è esente');
+  assert.deepEqual(await paga([nato(46), nato(12), nato(4), nato(1)], 2), [200, 300], 'bambini di 12, 4 e 1 anno esenti (prima si pagava dai 4)');
+  assert.deepEqual(await paga([nato(46), nato(30)], 10), [200, 3000]);
+  assert.deepEqual(await paga([nato(46), nato(30)], 14), [200, 3000], 'oltre 10 notti non si paga altro');
+  assert.deepEqual(await paga([nato(46)], 30), [200, 1500]);
+  assert.equal(creata.metadata.totale, '15', 'il totale nei metadati è quello tassato');
+  assert.equal(creata.metadata.numeroNotti, '30', 'le notti del soggiorno restano quelle vere');
+  // soli esenti (non può accadere: il responsabile ha almeno 18 anni): importo non valido, come prima per zero
+  assert.deepEqual(await paga([nato(10), nato(5)], 3), [400, 'Importo non valido']);
 });
 
 test('pagamento: il numero di prenotazione verificato nel primo passo va nei metadati (sessione e pagamento) per l\'area clienti di La Columbera; senza verifica o non valido non c\'è', async () => {

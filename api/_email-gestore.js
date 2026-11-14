@@ -12,6 +12,7 @@
 // Il sistema NON può cancellare le copie dell'email: lo deve fare il gestore (promemoria nel corpo del messaggio).
 import nodemailer from 'nodemailer';
 import { decodificaDocumento } from './_validazione-checkin.js';
+import { eSoggettoImposta } from './_imposta-soggiorno.js';
 
 export function preparaAllegati(documenti) {
   const allegati = [], scartati = [];
@@ -33,9 +34,6 @@ const dataIt = d => /^\d{4}-\d{2}-\d{2}$/.test(d || '') ? d.split('-').reverse()
 const riga = v => String(v == null ? '' : v).replace(/[\u0000-\u001f\u007f\u2028\u2029\s]+/g, ' ').trim().slice(0, 120);
 const valore = v => riga(v) || '—';
 const GENERE = { M: 'Maschio', F: 'Femmina' };
-// Soglia dell'imposta: la stessa del modulo (checkin.js, calcolaTotale) e del server (crea-pagamento-stripe.js)
-const ETA_TASSABILE = 4;
-
 // Un ospite, come nel vecchio PDF: nome, genere, data di nascita (età e tassa), cittadinanza, luogo di nascita; il responsabile anche il documento
 export function bloccoOspite(o, posizione) {
   const nome = [riga(o.cognome), riga(o.nome)].filter(Boolean).join(' ') || '—';
@@ -44,7 +42,7 @@ export function bloccoOspite(o, posizione) {
   const righe = [
     posizione + '. ' + nome + (o.isResponsabile ? ' (RESPONSABILE)' : ''),
     '   Genere: ' + (GENERE[o.genere] || '—'),
-    '   Data di nascita: ' + dataIt(riga(o.nascita)) + (eta === null ? '' : ' (' + eta + (eta === 1 ? ' anno, ' : ' anni, ') + (eta >= ETA_TASSABILE ? 'tassabile' : 'esente') + ')'),
+    '   Data di nascita: ' + dataIt(riga(o.nascita)) + (eta === null ? '' : ' (' + eta + (eta === 1 ? ' anno, ' : ' anni, ') + (eSoggettoImposta(eta) ? 'tassabile' : 'esente') + ')'),
     '   Cittadinanza: ' + valore(o.cittadinanza),
     '   Luogo di nascita: ' + valore(o.luogoNascita) + comune
   ];

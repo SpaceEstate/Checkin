@@ -25,7 +25,7 @@ Questa sezione corregge le parti del documento non più attuali. Le ho verificat
   - L'endpoint nel codice è `production-ams.browserless.io` (Amsterdam, UE); con `BROWSERLESS_URL` si può scegliere Londra o San Francisco (USA, trasferimento extra SEE).
   - `BROWSERLESS_API_TOKEN` resta necessaria.
 - **L'email al gestore contiene le immagini del documento e il PDF** (`_email-gestore.js`).
-- **Il riquadro finale sulla verifica dell'identità è stato rimosso**, su richiesta del gestore. Resta la nota accanto al caricamento del documento. Le chiavi `stepFinal.identita*` in `i18n.js` non sono più usate.
+- **Il riquadro finale sulla verifica dell'identità è stato rimosso**, su richiesta del gestore. Resta la nota accanto al caricamento del documento. Le chiavi `stepFinal.identita*` in `i18n.js` non erano più usate e il 14/11/2026 sono state **tolte** (richiesta del titolare: non deve vedersi).
 - **Informativa:** `https://la-columbera.vercel.app/privacy.html` esiste (repo LaColumbera). Nell'intervento 3:
   - è stata riscritta;
   - nel modulo sono stati aggiunti un'informativa breve, il link visibile in ogni passaggio e nella pagina di successo, e testi corretti per la casella di presa visione (id `privacy-presa-visione`, non inviata né registrata);
@@ -104,7 +104,7 @@ In questo documento le **prescrizioni normative** (quanto sopra) sono tenute sep
 | Immagini del documento | Email al gestore (`EMAIL_PROPRIETARIO`) tramite Gmail SMTP (`EMAIL_USER`) | Modalità temporanea | Allegati `documento-fronte.<ext>` e `documento-retro.<ext>` |
 | Email dell'ospite | Raccolta da Stripe Checkout (come prima) | Ricevuta Stripe ed email di benvenuto | Nei log è mascherata |
 | Nome e cognome del responsabile | Payload interno all'endpoint `invia-email-ospite` | Saluto nell'email di benvenuto | Come prima. Nessun documento, nessuna data di nascita |
-| Date di nascita (senza nomi) | Richiesta a `crea-pagamento-stripe` (non salvate su Stripe) | Il server ricalcola la tassa (età ≥ 4 anni) | |
+| Date di nascita (senza nomi) | Richiesta a `crea-pagamento-stripe` (non salvate su Stripe) | Il server ricalcola la tassa (età ≥ 14 anni, al massimo 10 notti: dal 14/11/2026, prima ≥ 4 anni) | |
 | Registro tecnico: `checkin_id` (hash della sessione Stripe), id della sessione Stripe, `temp_session_id`, data di arrivo, stati, nome e ID del file su Drive, hash del TXT, codici di errore (senza valori) | Neon `checkin_adempimenti` | Idempotenza, promemoria di cancellazione, diagnosi | Nessun dato anagrafico in chiaro. Gli identificativi sono pseudonimi |
 | Tabelle ufficiali Alloggiati (Luoghi, Tipi_Documento, Tipi_Alloggiato) | Neon `alloggiati_tabelle` + memoria | Codici del tracciato | Dati pubblici di riferimento |
 | Contatore dei tentativi falliti di verifica del numero di prenotazione: hash troncato dell'IP (`sha256('ip|'+ip)`, 24 caratteri), numero di tentativi, scadenza | Neon `limiti_tentativi` | Protezione da chi prova numeri a raffica (10 tentativi falliti ogni 15 minuti per IP, come sul sito) | Nessun IP in chiaro, nessun numero di prenotazione. Il numero cercato e i dati trovati non vanno più nei log |

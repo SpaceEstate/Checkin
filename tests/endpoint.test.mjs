@@ -73,7 +73,7 @@ test('Stripe: metadati senza dati personali, importo invariato (ricalcolato dal 
   assert.equal(r.statusCode, 200);
   assert.deepEqual(Object.keys(creata.metadata).sort(), ['appartamento', 'dataCheckin', 'lingua', 'numeroNotti', 'numeroOspiti', 'temp_session_id', 'timestamp', 'tipoGruppo', 'totale']);
   assert.deepEqual(contieneSensibili(JSON.stringify(creata)), []);
-  // tutti e 3 gli ospiti hanno almeno 4 anni: 3 × 3 notti × 1,50 € = 13,50 € (il totale 0,01 del client è ignorato)
+  // tutti e 3 gli ospiti hanno almeno 14 anni (46, 15 e 22): 3 × 3 notti × 1,50 € = 13,50 € (il totale 0,01 del client è ignorato)
   assert.equal(creata.line_items[0].price_data.unit_amount, 1350);
   assert.equal(creata.metadata.totale, '13.5');
   assert.deepEqual(contieneSensibili(righe.join('\n')), []);

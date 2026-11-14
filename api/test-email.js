@@ -276,7 +276,7 @@ function generaDatiTest(numOspiti, conDocumenti) {
     numeroOspiti: numOspiti,
     numeroNotti: 3,
     tipoGruppo: 'famiglia',
-    totale: (numOspiti - 1) * 1.5 * 3, // Solo maggiori di 4 anni tassabili
+    totale: (numOspiti - 1) * 1.5 * 3, // Solo i maggiori di 14 anni sono tassabili (l'ultimo ospite è un bambino esente)
     timestamp: new Date().toISOString(),
     ospiti: ospiti,
     documenti: documenti
